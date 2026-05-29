@@ -8,7 +8,7 @@ __SITE_MAIN__ {
     output file /var/log/caddy/access.log
     format console
   }
-  handle /api/* {
+  handle /api/* /healthz /status {
     reverse_proxy 127.0.0.1:7400
   }
   handle {

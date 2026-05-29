@@ -83,15 +83,22 @@ def mint_livekit_token(
     can_publish: bool = True,
     can_subscribe: bool = True,
     ttl_seconds: int = 3600,
+    agent_name: str | None = "voice-ai",
     now: int | None = None,
 ) -> str:
-    """Mint a minimal LiveKit JWT (HS256) for joining `room` as `identity`."""
+    """Mint a LiveKit JWT (HS256) for joining `room` as `identity`.
+
+    `agent_name` adds a `roomConfig.agents=[{agentName}]` claim → LiveKit
+    auto-dispatches that worker on participant join (no separate
+    AgentDispatchService.CreateDispatch needed). Pass `None` to mint a plain
+    join-only token (e.g. for a senior brain peer).
+    """
     import json
 
     nbf = (now if now is not None else int(time.time())) - 30
     exp = nbf + 30 + ttl_seconds
     header = {"alg": "HS256", "typ": "JWT"}
-    payload = {
+    payload: dict = {
         "iss": api_key,
         "sub": identity,
         "nbf": nbf,
@@ -104,6 +111,8 @@ def mint_livekit_token(
             "canPublishData": True,
         },
     }
+    if agent_name:
+        payload["roomConfig"] = {"agents": [{"agentName": agent_name}]}
     h_b64 = _b64u(json.dumps(header, separators=(",", ":")).encode())
     p_b64 = _b64u(json.dumps(payload, separators=(",", ":")).encode())
     signing_input = f"{h_b64}.{p_b64}".encode("ascii")

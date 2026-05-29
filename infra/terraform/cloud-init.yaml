@@ -10,14 +10,13 @@ packages:
   - jq
   - caddy
   - docker.io
-  - docker-compose-plugin
 
 write_files:
   - path: /opt/voicehook/.env
     permissions: "0600"
     content: |
       INVITE_SECRET=${invite_secret}
-      LIVEKIT_URL=ws://127.0.0.1:7880
+      LIVEKIT_URL=${livekit_public_url}
       LIVEKIT_API_KEY=${livekit_api_key}
       LIVEKIT_API_SECRET=${livekit_api_secret}
       DEEPGRAM_API_KEY=${deepgram_api_key}
@@ -44,12 +43,7 @@ write_files:
         level: info
 
 runcmd:
-  - mkdir -p /opt/voicehook /var/www/voicehook /var/log/caddy
-  - |
-    if [ -n "${github_deploy_token}" ]; then
-      git clone "https://x-access-token:${github_deploy_token}@github.com/${git_repo}.git" /opt/repo
-    else
-      git clone "https://github.com/${git_repo}.git" /opt/repo
-    fi
-    cd /opt/repo && git checkout "${git_ref}"
-    BOX_HOST=local /opt/repo/deploy/deploy.sh
+  - mkdir -p /opt/voicehook /var/www/voicehook /var/log/caddy /etc/livekit /etc/voicehook
+  - git clone "https://github.com/${git_repo}.git" /opt/repo
+  - cd /opt/repo && git checkout "${git_ref}"
+  - CADDY_SITE_MAIN="${caddy_site_main}" CADDY_SITE_RTC="${caddy_site_rtc}" BOX_HOST=local bash /opt/repo/deploy/deploy.sh

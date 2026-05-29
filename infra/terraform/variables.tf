@@ -10,7 +10,7 @@ variable "server_name" {
 
 variable "server_type" {
   type    = string
-  default = "cx32"
+  default = "cx23"
 }
 
 variable "location" {
@@ -25,12 +25,33 @@ variable "image" {
 
 variable "ssh_key_name" {
   type    = string
-  default = "hetzner_voicehook"
+  default = "voicehook-v4"
 }
 
 variable "domain" {
   type    = string
   default = "voicehook.ai"
+}
+
+# Caddy site hostnames + LK public WSS URL. For prod leave defaults. For a
+# staging/test box without DNS use sslip.io patterns (e.g.
+# caddy_site_main="178-105-177-133.sslip.io",
+# caddy_site_rtc="rtc-178-105-177-133.sslip.io",
+# livekit_public_url="wss://rtc-178-105-177-133.sslip.io").
+variable "caddy_site_main" {
+  type    = string
+  default = "voicehook.ai"
+}
+
+variable "caddy_site_rtc" {
+  type    = string
+  default = "rtc.voicehook.ai"
+}
+
+variable "livekit_public_url" {
+  description = "Public WSS URL the browser uses to reach LiveKit signaling (Caddy-fronted)."
+  type        = string
+  default     = "wss://rtc.voicehook.ai"
 }
 
 # --- secrets (rendered into the box .env / livekit.yaml by cloud-init) -----
