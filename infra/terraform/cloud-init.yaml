@@ -46,4 +46,8 @@ runcmd:
   - mkdir -p /opt/voicehook /var/www/voicehook /var/log/caddy /etc/livekit /etc/voicehook
   - git clone "https://github.com/${git_repo}.git" /opt/repo
   - cd /opt/repo && git checkout "${git_ref}"
+%{ if use_sslip ~}
+  - USE_SSLIP=true BOX_HOST=local bash /opt/repo/deploy/deploy.sh
+%{ else ~}
   - CADDY_SITE_MAIN="${caddy_site_main}" CADDY_SITE_RTC="${caddy_site_rtc}" BOX_HOST=local bash /opt/repo/deploy/deploy.sh
+%{ endif ~}

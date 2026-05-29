@@ -29,6 +29,21 @@ else
   rsync_file() { rsync -az -e "${SSH}" "$1" "${BOX_HOST}:$2"; }
 fi
 
+# USE_SSLIP=true (set by cloud-init first-boot on a DNS-less staging box):
+# self-derive <ip>.sslip.io / rtc-<ip>.sslip.io from the box's own public IPv4
+# so a fresh box gets working HTTPS in one apply with no IP injection. Only
+# engages when caddy hostnames weren't passed explicitly.
+if [ "${USE_SSLIP:-}" = "true" ] && [ -z "${CADDY_SITE_MAIN:-}" ]; then
+  IP="$(curl -s --max-time 5 http://169.254.169.254/hetzner/v1/metadata/public-ipv4 || true)"
+  [ -n "${IP}" ] || IP="$(curl -s --max-time 5 https://ifconfig.me || true)"
+  DASH="${IP//./-}"
+  CADDY_SITE_MAIN="${DASH}.sslip.io"
+  CADDY_SITE_RTC="rtc-${DASH}.sslip.io"
+  # point the agent + browser at the sslip rtc host (Caddy-fronted LK WSS)
+  [ -f /opt/voicehook/.env ] && sed -i "s|^LIVEKIT_URL=.*|LIVEKIT_URL=wss://${CADDY_SITE_RTC}|" /opt/voicehook/.env
+  echo "==> self-derived sslip: main=${CADDY_SITE_MAIN} rtc=${CADDY_SITE_RTC}"
+fi
+
 DOMAIN="${CADDY_SITE_MAIN:-voicehook.ai}"
 RTC="${CADDY_SITE_RTC:-rtc.voicehook.ai}"
 

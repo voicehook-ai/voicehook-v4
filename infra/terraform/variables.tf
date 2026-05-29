@@ -88,6 +88,15 @@ variable "gcp_sa_json" {
   sensitive   = true
 }
 
+# When true, cloud-init ignores caddy_site_* and self-derives <ip>.sslip.io /
+# rtc-<ip>.sslip.io from the box's own public IPv4 (hcloud metadata). Lets a
+# fresh box bring up working HTTPS in one apply with no DNS and no IP injection.
+# Leave false for prod (uses caddy_site_main/rtc defaults = voicehook.ai).
+variable "use_sslip" {
+  type    = bool
+  default = false
+}
+
 variable "git_repo" {
   type    = string
   default = "voicehook-ai/voicehook-v4"

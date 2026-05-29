@@ -19,6 +19,7 @@ resource "hcloud_server" "agent" {
     gcp_sa_json_b64     = base64encode(var.gcp_sa_json)
     caddy_site_main     = var.caddy_site_main
     caddy_site_rtc      = var.caddy_site_rtc
+    use_sslip           = var.use_sslip
     git_repo            = var.git_repo
     git_ref             = var.git_ref
   })
