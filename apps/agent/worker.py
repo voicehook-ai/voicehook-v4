@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import os
 
-from livekit.agents import AgentSession, JobContext, WorkerOptions, cli
+from livekit.agents import AgentSession, AutoSubscribe, JobContext, WorkerOptions, cli
 
 from .llm import build_llm
 from .relay import DEFAULT_PERSONA, RelayAgent, build_relay_handlers, topic_dispatch
@@ -26,7 +26,12 @@ AGENT_NAME = os.environ.get("VOICEHOOK_AGENT_NAME", "voice-ai")
 
 async def entrypoint(ctx: JobContext) -> None:
     """Connect, start the mouthpiece session, bind senior.* handlers."""
-    await ctx.connect()
+    # Explicitly subscribe to participant audio so STT always has an input track.
+    # Plain ctx.connect() leaves auto-subscribe to the lib default, which has
+    # bitten us repeatedly: VAD ("speaking") still fires server-side but the
+    # agent never receives the audio track → STT produces zero transcripts
+    # (#55). AUDIO_ONLY is what an STT mouthpiece actually needs.
+    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
     logger.info(
         "agent joined room=%s job=%s identity=%s",
         ctx.room.name,
