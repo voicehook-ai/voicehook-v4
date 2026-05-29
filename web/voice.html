@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>voicehook v4</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: ui-sans-serif, system-ui, sans-serif; max-width: 480px; margin: 4rem auto; padding: 0 1rem; }
+    h1 { margin: 0 0 .25rem; font-size: 1.5rem; }
+    p.sub { color: #888; margin: 0 0 2rem; }
+    button { font: inherit; padding: .75rem 1.25rem; border-radius: 999px; border: 0; cursor: pointer; background: #111; color: #fff; }
+    button:disabled { opacity: .5; cursor: progress; }
+    #log { margin-top: 1.5rem; font: 13px/1.5 ui-monospace, monospace; white-space: pre-wrap; }
+    .agent { color: #06c; }
+    .user  { color: #060; }
+  </style>
+</head>
+<body>
+  <h1>voicehook v4</h1>
+  <p class="sub" id="room">Loading…</p>
+  <button id="join" disabled>Connecting…</button>
+  <div id="log"></div>
+
+<script type="module">
+import { Room, RoomEvent, Track } from 'https://cdn.skypack.dev/livekit-client';
+
+const url = new URL(location.href);
+const room = url.pathname.startsWith('/r/') ? url.pathname.slice(3) : (url.searchParams.get('room') || 'voicehook-demo');
+const invite = url.searchParams.get('invite') || '';
+const identity = 'web-' + Math.random().toString(36).slice(2, 8);
+
+document.getElementById('room').textContent = `Raum: ${room}`;
+const log = (cls, t) => { const el = document.createElement('div'); el.className = cls; el.textContent = t; document.getElementById('log').appendChild(el); };
+
+async function join() {
+  document.getElementById('join').disabled = true;
+  const tok = await fetch('/api/token', {
+    method: 'POST', headers: {'content-type':'application/json'},
+    body: JSON.stringify({ room, identity, invite })
+  }).then(r => r.ok ? r.json() : Promise.reject(r.status));
+  const r = new Room();
+  r.on(RoomEvent.TrackSubscribed, (t) => { if (t.kind === Track.Kind.Audio) t.attach(document.body); });
+  r.on(RoomEvent.DataReceived, (payload, _p, _k, topic) => {
+    try { const d = JSON.parse(new TextDecoder().decode(payload));
+      if (topic === 'transcript') log(d.role === 'agent' ? 'agent' : 'user', `${d.role}: ${d.text}`);
+    } catch {}
+  });
+  await r.connect(tok.url, tok.token);
+  await r.localParticipant.setMicrophoneEnabled(true);
+  log('agent', '(verbunden)');
+}
+
+if (invite) {
+  document.getElementById('join').disabled = false;
+  document.getElementById('join').textContent = 'Beitreten';
+  document.getElementById('join').onclick = () => join().catch(e => log('agent', `Fehler: ${e}`));
+} else {
+  document.getElementById('join').textContent = 'Kein Invite-Token';
+}
+</script>
+</body>
+</html>

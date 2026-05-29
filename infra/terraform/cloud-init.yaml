@@ -1,0 +1,55 @@
+#cloud-config
+
+package_update: true
+package_upgrade: false
+packages:
+  - python3.12
+  - python3.12-venv
+  - git
+  - rsync
+  - jq
+  - caddy
+  - docker.io
+  - docker-compose-plugin
+
+write_files:
+  - path: /opt/voicehook/.env
+    permissions: "0600"
+    content: |
+      INVITE_SECRET=${invite_secret}
+      LIVEKIT_URL=ws://127.0.0.1:7880
+      LIVEKIT_API_KEY=${livekit_api_key}
+      LIVEKIT_API_SECRET=${livekit_api_secret}
+      DEEPGRAM_API_KEY=${deepgram_api_key}
+      GOOGLE_API_KEY=${google_api_key}
+      GOOGLE_APPLICATION_CREDENTIALS=/etc/voicehook/gcp-sa.json
+
+  - path: /etc/voicehook/gcp-sa.json
+    permissions: "0600"
+    encoding: b64
+    content: ${gcp_sa_json_b64}
+
+  - path: /etc/livekit/livekit.yaml
+    permissions: "0644"
+    content: |
+      port: 7880
+      rtc:
+        tcp_port: 7881
+        port_range_start: 50000
+        port_range_end: 60000
+        use_external_ip: true
+      keys:
+        ${livekit_api_key}: ${livekit_api_secret}
+      logging:
+        level: info
+
+runcmd:
+  - mkdir -p /opt/voicehook /var/www/voicehook /var/log/caddy
+  - |
+    if [ -n "${github_deploy_token}" ]; then
+      git clone "https://x-access-token:${github_deploy_token}@github.com/${git_repo}.git" /opt/repo
+    else
+      git clone "https://github.com/${git_repo}.git" /opt/repo
+    fi
+    cd /opt/repo && git checkout "${git_ref}"
+    BOX_HOST=local /opt/repo/deploy/deploy.sh
