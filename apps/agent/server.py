@@ -56,24 +56,50 @@ def status() -> dict:
     }
 
 
-@app.post("/api/token", response_model=TokenResponse)
-def issue_token(req: TokenRequest) -> TokenResponse:
-    """Mint a LiveKit JWT — only against a valid, unexpired HMAC invite."""
-    verdict = verify_invite(req.invite, req.room)
+def _mint(room: str, identity: str, invite: str, ttl_seconds: int, *, agent_name: str | None = "voice-ai") -> TokenResponse:
+    verdict = verify_invite(invite, room)
     if not verdict.valid:
         raise HTTPException(status_code=403, detail=f"invalid invite: {verdict.reason}")
-
     api_key = os.environ.get("LIVEKIT_API_KEY")
     api_secret = os.environ.get("LIVEKIT_API_SECRET")
     livekit_url = os.environ.get("LIVEKIT_URL", "wss://rtc.voicehook.ai")
     if not api_key or not api_secret:
         raise HTTPException(status_code=503, detail="server missing LiveKit credentials")
-
     token = mint_livekit_token(
-        api_key=api_key,
-        api_secret=api_secret,
-        room=req.room,
-        identity=req.identity,
-        ttl_seconds=req.ttl_seconds,
+        api_key=api_key, api_secret=api_secret,
+        room=room, identity=identity, ttl_seconds=ttl_seconds,
+        agent_name=agent_name,
     )
-    return TokenResponse(token=token, url=livekit_url, room=req.room, identity=req.identity)
+    return TokenResponse(token=token, url=livekit_url, room=room, identity=identity)
+
+
+@app.post("/api/token", response_model=TokenResponse)
+def issue_token(req: TokenRequest) -> TokenResponse:
+    """Mint a LK JWT — POST flow, HMAC invite required. Auto-dispatches voice-ai."""
+    return _mint(req.room, req.identity, req.invite, req.ttl_seconds)
+
+
+@app.get("/api/token", response_model=TokenResponse)
+def issue_token_get(
+    room: str, identity: str, invite: str = "", ttl_seconds: int = 3600
+) -> TokenResponse:
+    """GET-flavor compat for voicehook-agent CLI (v3 protocol).
+
+    The CLI passes `invite=1` for senior peers (no agent re-dispatch needed since
+    voice-ai is already in the room). For that special value we mint a plain
+    join token (agent_name=None). Otherwise we require a real HMAC invite.
+    """
+    if invite == "1":
+        # senior peer — no HMAC, no auto-dispatch (room is already live)
+        api_key = os.environ.get("LIVEKIT_API_KEY")
+        api_secret = os.environ.get("LIVEKIT_API_SECRET")
+        livekit_url = os.environ.get("LIVEKIT_URL", "wss://rtc.voicehook.ai")
+        if not api_key or not api_secret:
+            raise HTTPException(status_code=503, detail="server missing LiveKit credentials")
+        token = mint_livekit_token(
+            api_key=api_key, api_secret=api_secret,
+            room=room, identity=identity, ttl_seconds=ttl_seconds,
+            agent_name=None,
+        )
+        return TokenResponse(token=token, url=livekit_url, room=room, identity=identity)
+    return _mint(room, identity, invite, ttl_seconds)
