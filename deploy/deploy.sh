@@ -10,7 +10,7 @@
 set -euo pipefail
 
 BOX_HOST="${BOX_HOST:-root@voicehook.ai}"
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/voicehook_v4}"
+SSH_KEY="${SSH_KEY:-${HOME:-/root}/.ssh/voicehook_v4}"
 SSH="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
 [ "${SSH_KEY}" != "/dev/null" ] && SSH="ssh -i ${SSH_KEY} -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
