@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 from unittest.mock import MagicMock
@@ -57,6 +58,25 @@ async def test_say_calls_session_say_verbatim():
     await h.on_say(_pkt(TOPIC_SAY, {"text": "Hallo Welt"}))
     session.say.assert_called_once_with("Hallo Welt", allow_interruptions=False)
     session.interrupt.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_say_publishes_transcript_when_room_given():
+    """PR-12: senior.say must also publish {role:agent,text} on transcript topic."""
+    from unittest.mock import AsyncMock
+    session, agent = _fake_session(), _fake_agent()
+    room = MagicMock()
+    room.local_participant = MagicMock()
+    room.local_participant.publish_data = AsyncMock()
+    h = build_relay_handlers(session, agent, room=room)
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "Hallo Olli"}))
+    await asyncio.sleep(0)  # let the asyncio.create_task fire
+    await asyncio.sleep(0)
+    room.local_participant.publish_data.assert_called_once()
+    call = room.local_participant.publish_data.await_args
+    assert call.kwargs["topic"] == "transcript"
+    payload = json.loads(call.kwargs["payload"])
+    assert payload == {"role": "agent", "text": "Hallo Olli"}
 
 
 @pytest.mark.asyncio
