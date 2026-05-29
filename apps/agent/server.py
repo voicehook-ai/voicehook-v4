@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import secrets
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -81,9 +82,25 @@ def _lk_admin_jwt(api_key: str, api_secret: str, room: str) -> str:
     return f"{h}.{p}.{sig}"
 
 
+# Per-room locks serialize concurrent ensure-dispatch calls (senior invite=1 +
+# user invite-mint can race → two voice-ai workers, #47). The lock makes the
+# list-then-create check atomic within the process.
+_DISPATCH_LOCKS: dict[str, threading.Lock] = {}
+_DISPATCH_LOCKS_GUARD = threading.Lock()
+
+
+def _room_lock(room: str) -> threading.Lock:
+    with _DISPATCH_LOCKS_GUARD:
+        return _DISPATCH_LOCKS.setdefault(room, threading.Lock())
+
+
 def _ensure_agent_dispatched(room: str, agent_name: str = "voice-ai") -> None:
-    """Belt-and-suspenders: fire CreateDispatch for the room. Idempotent — LK dedups
-    when there's already a worker assigned for this room/agent_name."""
+    """Ensure exactly one `agent_name` worker is dispatched for the room.
+
+    Presence-idempotent (#47): under a per-room lock, ListDispatch first and skip
+    CreateDispatch if a matching dispatch already exists. Plain CreateDispatch is
+    NOT enough — two near-simultaneous callers (senior invite=1 + user invite-mint)
+    both create before either registers, yielding a double agent."""
     api_key = os.environ.get("LIVEKIT_API_KEY", "")
     api_secret = os.environ.get("LIVEKIT_API_SECRET", "")
     livekit_url = os.environ.get("LIVEKIT_URL", "wss://rtc.voicehook.ai")
@@ -91,22 +108,33 @@ def _ensure_agent_dispatched(room: str, agent_name: str = "voice-ai") -> None:
         return
     # twirp lives on the HTTP port — for in-cluster calls hit local LK directly
     http_url = livekit_url.replace("wss://", "https://").replace("ws://", "http://")
-    # local-machine optimization: use loopback (avoids TLS dance)
     if "127.0.0.1" in livekit_url or "localhost" in livekit_url:
         http_url = "http://127.0.0.1:7880"
     elif livekit_url.startswith(("wss://rtc.", "ws://rtc.")):
         http_url = "http://127.0.0.1:7880"  # same box, direct
-    try:
+
+    def _twirp(method: str, payload: dict) -> bytes:
         req = urllib.request.Request(
-            f"{http_url}/twirp/livekit.AgentDispatchService/CreateDispatch",
+            f"{http_url}/twirp/livekit.AgentDispatchService/{method}",
             method="POST",
-            data=json.dumps({"room": room, "agent_name": agent_name}).encode(),
+            data=json.dumps(payload).encode(),
             headers={"Authorization": f"Bearer {_lk_admin_jwt(api_key, api_secret, room)}",
                      "Content-Type": "application/json"},
         )
-        urllib.request.urlopen(req, timeout=3).read()
-    except (urllib.error.URLError, TimeoutError) as e:
-        logger.warning("[ensure-dispatch] %s: %s", room, e)
+        return urllib.request.urlopen(req, timeout=3).read()
+
+    with _room_lock(room):
+        # already dispatched? skip (closes the race)
+        try:
+            data = json.loads(_twirp("ListDispatch", {"room": room}) or b"{}")
+            if any(d.get("agent_name") == agent_name for d in data.get("agent_dispatches", [])):
+                return
+        except (urllib.error.URLError, TimeoutError, ValueError) as e:
+            logger.warning("[ensure-dispatch] list %s: %s", room, e)  # fall through to create
+        try:
+            _twirp("CreateDispatch", {"room": room, "agent_name": agent_name})
+        except (urllib.error.URLError, TimeoutError) as e:
+            logger.warning("[ensure-dispatch] create %s: %s", room, e)
 
 
 def _mint(room: str, identity: str, invite: str, ttl_seconds: int, *, agent_name: str | None = "voice-ai") -> TokenResponse:
@@ -135,7 +163,6 @@ def _issue(room: str, identity: str, ttl_seconds: int, *, agent_name: str | None
     # connects. Threading (not asyncio) to avoid event-loop coupling with the
     # sync FastAPI route handler.
     if agent_name:
-        import threading
         threading.Thread(
             target=_ensure_agent_dispatched, args=(room, agent_name), daemon=True
         ).start()
@@ -174,8 +201,7 @@ def issue_token_get(
             room=room, identity=identity, ttl_seconds=ttl_seconds,
             agent_name=None,
         )
-        # auto-ensure voice-ai is present (idempotent) — see docstring (#42)
-        import threading
+        # auto-ensure voice-ai is present (presence-idempotent) — see docstring (#42)
         threading.Thread(
             target=_ensure_agent_dispatched, args=(room, "voice-ai"), daemon=True
         ).start()

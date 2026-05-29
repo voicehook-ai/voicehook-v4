@@ -170,3 +170,38 @@ def test_invite1_auto_dispatches_voice_ai(monkeypatch):
             break
         _t.sleep(0.02)
     assert calls == [("auto-disp-room", "voice-ai")]
+
+
+# ----- ensure-dispatch presence-idempotent (#47) ---------------------------
+class _FakeResp:
+    def __init__(self, b): self._b = b
+    def read(self): return self._b
+
+
+def _dispatch_calls(monkeypatch, list_body):
+    import agent.server as srv
+    monkeypatch.setenv("LIVEKIT_API_KEY", "k")
+    monkeypatch.setenv("LIVEKIT_API_SECRET", "s")
+    monkeypatch.setenv("LIVEKIT_URL", "http://127.0.0.1:7880")
+    calls = []
+    def fake_urlopen(req, timeout=None):
+        url = req.full_url
+        calls.append(url)
+        if url.endswith("ListDispatch"):
+            return _FakeResp(list_body)
+        return _FakeResp(b"{}")
+    monkeypatch.setattr(srv.urllib.request, "urlopen", fake_urlopen)
+    return srv, calls
+
+
+def test_ensure_dispatch_skips_when_voice_ai_present(monkeypatch):
+    srv, calls = _dispatch_calls(monkeypatch, b'{"agent_dispatches":[{"agent_name":"voice-ai"}]}')
+    srv._ensure_agent_dispatched("room-present-47", "voice-ai")
+    assert any("ListDispatch" in u for u in calls)
+    assert not any("CreateDispatch" in u for u in calls)  # no double dispatch
+
+
+def test_ensure_dispatch_creates_when_absent(monkeypatch):
+    srv, calls = _dispatch_calls(monkeypatch, b'{"agent_dispatches":[]}')
+    srv._ensure_agent_dispatched("room-absent-47", "voice-ai")
+    assert any("CreateDispatch" in u for u in calls)
