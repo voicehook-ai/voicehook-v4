@@ -52,3 +52,8 @@ def test_caddyfile_only_routes_to_agent_port():
     assert cf.count("reverse_proxy 127.0.0.1:7400") == 1
     # plus the LK websocket
     assert cf.count("reverse_proxy 127.0.0.1:7880") == 1
+
+
+def test_skill_is_under_200_loc():
+    """Plan target: skill ≤200 LOC (v3 monster was 447)."""
+    assert _loc(ROOT / "skills" / "voicehook-join" / "SKILL.md") <= 200
