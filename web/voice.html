@@ -251,12 +251,13 @@ body.vh-transcript-expanded #vh-transcript-close { display: inline-flex; }
   -webkit-backdrop-filter: var(--vh-btn-blur);
   border: 1px solid var(--vh-btn-border);
   color: var(--vh-btn-fg); letter-spacing: 0.01em; }
-.vh-pres-chip .vh-pres-dot { width: 7px; height: 7px; border-radius: 50%;
-  background: rgba(255,255,255,0.18); flex-shrink: 0; transition: background .25s, box-shadow .25s; }
+/* presence marker = ∆ glyph (not a dot), colored per state */
+.vh-pres-chip .vh-pres-dot { font-size: 11px; line-height: 1; flex-shrink: 0;
+  color: rgba(255,255,255,0.18); transition: color .25s, text-shadow .25s; }
 .vh-pres-chip.in           { color: rgba(255,255,255,0.9); }
-.vh-pres-chip.in .vh-pres-dot   { background: #6dc9d9; }
+.vh-pres-chip.in .vh-pres-dot   { color: #6dc9d9; }
 .vh-pres-chip.speak              { color: #fff; border-color: rgba(109,201,217,0.4); }
-.vh-pres-chip.speak .vh-pres-dot { background: #9ddb6d; box-shadow: 0 0 6px #9ddb6d; }
+.vh-pres-chip.speak .vh-pres-dot { color: #9ddb6d; text-shadow: 0 0 6px #9ddb6d; }
 /* Per-chip color selection (Olli 2026-05-19): clicking a chip scopes palette+hue
    changes to that chip's role only. Default target is 'user'. */
 .vh-pres-chip { cursor: pointer; }
@@ -761,9 +762,9 @@ body.theme-light #tagline { color: rgba(0,0,0,0.30); }
 <!-- Transcript log — block in body flow, under the kringel -->
 <div id="vh-transcript-wrap">
   <div id="vh-presence">
-    <span class="vh-pres-chip" data-slot="user" title="Du — der Mensch im Raum"><span class="vh-pres-dot"></span><span class="vh-pres-label">User</span></span>
-    <span class="vh-pres-chip" data-slot="voice-ai" title="Delta Agent (voice) — voicehook-interne STT+LLM+TTS pipeline. Moderiert das Gespräch zwischen User und Agent."><span class="vh-pres-dot"></span><span class="vh-pres-label">Delta Agent (voice)</span></span>
-    <span class="vh-pres-chip" data-slot="agent" title="Agent — der externe LLM (z.B. Claude Code) der via voicehook-agent CLI eingeklinkt ist"><span class="vh-pres-dot"></span><span class="vh-pres-label">Agent</span></span>
+    <span class="vh-pres-chip" data-slot="user" title="Du — der Mensch im Raum"><span class="vh-pres-dot">∆</span><span class="vh-pres-label">User</span></span>
+    <span class="vh-pres-chip" data-slot="voice-ai" title="Delta Agent (voice) — voicehook-interne STT+LLM+TTS pipeline. Moderiert das Gespräch zwischen User und Agent."><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Delta Agent (voice)</span></span>
+    <span class="vh-pres-chip" data-slot="agent" title="Agent — der externe LLM (z.B. Claude Code) der via voicehook-agent CLI eingeklinkt ist"><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Agent</span></span>
   </div>
   <div id="vh-invite-banner" hidden></div>
   <div id="vh-transcript"><div id="vh-transcript-empty">Transcript — start a call to see live turns.</div></div>
@@ -2698,7 +2699,8 @@ function vhApplySpeakerColorsToTranscript() {
   };
   Object.entries(chips).forEach(([slot, color]) => {
     const el = document.querySelector(`#vh-presence .vh-pres-chip[data-slot="${slot}"] .vh-pres-dot`);
-    if (el && el.parentElement.classList.contains('in')) el.style.background = color;
+    // ∆ glyph (not a dot): tint the text color, not the background
+    if (el && el.parentElement.classList.contains('in')) { el.style.color = color; el.style.background = 'transparent'; }
   });
   // refresh selected-chip outline — paint via per-element CSS var, leave the
   // chip text-color rule (.in/.speak) untouched:
@@ -3064,10 +3066,10 @@ function vhBrandFromIdentity(identity) {
   if (word === 'senior' || word === 'agent') return 'Agent';
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
-const VH_SLOT_LABELS = { user: 'User', 'voice-ai': 'Voice Agent (Moderator)', agent: 'Agent' };
+const VH_SLOT_LABELS = { user: 'User', 'voice-ai': 'Delta Agent (voice)', agent: 'Agent' };
 const VH_SLOT_DESCS  = {
   user: 'Du — der Mensch im Raum',
-  'voice-ai': 'Voice Agent (Moderator) — voicehook-interne STT+LLM+TTS pipeline. Moderiert das Gespräch zwischen User und Agent.',
+  'voice-ai': 'Delta Agent (voice) — voicehook-interne STT+LLM+TTS pipeline. Moderiert das Gespräch zwischen User und Agent.',
   agent: 'Agent — der externe LLM (z.B. Claude Code) der via voicehook-agent CLI eingeklinkt ist',
 };
 // Issue #3: track which identity currently owns each slot so we can ignore
@@ -3088,7 +3090,7 @@ function vhPresenceSet(slot, state, id) {
   if (state === 'out') {
     // Reset to grey baseline: clear inline-colored dot, restore default label + tooltip
     const dot = el.querySelector('.vh-pres-dot');
-    if (dot) dot.style.background = '';
+    if (dot) { dot.style.color = ''; dot.style.background = ''; }
     const lbl = el.querySelector('.vh-pres-label');
     if (lbl) lbl.textContent = VH_SLOT_LABELS[slot] || slot;
     el.title = VH_SLOT_DESCS[slot] || slot;
