@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<!--
+  web/faq.html: GEO (Generative Engine Optimization) page for voicehook.ai
+  Goal: give answer engines (ChatGPT, Perplexity, Google AI) clean, citable,
+  factual Q/A about the product, with JSON-LD FAQPage structured data.
+  Positioning verbatim: "The Voice Interface for Your AI Agents".
+  NOTE: og-image expected at https://voicehook.ai/og-image.png (1200x630).
+        If that asset does not yet exist, add it to web/ for richer link previews.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>voicehook FAQ: The Voice Interface for Your AI Agents</title>
+  <meta name="description" content="voicehook is the voice interface for your AI agents: a human and an AI agent meet in a live voice call with a 3D voice orb, presence chips, and a live transcript. Free tier with about 10 minutes a day. Read the FAQ.">
+  <link rel="canonical" href="https://voicehook.ai/faq">
+  <meta name="robots" content="index, follow">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="voicehook">
+  <meta property="og:title" content="voicehook FAQ: The Voice Interface for Your AI Agents">
+  <meta property="og:description" content="A human and an AI agent meet in a live voice call: 3D voice orb, presence chips, live transcript, a strict-relay voicebot driven by a senior AI brain. Free tier with about 10 minutes a day.">
+  <meta property="og:url" content="https://voicehook.ai/faq">
+  <meta property="og:image" content="https://voicehook.ai/og-image.png">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="voicehook FAQ: The Voice Interface for Your AI Agents">
+  <meta name="twitter:description" content="A human and an AI agent meet in a live voice call: 3D voice orb, presence chips, live transcript. Free tier with about 10 minutes a day.">
+  <meta name="twitter:image" content="https://voicehook.ai/og-image.png">
+
+  <!-- JSON-LD: FAQPage structured data for answer engines -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is voicehook?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "voicehook is the voice interface for your AI agents. It is the place where a human and an AI agent meet in a live voice call. The call screen shows a 3D voice orb, presence chips for who is in the room, and a live transcript. A strict-relay voicebot speaks in the call while a senior AI brain drives what it says, so the voice you hear is grounded and controlled rather than improvised. voicehook is a call experience layer, not a developer voice API."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I talk to an AI agent by voice with voicehook?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Open a voicehook call link in your browser and allow microphone access. You join a live room with a 3D voice orb and presence chips. You speak naturally and the AI agent answers out loud in real time, while a live transcript records both sides. There is nothing to install and no app to download; the call runs in the browser."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I voice-control Claude or my coding agent through voicehook?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. A core use case is pair programming by voice: a senior AI brain, such as a coding agent, sits behind the voicehook voicebot and you talk to it in a live call instead of typing. The agent joins your call as the senior brain and the strict-relay voicebot speaks its responses, so you can think out loud and get spoken answers while you work."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is there a free tier?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. voicehook has a free tier of about 10 minutes of voice call time per day. The free time resets each day, which is enough to try a real conversation with an AI agent before you decide to add more time."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does an AI agent join my voice call?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "An AI agent joins your voicehook room as the senior brain behind the voicebot. The voicebot is the voice in the call, and the senior brain decides what it says. The voicebot follows a strict relay rule: it speaks only the text the senior brain pushes, a curated persona that the brain injects, or verbatim quotes from a web search. It does not improvise its own answers, which keeps the conversation grounded."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Do I need an account to use voicehook?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No account is required to start. You can open a call link and talk to an AI agent in the browser. The free daily allowance lets you use voicehook without signing up first. An account or wallet is only relevant if you want more talk time than the free tier provides."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is a strict-relay voicebot?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "A strict-relay voicebot is a voice agent that never makes up its own answers. It speaks only what the senior AI brain explicitly relays to it: text the brain pushes, a curated knowledge or experience persona the brain injects, or verbatim quotes from a web search. This relay design keeps the spoken output controlled, on-brand, and traceable to a source, which is safer than a freely improvising voice bot."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How is voicehook different from a voice API or voice SDK?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "A voice API or SDK is a developer building block: you write code to assemble speech-to-text, a model, and text-to-speech into your own product. voicehook is the finished call experience that sits on top: a ready human-meets-agent voice call with a 3D voice orb, presence chips, a live transcript, and a strict-relay voicebot. You do not assemble a pipeline; you open a call and talk to your agent."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What can I use voicehook for?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Three main use cases. First, pair programming by voice: talk to your coding agent in a live call instead of typing. Second, coaching and interview sessions: practice or get coached by an AI agent that speaks with you in real time. Third, agent-to-agent calls: two AI agents meet and talk in the same voice room. All three run through the same human-meets-agent call layer."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What languages does voicehook support?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "voicehook is a browser-based voice call layer driven by the underlying AI brain and speech models, so it follows the language the agent and voice models handle. The interface and core experience are available in English, and the spoken conversation can run in whatever language the connected agent and voice models support."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is the 3D voice orb and presence chips?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The 3D voice orb is the animated visual at the center of a voicehook call that reacts to the voice in the room, giving the conversation a sense of presence rather than a flat audio stream. Presence chips show who is currently in the call, human or agent, so you always know who is connected. Together with the live transcript, they make a voice call feel like a real shared space."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does voicehook show a live transcript of the call?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Every voicehook call includes a live transcript that captures both the human and the AI agent as they speak. This lets you follow the conversation in text in real time and have a written record of what was said, alongside the spoken voice call."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg: #0b0f12;
+      --panel: #131a1f;
+      --panel-2: #0f161b;
+      --text: #e6eef1;
+      --muted: #9fb2ba;
+      --accent: #6dc9d9;
+      --border: #243038;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      font-size: 17px;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover, a:focus { text-decoration: underline; }
+    a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+    .wrap {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 32px 20px 80px;
+    }
+    header.top {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 24px;
+      margin-bottom: 32px;
+    }
+    .home-link {
+      display: inline-block;
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+    h1 {
+      font-size: 2rem;
+      line-height: 1.2;
+      margin: 0 0 14px;
+    }
+    h1 .accent { color: var(--accent); }
+    .intro {
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 70ch;
+    }
+    .intro strong { color: var(--text); }
+    h2 {
+      font-size: 1.4rem;
+      margin: 48px 0 8px;
+      padding-top: 8px;
+    }
+    .section-lead {
+      color: var(--muted);
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+    .faq-item {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel);
+      padding: 18px 22px;
+      margin: 16px 0;
+    }
+    .faq-item h3 {
+      margin: 0 0 8px;
+      font-size: 1.12rem;
+      color: var(--accent);
+    }
+    .faq-item p { margin: 0; color: var(--text); }
+    .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table.compare {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 16px;
+      min-width: 640px;
+      font-size: 0.96rem;
+    }
+    table.compare caption {
+      caption-side: top;
+      text-align: left;
+      color: var(--muted);
+      padding-bottom: 10px;
+    }
+    table.compare th, table.compare td {
+      border: 1px solid var(--border);
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: top;
+    }
+    table.compare thead th {
+      background: var(--panel-2);
+      color: var(--text);
+      font-weight: 600;
+    }
+    table.compare thead th.product { color: var(--accent); }
+    table.compare tbody th {
+      background: var(--panel-2);
+      font-weight: 600;
+      color: var(--text);
+      width: 24%;
+    }
+    table.compare td.yes { color: var(--accent); font-weight: 600; }
+    table.compare td.no { color: var(--muted); }
+    footer.bottom {
+      border-top: 1px solid var(--border);
+      margin-top: 56px;
+      padding-top: 24px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    footer.bottom a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="top">
+      <a class="home-link" href="/">Back to voicehook home</a>
+      <h1>voicehook: <span class="accent">The Voice Interface for Your AI Agents</span></h1>
+      <p class="intro">
+        voicehook is the place where a <strong>human and an AI agent meet in a live voice call</strong>.
+        The call screen shows a <strong>3D voice orb</strong>, <strong>presence chips</strong> for who is
+        in the room, and a <strong>live transcript</strong>. A <strong>strict-relay voicebot</strong>
+        speaks in the call while a <strong>senior AI brain</strong> drives exactly what it says, so the
+        voice you hear is grounded and controlled rather than improvised. There is a
+        <strong>free tier of about 10 minutes a day</strong>, and the whole experience runs in the browser.
+        This page answers the most common questions about how voicehook works.
+      </p>
+    </header>
+
+    <section aria-labelledby="faq-heading">
+      <h2 id="faq-heading">Frequently asked questions</h2>
+      <p class="section-lead">Plain, factual answers about what voicehook is and how to talk to an AI agent by voice.</p>
+
+      <div class="faq-item">
+        <h3>What is voicehook?</h3>
+        <p>voicehook is the voice interface for your AI agents. It is the place where a human and an AI agent meet in a live voice call. The call screen shows a 3D voice orb, presence chips for who is in the room, and a live transcript. A strict-relay voicebot speaks in the call while a senior AI brain drives what it says, so the voice you hear is grounded and controlled rather than improvised. voicehook is a call experience layer, not a developer voice API.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>How do I talk to an AI agent by voice with voicehook?</h3>
+        <p>Open a voicehook call link in your browser and allow microphone access. You join a live room with a 3D voice orb and presence chips. You speak naturally and the AI agent answers out loud in real time, while a live transcript records both sides. There is nothing to install and no app to download; the call runs in the browser.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>Can I voice-control Claude or my coding agent through voicehook?</h3>
+        <p>Yes. A core use case is pair programming by voice: a senior AI brain, such as a coding agent, sits behind the voicehook voicebot and you talk to it in a live call instead of typing. The agent joins your call as the senior brain and the strict-relay voicebot speaks its responses, so you can think out loud and get spoken answers while you work.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>Is there a free tier?</h3>
+        <p>Yes. voicehook has a free tier of about 10 minutes of voice call time per day. The free time resets each day, which is enough to try a real conversation with an AI agent before you decide to add more time.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>How does an AI agent join my voice call?</h3>
+        <p>An AI agent joins your voicehook room as the senior brain behind the voicebot. The voicebot is the voice in the call, and the senior brain decides what it says. The voicebot follows a strict relay rule: it speaks only the text the senior brain pushes, a curated persona that the brain injects, or verbatim quotes from a web search. It does not improvise its own answers, which keeps the conversation grounded.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>Do I need an account to use voicehook?</h3>
+        <p>No account is required to start. You can open a call link and talk to an AI agent in the browser. The free daily allowance lets you use voicehook without signing up first. An account or wallet is only relevant if you want more talk time than the free tier provides.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>What is a strict-relay voicebot?</h3>
+        <p>A strict-relay voicebot is a voice agent that never makes up its own answers. It speaks only what the senior AI brain explicitly relays to it: text the brain pushes, a curated knowledge or experience persona the brain injects, or verbatim quotes from a web search. This relay design keeps the spoken output controlled, on-brand, and traceable to a source, which is safer than a freely improvising voice bot.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>How is voicehook different from a voice API or voice SDK?</h3>
+        <p>A voice API or SDK is a developer building block: you write code to assemble speech-to-text, a model, and text-to-speech into your own product. voicehook is the finished call experience that sits on top: a ready human-meets-agent voice call with a 3D voice orb, presence chips, a live transcript, and a strict-relay voicebot. You do not assemble a pipeline; you open a call and talk to your agent.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>What can I use voicehook for?</h3>
+        <p>Three main use cases. First, pair programming by voice: talk to your coding agent in a live call instead of typing. Second, coaching and interview sessions: practice or get coached by an AI agent that speaks with you in real time. Third, agent-to-agent calls: two AI agents meet and talk in the same voice room. All three run through the same human-meets-agent call layer.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>What languages does voicehook support?</h3>
+        <p>voicehook is a browser-based voice call layer driven by the underlying AI brain and speech models, so it follows the language the agent and voice models handle. The interface and core experience are available in English, and the spoken conversation can run in whatever language the connected agent and voice models support.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>What is the 3D voice orb and presence chips?</h3>
+        <p>The 3D voice orb is the animated visual at the center of a voicehook call that reacts to the voice in the room, giving the conversation a sense of presence rather than a flat audio stream. Presence chips show who is currently in the call, human or agent, so you always know who is connected. Together with the live transcript, they make a voice call feel like a real shared space.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>Does voicehook show a live transcript of the call?</h3>
+        <p>Yes. Every voicehook call includes a live transcript that captures both the human and the AI agent as they speak. This lets you follow the conversation in text in real time and have a written record of what was said, alongside the spoken voice call.</p>
+      </div>
+    </section>
+
+    <section aria-labelledby="compare-heading">
+      <h2 id="compare-heading">How voicehook compares</h2>
+      <p class="section-lead">voicehook is the human-meets-agent call layer. The table below contrasts it with a generic voice API or SDK and with plain text chat.</p>
+      <div class="table-scroll">
+        <table class="compare">
+          <caption>Voice call experience layer vs a generic voice API or SDK vs text chat</caption>
+          <thead>
+            <tr>
+              <th scope="col">Capability</th>
+              <th scope="col" class="product">voicehook (voice call layer)</th>
+              <th scope="col">Generic voice API or SDK</th>
+              <th scope="col">Text chat</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Live voice call with an AI agent</th>
+              <td class="yes">Yes, ready in the browser</td>
+              <td class="no">You build it from parts</td>
+              <td class="no">No, text only</td>
+            </tr>
+            <tr>
+              <th scope="row">3D voice orb and presence chips</th>
+              <td class="yes">Yes, built in</td>
+              <td class="no">No, not provided</td>
+              <td class="no">No</td>
+            </tr>
+            <tr>
+              <th scope="row">Live transcript of both sides</th>
+              <td class="yes">Yes, in the call</td>
+              <td class="no">You build it</td>
+              <td class="yes">Yes, it is the medium</td>
+            </tr>
+            <tr>
+              <th scope="row">Agent joins your call as senior brain</th>
+              <td class="yes">Yes, core design</td>
+              <td class="no">Not a concept</td>
+              <td class="no">No</td>
+            </tr>
+            <tr>
+              <th scope="row">Strict-relay safety on spoken output</th>
+              <td class="yes">Yes, no improvising</td>
+              <td class="no">Up to your code</td>
+              <td class="no">Not applicable</td>
+            </tr>
+            <tr>
+              <th scope="row">Free tier to try it</th>
+              <td class="yes">Yes, about 10 minutes a day</td>
+              <td class="no">Usage billed by call</td>
+              <td class="no">Varies by provider</td>
+            </tr>
+            <tr>
+              <th scope="row">Setup effort to start talking</th>
+              <td class="yes">Open a link, allow the mic</td>
+              <td class="no">Write and host integration code</td>
+              <td class="yes">Open a chat box</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="bottom">
+      <p>voicehook is the voice interface for your AI agents: a human and an AI agent meet in a live voice call.</p>
+      <p><a href="/">Back to voicehook home</a></p>
+    </footer>
+  </main>
+</body>
+</html>
