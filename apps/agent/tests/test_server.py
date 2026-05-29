@@ -27,6 +27,35 @@ def test_healthz_returns_200():
     assert r.json() == {"status": "ok"}
 
 
+def test_status_returns_probe_shape():
+    c = TestClient(app)
+    r = c.get("/status")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["service"] == "voicehook-agent"
+    assert set(body["probe"].keys()) == {"stt", "tts", "llm"}
+    assert isinstance(body["healthy"], bool)
+
+
+def test_status_healthy_true_when_all_creds_present(monkeypatch):
+    monkeypatch.setenv("DEEPGRAM_API_KEY", "x")
+    monkeypatch.setenv("GOOGLE_API_KEY", "y")
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "/dev/null")
+    c = TestClient(app)
+    body = c.get("/status").json()
+    assert body["healthy"] is True
+    assert body["probe"] == {"stt": True, "tts": True, "llm": True}
+
+
+def test_status_unhealthy_when_creds_missing(monkeypatch):
+    monkeypatch.delenv("DEEPGRAM_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    c = TestClient(app)
+    body = c.get("/status").json()
+    assert body["healthy"] is False
+
+
 def test_api_token_rejects_without_invite():
     c = TestClient(app)
     r = c.post("/api/token", json={"room": "x", "identity": "alice", "invite": "bogus"})
