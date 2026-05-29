@@ -181,10 +181,11 @@ def issue_token_get(
 # target an existing room → no hijack) and mints directly. Quota-abuse throttling
 # is a stopgap per-IP limit here; the real gate is the free-tier wallet (#17-19).
 
-_HOST_WORDS = (
-    "fresh signal clear drift bright swift calm bold lucid prime spark vivid "
-    "quiet rapid solid keen brisk lunar solar amber ivory cobalt onyx ember"
-).split()
+_HOST_WORDS = [
+    "fresh", "signal", "clear", "drift", "bright", "swift", "calm", "bold",
+    "lucid", "prime", "spark", "vivid", "quiet", "rapid", "solid", "keen",
+    "brisk", "lunar", "solar", "amber", "ivory", "cobalt", "onyx", "ember",
+]
 _HOST_SUFFIX_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 _HOST_HITS: dict[str, list[float]] = {}
 _HOST_LIMIT = 5          # calls

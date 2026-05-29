@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -109,9 +111,7 @@ def test_api_token_validates_payload_shape():
 
 
 # ----- /api/host-call (#20) ------------------------------------------------
-import re as _re
-
-_SLUG_RX = _re.compile(r"^[a-z]+-[a-z]+-[a-z]+-[A-Z0-9]{4}$")
+_SLUG_RX = re.compile(r"^[a-z]+-[a-z]+-[a-z]+-[A-Z0-9]{4}$")
 
 
 def test_host_call_mints_fresh_server_generated_room():
