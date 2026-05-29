@@ -94,3 +94,30 @@ def test_livekit_token_signature_matches_secret():
     expected = hmac.new(b"S", f"{h}.{p}".encode("ascii"), hashlib.sha256).digest()
     pad = lambda x: x + "=" * (-len(x) % 4)  # noqa: E731
     assert hmac.compare_digest(base64.urlsafe_b64decode(pad(s)), expected)
+
+
+def test_livekit_token_auto_dispatches_voice_ai_by_default():
+    """JWT must carry roomConfig.agents so LK auto-dispatches the worker on join.
+
+    Without this claim the browser joins an empty room and the voice-ai
+    worker is never invited — observed live 2026-05-29.
+    """
+    import json as _j
+    tok = mint_livekit_token(
+        api_key="K", api_secret="S", room="r", identity="i", ttl_seconds=60
+    )
+    pad = lambda x: x + "=" * (-len(x) % 4)  # noqa: E731
+    payload = _j.loads(base64.urlsafe_b64decode(pad(tok.split(".")[1])))
+    assert payload["roomConfig"]["agents"] == [{"agentName": "voice-ai"}]
+
+
+def test_livekit_token_no_dispatch_when_agent_name_none():
+    """Pass agent_name=None to mint a plain join token (senior brain peer)."""
+    import json as _j
+    tok = mint_livekit_token(
+        api_key="K", api_secret="S", room="r", identity="i",
+        ttl_seconds=60, agent_name=None,
+    )
+    pad = lambda x: x + "=" * (-len(x) % 4)  # noqa: E731
+    payload = _j.loads(base64.urlsafe_b64decode(pad(tok.split(".")[1])))
+    assert "roomConfig" not in payload
