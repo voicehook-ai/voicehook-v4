@@ -35,8 +35,8 @@ def mint_invite(room: str, ttl_seconds: int = 3600, *, secret: str | None = None
     if not room or "|" in room or len(room) > 200:
         raise ValueError("invalid room slug")
     exp = (now if now is not None else int(time.time())) + ttl_seconds
-    msg = f"{room}|{exp}".encode("utf-8")
-    sig = hmac.new(secret.encode("utf-8"), msg, hashlib.sha256).digest()
+    msg = f"{room}|{exp}".encode()
+    sig = hmac.new(secret.encode(), msg, hashlib.sha256).digest()
     return f"{_b64u(room.encode('utf-8'))}.{_b64u(str(exp).encode('ascii'))}.{_b64u(sig)}"
 
 
@@ -61,7 +61,7 @@ def verify_invite(code: str, expected_room: str, *, secret: str | None = None, n
     except (ValueError, UnicodeDecodeError):
         return InviteVerdict(False, "malformed")
 
-    expected_sig = hmac.new(secret.encode("utf-8"), f"{room}|{exp}".encode("utf-8"), hashlib.sha256).digest()
+    expected_sig = hmac.new(secret.encode(), f"{room}|{exp}".encode(), hashlib.sha256).digest()
     if not hmac.compare_digest(sig, expected_sig):
         return InviteVerdict(False, "bad signature")
     if room != expected_room:
@@ -104,8 +104,8 @@ def mint_livekit_token(
             "canPublishData": True,
         },
     }
-    h_b64 = _b64u(json.dumps(header, separators=(",", ":")).encode("utf-8"))
-    p_b64 = _b64u(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    h_b64 = _b64u(json.dumps(header, separators=(",", ":")).encode())
+    p_b64 = _b64u(json.dumps(payload, separators=(",", ":")).encode())
     signing_input = f"{h_b64}.{p_b64}".encode("ascii")
-    sig = hmac.new(api_secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
+    sig = hmac.new(api_secret.encode(), signing_input, hashlib.sha256).digest()
     return f"{h_b64}.{p_b64}.{_b64u(sig)}"
