@@ -56,6 +56,10 @@ async function join() {
   });
   await r.connect(tok.url, tok.token);
   await r.localParticipant.setMicrophoneEnabled(true);
+  // LiveKit autoplay unblock — must be called inside the same user gesture
+  // as the click that started join(). Without this Chrome silently mutes
+  // remote audio (v3 lesson, voicehook-v3 PR#13).
+  try { await r.startAudio(); } catch (e) { log('agent', `(startAudio: ${e.message})`); }
   log('agent', '(verbunden)');
 }
 
