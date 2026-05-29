@@ -1,8 +1,8 @@
 """LiveKit worker — joins dispatched rooms as `voice-ai`.
 
-PR-3 ships the worker skeleton: registers with the LiveKit server, accepts
-dispatches, connects to the room, logs the join. STT/TTS/LLM components land
-in PR-4/5; senior.* data-channel relay in PR-5; health/status in PR-6.
+PR-5 wires the full mouthpiece: connect → start AgentSession(stt+tts+llm) →
+bind senior.* data-channel handlers → RelayAgent.on_user_turn_completed
+raises StopResponse so the model never produces a turn on its own.
 
 Run locally:
     python -m agent.worker dev   # connects to LIVEKIT_URL with API creds
@@ -13,7 +13,11 @@ from __future__ import annotations
 import logging
 import os
 
-from livekit.agents import JobContext, WorkerOptions, cli
+from livekit.agents import AgentSession, JobContext, WorkerOptions, cli
+
+from .llm import build_llm
+from .relay import DEFAULT_PERSONA, RelayAgent, build_relay_handlers, topic_dispatch
+from .voice import build_stt, build_tts
 
 logger = logging.getLogger("voicehook.worker")
 
@@ -21,7 +25,7 @@ AGENT_NAME = os.environ.get("VOICEHOOK_AGENT_NAME", "voice-ai")
 
 
 async def entrypoint(ctx: JobContext) -> None:
-    """Connect to the dispatched room and idle. Real session wires up PR-4+."""
+    """Connect, start the mouthpiece session, bind senior.* handlers."""
     await ctx.connect()
     logger.info(
         "agent joined room=%s job=%s identity=%s",
@@ -29,8 +33,21 @@ async def entrypoint(ctx: JobContext) -> None:
         ctx.job.id,
         ctx.room.local_participant.identity,
     )
-    # PR-4 will spin up AgentSession with STT + TTS + LLM here.
-    # For now: just hold the connection until the participant disconnects.
+
+    session = AgentSession(stt=build_stt(), tts=build_tts(), llm=build_llm())
+    agent = RelayAgent(instructions=DEFAULT_PERSONA)
+    handlers = build_relay_handlers(session, agent)
+    routes = topic_dispatch(handlers)
+
+    @ctx.room.on("data_received")
+    def _on_data(packet) -> None:  # noqa: ANN001
+        handler = routes.get(packet.topic)
+        if handler is None:
+            return
+        import asyncio
+        asyncio.create_task(handler(packet))
+
+    await session.start(agent=agent, room=ctx.room)
 
 
 def build_worker_options() -> WorkerOptions:
