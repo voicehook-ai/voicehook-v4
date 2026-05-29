@@ -16,11 +16,12 @@ import hmac
 import json
 import logging
 import os
+import secrets
 import time
 import urllib.error
 import urllib.request
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from .health import probe_all
@@ -112,6 +113,13 @@ def _mint(room: str, identity: str, invite: str, ttl_seconds: int, *, agent_name
     verdict = verify_invite(invite, room)
     if not verdict.valid:
         raise HTTPException(status_code=403, detail=f"invalid invite: {verdict.reason}")
+    return _issue(room, identity, ttl_seconds, agent_name=agent_name)
+
+
+def _issue(room: str, identity: str, ttl_seconds: int, *, agent_name: str | None = "voice-ai") -> TokenResponse:
+    """Mint + dispatch for an already-authorized room. Skips invite verification —
+    callers must have authorized the room themselves (HMAC invite, or a
+    server-generated fresh slug in the host-call path)."""
     api_key = os.environ.get("LIVEKIT_API_KEY")
     api_secret = os.environ.get("LIVEKIT_API_SECRET")
     livekit_url = os.environ.get("LIVEKIT_URL", "wss://rtc.voicehook.ai")
@@ -164,3 +172,60 @@ def issue_token_get(
         )
         return TokenResponse(token=token, url=livekit_url, room=room, identity=identity)
     return _mint(room, identity, invite, ttl_seconds)
+
+
+# ----- host-call: start a fresh call without an invite (#20) --------------
+# The invite gate (#52 fix) protects EXISTING rooms — a leaked slug must not let
+# strangers publish into your room. Starting a NEW room is different: there is no
+# room to protect yet. So the server generates the slug itself (the caller cannot
+# target an existing room → no hijack) and mints directly. Quota-abuse throttling
+# is a stopgap per-IP limit here; the real gate is the free-tier wallet (#17-19).
+
+_HOST_WORDS = (
+    "fresh signal clear drift bright swift calm bold lucid prime spark vivid "
+    "quiet rapid solid keen brisk lunar solar amber ivory cobalt onyx ember"
+).split()
+_HOST_SUFFIX_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+_HOST_HITS: dict[str, list[float]] = {}
+_HOST_LIMIT = 5          # calls
+_HOST_WINDOW = 600       # seconds (per IP)
+
+
+def _gen_slug() -> str:
+    """3 lowercase words + 4-char upper suffix — matches the client SLUG regex."""
+    words = "-".join(secrets.choice(_HOST_WORDS) for _ in range(3))
+    suffix = "".join(secrets.choice(_HOST_SUFFIX_ALPHABET) for _ in range(4))
+    return f"{words}-{suffix}"
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _host_rate_ok(ip: str) -> bool:
+    now = time.time()
+    hits = [t for t in _HOST_HITS.get(ip, []) if now - t < _HOST_WINDOW]
+    if len(hits) >= _HOST_LIMIT:
+        _HOST_HITS[ip] = hits
+        return False
+    hits.append(now)
+    _HOST_HITS[ip] = hits
+    return True
+
+
+class HostCallRequest(BaseModel):
+    identity: str = Field(..., min_length=1, max_length=200)
+    ttl_seconds: int = Field(3600, ge=60, le=86400)
+
+
+@app.post("/api/host-call", response_model=TokenResponse)
+def host_call(req: HostCallRequest, request: Request) -> TokenResponse:
+    """Start a fresh call. Server-generated room (no hijack), direct mint +
+    voice-ai dispatch. Stopgap per-IP rate limit until free-tier gate (#17-19)."""
+    ip = _client_ip(request)
+    if not _host_rate_ok(ip):
+        raise HTTPException(status_code=429, detail="rate limited — try again later")
+    return _issue(_gen_slug(), req.identity, req.ttl_seconds)
