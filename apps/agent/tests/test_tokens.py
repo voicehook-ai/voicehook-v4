@@ -12,7 +12,6 @@ import pytest
 
 from agent.tokens import mint_invite, mint_livekit_token, verify_invite
 
-
 SECRET = "test-secret-do-not-use"
 
 
