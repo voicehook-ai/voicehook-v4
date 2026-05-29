@@ -23,7 +23,7 @@
   <div id="log"></div>
 
 <script type="module">
-import { Room, RoomEvent, Track } from 'https://cdn.skypack.dev/livekit-client';
+import { Room, RoomEvent, Track } from 'https://cdn.jsdelivr.net/npm/livekit-client@2.18.4/dist/livekit-client.esm.mjs';
 
 const url = new URL(location.href);
 const room = url.pathname.startsWith('/r/') ? url.pathname.slice(3) : (url.searchParams.get('room') || 'voicehook-demo');
