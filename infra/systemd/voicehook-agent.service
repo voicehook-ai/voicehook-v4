@@ -1,0 +1,18 @@
+[Unit]
+Description=voicehook.ai agent (FastAPI :7400 + LiveKit worker `voice-ai`)
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/voicehook
+EnvironmentFile=/opt/voicehook/.env
+ExecStart=/opt/voicehook/.venv/bin/python -m agent dev
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/voicehook-agent.log
+StandardError=append:/var/log/voicehook-agent.log
+
+[Install]
+WantedBy=multi-user.target

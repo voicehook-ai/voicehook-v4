@@ -1,0 +1,9 @@
+services:
+  livekit-server:
+    image: livekit/livekit-server:latest
+    container_name: livekit-server
+    restart: unless-stopped
+    network_mode: host
+    command: --config /etc/livekit/livekit.yaml
+    volumes:
+      - /etc/livekit/livekit.yaml:/etc/livekit/livekit.yaml:ro
