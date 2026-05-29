@@ -2817,19 +2817,38 @@ async function vhStartCall() {
     vhWireRoomEvents(lkRoom, RoomEvent, Track);
 
     await lkRoom.connect(tok.url, tok.token);
-    await lkRoom.localParticipant.setMicrophoneEnabled(true);
-    // Unblock remote-audio playback inside this user gesture (autoplay policy).
-    await vhStartRoomAudio(lkRoom);
-    // "ready"-message comes from TrackSubscribed once voice-ai's audio-track
-    // arrives — at this point the user cannot actually talk yet.
+    // The call is LIVE the moment connect resolves — flip UI out of idle and arm
+    // the hang-up button NOW, before the mic/audio steps. Those need a transient
+    // user gesture and can no-op/throw on an autostart (?go=1 / localStorage
+    // rejoin); doing them first left a gesture-less autostart connected-but-idle
+    // with a dead hang-up button (#58). State transition must not depend on mic.
     lkConnected = true;
     btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = 'End call';
     try { vhMuteBtnVisibility(true); } catch (_) {}  // show mic-mute toggle next to btn-call
     err.textContent = '';  // no "connected" text — speaker-color in kringel does the talking
-    // rewrite browser URL to /r/<slug> so bookmark + back-button work
     // Preserve query string (esp. ?go=1) so a refresh re-triggers autostart
-    // instead of dumping the user back to the modal mid-call.
     try { history.replaceState(null, '', '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
+    // mic + remote-audio playback: require transient user activation. Best-effort —
+    // must NOT tear down a live call if they fail on a gesture-less autostart. One
+    // later tap (mute toggle / page click) re-arms them.
+    try {
+      await lkRoom.localParticipant.setMicrophoneEnabled(true);
+      await vhStartRoomAudio(lkRoom);
+    } catch (micErr) {
+      console.warn('[voicehook] mic/audio deferred (needs a tap):', micErr);
+      err.textContent = 'Tippe einmal, um das Mikrofon zu aktivieren';
+      // Arm mic on the user's NEXT interaction (any tap/key = transient activation),
+      // so a gesture-less autostart still gets a live mic without hunting for a button.
+      const armMic = async () => {
+        try {
+          await lkRoom.localParticipant.setMicrophoneEnabled(true);
+          await vhStartRoomAudio(lkRoom);
+          err.textContent = '';
+        } catch (e2) { console.warn('[voicehook] mic arm retry failed:', e2); }
+      };
+      window.addEventListener('pointerdown', armMic, { once: true });
+      window.addEventListener('keydown', armMic, { once: true });
+    }
   } catch (e) {
     console.error('[voicehook] call failed', e);
     err.textContent = 'Connection failed: ' + (e && e.message ? e.message : e);
@@ -3008,15 +3027,21 @@ async function vhInviteJoinAsHost() {
     vhTrLog('system', `Raum ${room} bereit — du bist drin, warte auf deinen Agent…`);
 
     await lkRoom.connect(tok.url, tok.token);
-    await lkRoom.localParticipant.setMicrophoneEnabled(true);
-    // Unblock remote-audio playback inside this user gesture (autoplay policy).
-    await vhStartRoomAudio(lkRoom);
+    // Live on connect — UI out of idle + hang-up armed BEFORE mic/audio (#58),
+    // so a gesture-less autostart is still a controllable call.
     lkConnected = true;
     btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = 'End call';
     try { vhMuteBtnVisibility(true); } catch (_) {}  // show mic-mute + speaker-mute toggles (parity with vhStartCall)
     // Preserve query string (esp. ?go=1) so a refresh re-triggers autostart
-    // instead of dumping the user back to the modal mid-call.
     try { history.replaceState(null, '', '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
+    // mic + audio best-effort (need user gesture; must not tear down a live call)
+    try {
+      await lkRoom.localParticipant.setMicrophoneEnabled(true);
+      await vhStartRoomAudio(lkRoom);
+    } catch (micErr) {
+      console.warn('[voicehook] invite mic/audio deferred (needs a tap):', micErr);
+      err.textContent = 'Tippe einmal, um das Mikrofon zu aktivieren';
+    }
   } catch (e) {
     console.error('[voicehook] invite call failed', e);
     err.textContent = 'Invite failed: ' + (e && e.message ? e.message : e);
