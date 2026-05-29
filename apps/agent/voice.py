@@ -35,8 +35,17 @@ def build_stt(
     )
 
 
-def build_tts(*, voice: str | None = None) -> GoogleTTS:
-    """Google Chirp3-HD TTS. Requires GOOGLE_APPLICATION_CREDENTIALS (GCP SA JSON path)."""
+def build_tts(*, voice: str | None = None, language: str | None = None) -> GoogleTTS:
+    """Google Chirp3-HD TTS. Requires GOOGLE_APPLICATION_CREDENTIALS (GCP SA JSON path).
+
+    `language` must match the voice's language prefix (Google rejects e.g.
+    voice=de-DE-Chirp3-HD-Charon with language=en-US → 400 "code to match"). We
+    auto-derive the BCP-47 lang from the voice name's prefix when not given.
+    """
     from livekit.plugins.google import TTS
 
-    return TTS(voice_name=voice or os.environ.get("VOICEHOOK_TTS_VOICE", DEFAULT_TTS_VOICE))
+    v = voice or os.environ.get("VOICEHOOK_TTS_VOICE", DEFAULT_TTS_VOICE)
+    # voice name is "de-DE-Chirp3-HD-Charon" — first two dash-segments = lang code
+    auto_lang = "-".join(v.split("-")[:2]) if "-" in v else "en-US"
+    lang = language or os.environ.get("VOICEHOOK_TTS_LANGUAGE", auto_lang)
+    return TTS(voice_name=v, language=lang)
