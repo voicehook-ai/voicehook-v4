@@ -1,0 +1,45 @@
+name: E2E voice (manual)
+
+# Real-audio E2E against a deployed v4 box. NOT triggered on push/PR —
+# uses paid provider APIs (Deepgram, Google) and requires a live LK server.
+# Trigger manually after a successful staging deploy; must pass before DNS cutover.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Target LiveKit URL (e.g. wss://rtc.staging.voicehook.ai)"
+        required: true
+        default: "wss://rtc.staging.voicehook.ai"
+
+permissions:
+  contents: read
+
+jobs:
+  voice:
+    name: real-audio round-trip
+    runs-on: ubuntu-latest
+    environment: staging   # gate on secrets only configured in `staging`
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: install
+        run: pip install -e ".[dev]" "livekit-api>=0.7" httpx
+      - name: run E2E voice script
+        env:
+          LIVEKIT_URL: ${{ github.event.inputs.target }}
+          LIVEKIT_API_KEY:    ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          INVITE_SECRET:      ${{ secrets.INVITE_SECRET }}
+          DEEPGRAM_API_KEY:   ${{ secrets.DEEPGRAM_API_KEY }}
+          GOOGLE_API_KEY:     ${{ secrets.GOOGLE_API_KEY }}
+        run: |
+          if [ ! -x tests/e2e/run.sh ]; then
+            echo "tests/e2e/run.sh not implemented yet — see tests/e2e/README.md"
+            echo "the real-audio E2E ships in v4.1 once a staging box exists"
+            exit 78  # neutral
+          fi
+          bash tests/e2e/run.sh
