@@ -1194,7 +1194,10 @@ function animate() {
   // Connected-but-no-audio-yet (gesture-less auto-join, pre-tap): give the orb
   // a visibly livelier resting state than true-idle so a connected call never
   // looks dead while the user is about to tap to activate (#63).
-  const orbConn = (typeof lkConnected !== 'undefined' && lkConnected && !micActive);
+  // NB: read window.vhInCall, NOT the `let lkConnected` — this hot loop starts
+  // via rAF before that declaration runs, and `typeof` does NOT dodge the TDZ
+  // for a let, so referencing lkConnected here throws every frame.
+  const orbConn = (window.vhInCall === true && !micActive);
 
   // Maus-Welt-Position einmal pro Frame via Raycast auf z=0
   if (mouseInside) {
@@ -2827,7 +2830,7 @@ async function vhStartCall() {
     // user gesture and can no-op/throw on an autostart (?go=1 / localStorage
     // rejoin); doing them first left a gesture-less autostart connected-but-idle
     // with a dead hang-up button (#58). State transition must not depend on mic.
-    lkConnected = true;
+    lkConnected = true; window.vhInCall = true;
     btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = 'End call';
     try { vhMuteBtnVisibility(true); } catch (_) {}  // show mic-mute toggle next to btn-call
     err.textContent = '';  // no "connected" text — speaker-color in kringel does the talking
@@ -2853,7 +2856,7 @@ async function vhStartCall() {
     console.error('[voicehook] call failed', e);
     err.textContent = 'Connection failed: ' + (e && e.message ? e.message : e);
     try { lkRoom && lkRoom.disconnect(); } catch (_) {}
-    lkRoom = null; lkConnected = false;
+    lkRoom = null; lkConnected = false; window.vhInCall = false;
   vhRestorePalette();
   } finally { btnCall.disabled = false; }
 }
@@ -3030,7 +3033,7 @@ async function vhInviteJoinAsHost() {
     await lkRoom.connect(tok.url, tok.token);
     // Live on connect — UI out of idle + hang-up armed BEFORE mic/audio (#58),
     // so a gesture-less autostart is still a controllable call.
-    lkConnected = true;
+    lkConnected = true; window.vhInCall = true;
     btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = 'End call';
     try { vhMuteBtnVisibility(true); } catch (_) {}  // show mic-mute + speaker-mute toggles (parity with vhStartCall)
     // Preserve query string (esp. ?go=1) so a refresh re-triggers autostart
@@ -3054,7 +3057,7 @@ async function vhInviteJoinAsHost() {
     console.error('[voicehook] invite call failed', e);
     err.textContent = 'Invite failed: ' + (e && e.message ? e.message : e);
     try { lkRoom && lkRoom.disconnect(); } catch (_) {}
-    lkRoom = null; lkConnected = false;
+    lkRoom = null; lkConnected = false; window.vhInCall = false;
     vhRestorePalette();
   } finally { btnCall.disabled = false; }
 }
@@ -3864,7 +3867,7 @@ vhRecentsRender();
       await lkRoom.connect(tok.url, tok.token);
       await lkRoom.localParticipant.setMicrophoneEnabled(true);
       try { await vhStartRoomAudio(lkRoom); } catch (_) {}
-      lkConnected = true;
+      lkConnected = true; window.vhInCall = true;
       try { history.replaceState(null, '', '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
 
       _setCallUi('in-call', 'in call · invite URL copied: ' + inviteUrl);
