@@ -12,6 +12,7 @@ import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from .health import probe_all
 from .tokens import mint_livekit_token, verify_invite
 
 app = FastAPI(title="voicehook-agent", version="4.0.0-dev")
@@ -35,6 +36,24 @@ class TokenResponse(BaseModel):
 def healthz() -> dict[str, str]:
     """Liveness probe. PR-6 adds functional probes (STT/TTS/LLM)."""
     return {"status": "ok"}
+
+
+@app.get("/status")
+def status() -> dict:
+    """Functional health: each component's probe. 200 always; clients read `healthy`.
+
+    Component checks today are env-presence (key/credentials). PR-10 promotes
+    these to real round-trip probes (Deepgram WS handshake, TTS synthesize a
+    tone, Gemini ping prompt) so /status reflects upstream availability, not
+    just configuration.
+    """
+    probe = probe_all()
+    return {
+        "service": "voicehook-agent",
+        "version": "4.0.0-dev",
+        "probe": {"stt": probe.stt, "tts": probe.tts, "llm": probe.llm},
+        "healthy": probe.healthy,
+    }
 
 
 @app.post("/api/token", response_model=TokenResponse)
