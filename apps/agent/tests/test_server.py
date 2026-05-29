@@ -148,3 +148,25 @@ def test_host_call_rate_limited_per_ip():
 def test_host_call_validates_payload():
     c = TestClient(app)
     assert c.post("/api/host-call", json={}, headers={"x-forwarded-for": "10.0.0.4"}).status_code == 422
+
+
+# ----- invite=1 auto-dispatches voice-ai (#42) -----------------------------
+def test_invite1_auto_dispatches_voice_ai(monkeypatch):
+    import time as _t
+
+    import agent.server as srv
+    calls = []
+    monkeypatch.setattr(
+        srv, "_ensure_agent_dispatched",
+        lambda room, agent_name="voice-ai": calls.append((room, agent_name)),
+    )
+    c = TestClient(app)
+    r = c.get("/api/token", params={"room": "auto-disp-room", "identity": "claude", "invite": "1"})
+    assert r.status_code == 200
+    assert r.json()["room"] == "auto-disp-room"
+    # dispatch fires in a daemon thread — give it a beat
+    for _ in range(50):
+        if calls:
+            break
+        _t.sleep(0.02)
+    assert calls == [("auto-disp-room", "voice-ai")]

@@ -154,12 +154,16 @@ def issue_token_get(
 ) -> TokenResponse:
     """GET-flavor compat for voicehook-agent CLI (v3 protocol).
 
-    The CLI passes `invite=1` for senior peers (no agent re-dispatch needed since
-    voice-ai is already in the room). For that special value we mint a plain
-    join token (agent_name=None). Otherwise we require a real HMAC invite.
+    The CLI passes `invite=1` for senior peers — a plain join token (no
+    `roomConfig.agents` claim, so the JOIN itself won't dispatch). But the room
+    may be agentless (the human entered via a path that never dispatched), and a
+    non-developer senior agent can't be expected to know it must hand-trigger a
+    dispatch (#42). So on every invite=1 join we also fire an explicit, idempotent
+    CreateDispatch for voice-ai — LK dedups, so it's a no-op if one is already
+    assigned. Net: any senior join guarantees voice-ai is in the room, automatically.
+    Otherwise we require a real HMAC invite.
     """
     if invite == "1":
-        # senior peer — no HMAC, no auto-dispatch (room is already live)
         api_key = os.environ.get("LIVEKIT_API_KEY")
         api_secret = os.environ.get("LIVEKIT_API_SECRET")
         livekit_url = os.environ.get("LIVEKIT_URL", "wss://rtc.voicehook.ai")
@@ -170,6 +174,11 @@ def issue_token_get(
             room=room, identity=identity, ttl_seconds=ttl_seconds,
             agent_name=None,
         )
+        # auto-ensure voice-ai is present (idempotent) — see docstring (#42)
+        import threading
+        threading.Thread(
+            target=_ensure_agent_dispatched, args=(room, "voice-ai"), daemon=True
+        ).start()
         return TokenResponse(token=token, url=livekit_url, room=room, identity=identity)
     return _mint(room, identity, invite, ttl_seconds)
 
