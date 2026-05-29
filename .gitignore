@@ -1,0 +1,38 @@
+# secrets — NEVER commit. Terraform vars come from KeePass/Keychain only.
+.env
+.env.*
+!.env.example
+*.tfvars
+!*.tfvars.example
+*.tfstate*
+.terraform/
+secrets.auto.tfvars
+gcp-sa.json
+livekit.yaml
+!livekit.yaml.example
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.bak
+*.bak-*
+
+# logs / runtime
+*.log
+/tmp/
+_orphans-*/

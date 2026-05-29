@@ -1,0 +1,38 @@
+[project]
+name = "voicehook"
+version = "4.0.0-dev"
+description = "voicehook.ai — voice meeting + translation layer between humans and agents (v4 clean-slate)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "voicehook.ai" }]
+
+# runtime deps grow per PR; PR-1 ships an empty set so CI is minimal-fast.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23",
+  "ruff>=0.6",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["apps"]
+include = ["agent*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]  # line-length handled by formatter
+
+[tool.pytest.ini_options]
+testpaths = ["apps/agent/tests"]
+asyncio_mode = "auto"
