@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -106,3 +108,43 @@ def test_api_token_validates_payload_shape():
         json={"room": "room-x", "identity": "alice", "invite": code, "ttl_seconds": 5},
     )
     assert r.status_code == 422
+
+
+# ----- /api/host-call (#20) ------------------------------------------------
+_SLUG_RX = re.compile(r"^[a-z]+-[a-z]+-[a-z]+-[A-Z0-9]{4}$")
+
+
+def test_host_call_mints_fresh_server_generated_room():
+    c = TestClient(app)
+    r = c.post("/api/host-call", json={"identity": "host1"},
+               headers={"x-forwarded-for": "10.0.0.1"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["identity"] == "host1"
+    assert body["url"] == "wss://rtc.test"
+    assert body["token"].count(".") == 2
+    assert _SLUG_RX.match(body["room"]), f"slug {body['room']} must match client regex"
+
+
+def test_host_call_rooms_are_unique():
+    c = TestClient(app)
+    rooms = {
+        c.post("/api/host-call", json={"identity": "h"},
+               headers={"x-forwarded-for": "10.0.0.2"}).json()["room"]
+        for _ in range(5)
+    }
+    assert len(rooms) == 5  # server picks a fresh slug each time
+
+
+def test_host_call_rate_limited_per_ip():
+    c = TestClient(app)
+    ip = {"x-forwarded-for": "10.0.0.3"}
+    for _ in range(5):
+        assert c.post("/api/host-call", json={"identity": "h"}, headers=ip).status_code == 200
+    # 6th within the window is throttled
+    assert c.post("/api/host-call", json={"identity": "h"}, headers=ip).status_code == 429
+
+
+def test_host_call_validates_payload():
+    c = TestClient(app)
+    assert c.post("/api/host-call", json={}, headers={"x-forwarded-for": "10.0.0.4"}).status_code == 422

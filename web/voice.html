@@ -2774,22 +2774,36 @@ async function vhStartCall() {
   if (!window.LivekitClient) { err.textContent = 'LiveKit SDK failed to load — reload the page.'; return; }
   btnCall.disabled = true; err.textContent = 'connecting…';
   try {
-    // Slug from /r/<slug> deeplink or fresh thematic slug. Either way it's
-    // a /r/-style room (matches server SLUG_PATTERN).
-    const room     = VH_PREFILL_ROOM || vhRandSlug();
-    const identity = vhStableIdentity(room, 'gast');
     const voice    = (document.getElementById('lk-voice') || {}).value || '';
     const model    = (document.getElementById('lk-model') || {}).value || VH_LK_MODEL;
-    const u = '/api/token?room=' + encodeURIComponent(room) +
-              '&identity=' + encodeURIComponent(identity) +
-              '&model=' + encodeURIComponent(model) +
-              (voice ? '&voice=' + encodeURIComponent(voice) : '') +
-              (VH_INVITE ? '&invite=' + encodeURIComponent(VH_INVITE) : '');
-    // Pre-call wiring (token-mint + connect + mic-publish) is implementation
-    // noise — surface only when something fails. Silence the happy path.
-    const r = await fetch(u);
-    if (!r.ok) throw new Error('Token server ' + r.status);
-    const tok = await r.json();
+    // Two paths on v4 (#20): an /r/<slug>?invite=<code> deeplink is an INVITED
+    // join to a named room (HMAC-gated mint). A fresh "Start Call" has no invite
+    // — v4 forbids client-named mints without one (#52 fix), so it goes through
+    // /api/host-call, where the SERVER picks a brand-new slug and self-authorizes
+    // (no room to hijack). Either way `tok.room` is the room we end up in.
+    let room, tok;
+    if (VH_INVITE) {
+      room = VH_PREFILL_ROOM || vhRandSlug();
+      const identity = vhStableIdentity(room, 'gast');
+      const u = '/api/token?room=' + encodeURIComponent(room) +
+                '&identity=' + encodeURIComponent(identity) +
+                '&model=' + encodeURIComponent(model) +
+                (voice ? '&voice=' + encodeURIComponent(voice) : '') +
+                '&invite=' + encodeURIComponent(VH_INVITE);
+      const r = await fetch(u);
+      if (!r.ok) throw new Error('Token server ' + r.status);
+      tok = await r.json();
+    } else {
+      // fresh host call — server returns the slug it minted for us
+      const identity = 'host-' + Math.random().toString(36).slice(2, 8);
+      const r = await fetch('/api/host-call', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ identity }),
+      });
+      if (!r.ok) throw new Error('Host-call ' + r.status);
+      tok = await r.json();
+      room = tok.room;
+    }
     if (!tok || !tok.token || !tok.url) throw new Error('invalid token response');
 
     if (currentMode !== 'speech') applyProfile('speech');
