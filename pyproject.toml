@@ -7,11 +7,12 @@ requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [{ name = "voicehook.ai" }]
 
-# runtime deps grow per PR; PR-2 adds the FastAPI surface for /api/token + /healthz.
+# runtime deps grow per PR; PR-3 adds the LiveKit worker (registers as agent_name=voice-ai).
 dependencies = [
   "fastapi>=0.115",
   "pydantic>=2.7",
   "uvicorn[standard]>=0.30",
+  "livekit-agents>=0.11",
 ]
 
 [project.optional-dependencies]
