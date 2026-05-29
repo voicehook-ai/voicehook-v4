@@ -40,7 +40,15 @@ async function join() {
     body: JSON.stringify({ room, identity, invite })
   }).then(r => r.ok ? r.json() : Promise.reject(r.status));
   const r = new Room();
-  r.on(RoomEvent.TrackSubscribed, (t) => { if (t.kind === Track.Kind.Audio) t.attach(document.body); });
+  r.on(RoomEvent.TrackSubscribed, (t) => {
+    if (t.kind !== Track.Kind.Audio) return;
+    const el = t.attach();
+    el.autoplay = true;
+    el.playsInline = true;
+    document.body.appendChild(el);
+    el.play().catch(e => log('agent', `(autoplay blocked: ${e.name} — click page to enable)`));
+    log('agent', '(audio subscribed)');
+  });
   r.on(RoomEvent.DataReceived, (payload, _p, _k, topic) => {
     try { const d = JSON.parse(new TextDecoder().decode(payload));
       if (topic === 'transcript') log(d.role === 'agent' ? 'agent' : 'user', `${d.role}: ${d.text}`);
