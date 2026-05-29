@@ -36,16 +36,34 @@ async def entrypoint(ctx: JobContext) -> None:
 
     session = AgentSession(stt=build_stt(), tts=build_tts(), llm=build_llm())
     agent = RelayAgent(instructions=DEFAULT_PERSONA)
-    handlers = build_relay_handlers(session, agent)
+    handlers = build_relay_handlers(session, agent, room=ctx.room)
     routes = topic_dispatch(handlers)
+
+    import asyncio
+    import json
 
     @ctx.room.on("data_received")
     def _on_data(packet) -> None:  # noqa: ANN001
         handler = routes.get(packet.topic)
         if handler is None:
             return
-        import asyncio
         asyncio.create_task(handler(packet))
+
+    # Publish user STT transcripts back on the `transcript` topic so the
+    # browser UI sees what the agent heard. (v3 parity, PR-12.)
+    @session.on("user_input_transcribed")
+    def _on_user_transcript(ev) -> None:  # noqa: ANN001
+        text = getattr(ev, "transcript", None) or getattr(ev, "text", "")
+        is_final = getattr(ev, "is_final", True)
+        if not text or not is_final:
+            return
+        payload = json.dumps({"role": "user", "text": text}).encode()
+        async def _send() -> None:
+            try:
+                await ctx.room.local_participant.publish_data(payload=payload, topic="transcript")
+            except Exception as e:  # noqa: BLE001
+                logger.warning("[user-transcript publish] %s", e)
+        asyncio.create_task(_send())
 
     await session.start(agent=agent, room=ctx.room)
 

@@ -1,19 +1,32 @@
 """FastAPI surface for the voicehook agent.
 
-PR-2 scope: HMAC-gated /api/token mint + /healthz. Later PRs add /status (#54),
-senior.* routes (kept on LiveKit data-channel, NOT HTTP), and an inline
-LiveKit-worker bootstrap (PR-3).
+PR-2 scope: HMAC-gated /api/token mint + /healthz. PR-6 added /status.
+PR-12 adds belt-and-suspenders agent dispatch: on every POST /api/token we
+fire `AgentDispatchService.CreateDispatch` for the room. JWT `roomConfig.agents`
+auto-dispatches on FIRST participant join, but if the room was already created
+by a senior peer (no agents claim), that path is dead — the explicit dispatch
+guarantees an agent shows up either way. Idempotent server-side (LK dedups).
 """
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
+import logging
 import os
+import time
+import urllib.error
+import urllib.request
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from .health import probe_all
 from .tokens import mint_livekit_token, verify_invite
+
+logger = logging.getLogger("voicehook.server")
 
 app = FastAPI(title="voicehook-agent", version="4.0.0-dev")
 
@@ -56,6 +69,45 @@ def status() -> dict:
     }
 
 
+def _lk_admin_jwt(api_key: str, api_secret: str, room: str) -> str:
+    """Mint a 60s admin JWT for the LK twirp API (used for CreateDispatch)."""
+    def b64u(b: bytes) -> str:
+        return base64.urlsafe_b64encode(b).rstrip(b"=").decode("ascii")
+    h = b64u(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+    p = b64u(json.dumps({"iss": api_key, "exp": int(time.time()) + 60,
+                          "video": {"roomAdmin": True, "room": room}}).encode())
+    sig = b64u(hmac.new(api_secret.encode(), f"{h}.{p}".encode(), hashlib.sha256).digest())
+    return f"{h}.{p}.{sig}"
+
+
+def _ensure_agent_dispatched(room: str, agent_name: str = "voice-ai") -> None:
+    """Belt-and-suspenders: fire CreateDispatch for the room. Idempotent — LK dedups
+    when there's already a worker assigned for this room/agent_name."""
+    api_key = os.environ.get("LIVEKIT_API_KEY", "")
+    api_secret = os.environ.get("LIVEKIT_API_SECRET", "")
+    livekit_url = os.environ.get("LIVEKIT_URL", "wss://rtc.voicehook.ai")
+    if not api_key or not api_secret:
+        return
+    # twirp lives on the HTTP port — for in-cluster calls hit local LK directly
+    http_url = livekit_url.replace("wss://", "https://").replace("ws://", "http://")
+    # local-machine optimization: use loopback (avoids TLS dance)
+    if "127.0.0.1" in livekit_url or "localhost" in livekit_url:
+        http_url = "http://127.0.0.1:7880"
+    elif livekit_url.startswith(("wss://rtc.", "ws://rtc.")):
+        http_url = "http://127.0.0.1:7880"  # same box, direct
+    try:
+        req = urllib.request.Request(
+            f"{http_url}/twirp/livekit.AgentDispatchService/CreateDispatch",
+            method="POST",
+            data=json.dumps({"room": room, "agent_name": agent_name}).encode(),
+            headers={"Authorization": f"Bearer {_lk_admin_jwt(api_key, api_secret, room)}",
+                     "Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=3).read()
+    except (urllib.error.URLError, TimeoutError) as e:
+        logger.warning("[ensure-dispatch] %s: %s", room, e)
+
+
 def _mint(room: str, identity: str, invite: str, ttl_seconds: int, *, agent_name: str | None = "voice-ai") -> TokenResponse:
     verdict = verify_invite(invite, room)
     if not verdict.valid:
@@ -70,6 +122,15 @@ def _mint(room: str, identity: str, invite: str, ttl_seconds: int, *, agent_name
         room=room, identity=identity, ttl_seconds=ttl_seconds,
         agent_name=agent_name,
     )
+    # Fire explicit dispatch off the request path so the token returns fast
+    # even if LK is slow; the agent shows up shortly after the participant
+    # connects. Threading (not asyncio) to avoid event-loop coupling with the
+    # sync FastAPI route handler.
+    if agent_name:
+        import threading
+        threading.Thread(
+            target=_ensure_agent_dispatched, args=(room, agent_name), daemon=True
+        ).start()
     return TokenResponse(token=token, url=livekit_url, room=room, identity=identity)
 
 

@@ -14,10 +14,14 @@ Topics handled here:
 - senior.persona    — replace the agent's instructions (live-injected knowledge)
 - senior.interrupt  — drop the current say
 - senior.inject     — synthetic user-turn (test harness; senior brain reads transcript)
+
+PR-12 adds: every senior.say also publishes {role:"agent",text:...} on the
+`transcript` topic so the browser UI can render it (v3 parity).
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -27,7 +31,7 @@ from livekit.agents import Agent, StopResponse
 
 if TYPE_CHECKING:
     from livekit.agents import AgentSession
-    from livekit.rtc import DataPacket
+    from livekit.rtc import DataPacket, Room
 
 logger = logging.getLogger("voicehook.relay")
 
@@ -68,10 +72,33 @@ def _decode(payload: bytes) -> dict:
         return {}
 
 
-def build_relay_handlers(session: AgentSession, agent: RelayAgent) -> RelayHandlers:
+TOPIC_TRANSCRIPT = "transcript"
+
+
+def _publish_transcript_safe(room: Room | None, role: str, text: str) -> None:
+    """Fire-and-forget publish_data; never let UI feedback break the relay."""
+    if room is None or not text:
+        return
+    payload = json.dumps({"role": role, "text": text}).encode()
+    async def _send() -> None:
+        try:
+            await room.local_participant.publish_data(payload=payload, topic=TOPIC_TRANSCRIPT)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("[transcript publish] %s", e)
+    asyncio.create_task(_send())
+
+
+def build_relay_handlers(
+    session: AgentSession,
+    agent: RelayAgent,
+    *,
+    room: Room | None = None,
+) -> RelayHandlers:
     """Build per-topic handler closures bound to a session + agent.
 
-    Exposed for unit tests; the worker wires these via ctx.room.on('data_received').
+    `room` is optional — when passed, every senior.say also publishes a
+    {role:"agent",text:...} packet on the `transcript` topic so the browser UI
+    can render the agent turn. (v3 parity, PR-12.)
     """
 
     async def on_say(packet: DataPacket) -> None:
@@ -83,6 +110,7 @@ def build_relay_handlers(session: AgentSession, agent: RelayAgent) -> RelayHandl
         if priority == "interrupt":
             session.interrupt()
         logger.info("[senior.say] %s", text[:200])
+        _publish_transcript_safe(room, "agent", text)
         session.say(text, allow_interruptions=False)
 
     async def on_persona(packet: DataPacket) -> None:
