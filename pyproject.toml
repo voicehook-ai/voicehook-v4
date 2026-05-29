@@ -7,12 +7,14 @@ requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [{ name = "voicehook.ai" }]
 
-# runtime deps grow per PR; PR-3 adds the LiveKit worker (registers as agent_name=voice-ai).
+# runtime deps grow per PR; PR-4 wires Deepgram STT + Google Chirp TTS providers.
 dependencies = [
   "fastapi>=0.115",
   "pydantic>=2.7",
   "uvicorn[standard]>=0.30",
   "livekit-agents>=0.11",
+  "livekit-plugins-deepgram>=0.6",
+  "livekit-plugins-google>=0.6",
 ]
 
 [project.optional-dependencies]
