@@ -44,3 +44,12 @@ def test_worker_options_respects_env_override(monkeypatch):
     finally:
         monkeypatch.delenv("VOICEHOOK_AGENT_NAME", raising=False)
         importlib.reload(worker_mod)
+
+
+def test_entrypoint_subscribes_to_audio():
+    """Regression guard (#55): the agent MUST connect with explicit audio
+    auto-subscribe, else STT silently gets no input (recurring post-deploy bug)."""
+    import inspect as _inspect
+    src = _inspect.getsource(entrypoint)
+    assert "auto_subscribe=AutoSubscribe.AUDIO_ONLY" in src, \
+        "ctx.connect must use AutoSubscribe.AUDIO_ONLY so STT receives audio"
