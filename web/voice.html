@@ -3440,9 +3440,36 @@ function vhMuteBtnVisibility(visible) {
 }
 window.addEventListener('beforeunload', () => { try { lkRoom && lkRoom.disconnect(); } catch (_) {} });
 
-// Auto-start: ?go=1 (or ?autostart=1) skips the choice modal and connects
-// immediately. Used when the link is sent by an agent — confirmation already
-// happened at the conversation layer; a UI modal would be friction.
+// One-tap join gate (#58). A gesture-less autostart published the mic but
+// Chrome delivered 0 audio — mic capture AND remote-audio playback require a
+// real user gesture, so the call looked "half-joined": no STT, no transcript,
+// dead Kringel. So ?go=1 no longer silently connects; it surfaces a single tap
+// target whose click IS the gesture → vhStartCall() runs inside it → mic audio
+// flows, transcript + orb come alive.
+let vhJoinGate = null;
+function vhShowJoinGate() {
+  if (vhJoinGate || (typeof lkConnected !== 'undefined' && lkConnected)) return;
+  const b = document.createElement('button');
+  b.id = 'vh-join-gate';
+  b.type = 'button';
+  b.textContent = 'Tippen zum Beitreten';
+  b.setAttribute('aria-label', 'Dem Call beitreten');
+  b.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9999;' +
+    'padding:16px 32px;border-radius:999px;border:1px solid rgba(109,201,217,0.6);' +
+    'background:rgba(109,201,217,0.14);color:#cfeef4;font:600 1rem/1 inherit;cursor:pointer;' +
+    'backdrop-filter:blur(6px);box-shadow:0 4px 24px rgba(0,0,0,0.35);';
+  b.addEventListener('click', () => {
+    try { b.remove(); } catch (_) {}
+    vhJoinGate = null;
+    vhStartCall().catch(e => console.error('[join-gate]', e));
+  }, { once: true });
+  document.body.appendChild(b);
+  vhJoinGate = b;
+}
+
+// Auto-start: ?go=1 (or ?autostart=1) skips the choice modal. v4 (#58): it does
+// NOT auto-connect (gesture-less connect = silent mic). It surfaces a one-tap
+// join gate instead; the tap supplies the gesture the audio pipeline needs.
 // Optional ?voice=…&model=… pre-fill the picks (else page defaults apply).
 (function vhMaybeAutostart() {
   try {
@@ -3459,7 +3486,10 @@ window.addEventListener('beforeunload', () => { try { lkRoom && lkRoom.disconnec
     const v = q.get('voice'); if (v) { const el = document.getElementById('lk-voice'); if (el) el.value = v; }
     const m = q.get('model'); if (m) { const el = document.getElementById('lk-model'); if (el) el.value = m; }
     if (vhModal) vhModal.hidden = true;
-    requestAnimationFrame(() => { vhStartCall().catch(e => console.error('[autostart]', e)); });
+    // #58: surface a one-tap gate instead of a silent connect. The user's tap
+    // is the gesture that lets the browser actually capture mic audio + unblock
+    // remote playback — without it the mic track is dead (no STT, idle Kringel).
+    vhShowJoinGate();
   } catch (e) { console.warn('[autostart] failed:', e); }
 })();
 
