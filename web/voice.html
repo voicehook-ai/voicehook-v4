@@ -14,6 +14,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
 </script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
+@keyframes vh-act-pulse { 0% { box-shadow: 0 0 0 0 rgba(109,201,217,0.5); } 70% { box-shadow: 0 0 0 14px rgba(109,201,217,0); } 100% { box-shadow: 0 0 0 0 rgba(109,201,217,0); } }
 /* CI-Tokens aus voicehook.ai/styles.css übernommen */
 :root {
   --vh-bg-0: #000000;
@@ -1190,6 +1191,13 @@ function animate() {
   // Damping: aktiv aggressiv (0.74) → ≈ kritisch gedämpft mit Spring 0.040,
   // Settling ~250 ms statt ~500 ms — direkter Sound-→Visual-Response
   const damp    = micActive ? 0.74 : 0.92;
+  // Connected-but-no-audio-yet (gesture-less auto-join, pre-tap): give the orb
+  // a visibly livelier resting state than true-idle so a connected call never
+  // looks dead while the user is about to tap to activate (#63).
+  // NB: read window.vhInCall, NOT the `let lkConnected` — this hot loop starts
+  // via rAF before that declaration runs, and `typeof` does NOT dodge the TDZ
+  // for a let, so referencing lkConnected here throws every frame.
+  const orbConn = (window.vhInCall === true && !micActive);
 
   // Maus-Welt-Position einmal pro Frame via Raycast auf z=0
   if (mouseInside) {
@@ -1348,7 +1356,7 @@ function animate() {
       // Speech-Mode: Idle-Geschwindigkeit + 10%, unabhängig von Mic-Status —
       // gibt eine ruhige aber merklich lebendige Halo-Rotation.
       const isSpeech = (currentMode === 'speech');
-      const orbSpeed = isSpeech ? 0.000517 : (micActive ? 0.0019 : 0.00047);
+      const orbSpeed = isSpeech ? 0.000517 : (micActive ? 0.0019 : (orbConn ? 0.0011 : 0.00047));
       vel[i3]   += tanX * orbSpeed;
       vel[i3+1] += tanY * orbSpeed;
       // sin(clock*0.7 + turb[i]) via sum-of-angles: spart 1 sin/Particle/Frame
@@ -1431,7 +1439,7 @@ function animate() {
       vel[i3+2] += (oz - pz) * 0.040;
     } else {
       // ── Donut-Korn ruhend: Atem-Ripple + Spring zur Origin am Ring ───────
-      const ripple = (sCK07 * cTurb[i] + cCK07 * sTurb[i]) * 0.0006;
+      const ripple = (sCK07 * cTurb[i] + cCK07 * sTurb[i]) * (orbConn ? 0.0015 : 0.0006);
       vel[i3]   += radX * ripple;
       vel[i3+1] += radY * ripple;
       vel[i3]   += (ox - px) * springK;
@@ -2817,30 +2825,45 @@ async function vhStartCall() {
     vhWireRoomEvents(lkRoom, RoomEvent, Track);
 
     await lkRoom.connect(tok.url, tok.token);
-    await lkRoom.localParticipant.setMicrophoneEnabled(true);
-    // Unblock remote-audio playback inside this user gesture (autoplay policy).
-    await vhStartRoomAudio(lkRoom);
-    // "ready"-message comes from TrackSubscribed once voice-ai's audio-track
-    // arrives — at this point the user cannot actually talk yet.
-    lkConnected = true;
+    // The call is LIVE the moment connect resolves — flip UI out of idle and arm
+    // the hang-up button NOW, before the mic/audio steps. Those need a transient
+    // user gesture and can no-op/throw on an autostart (?go=1 / localStorage
+    // rejoin); doing them first left a gesture-less autostart connected-but-idle
+    // with a dead hang-up button (#58). State transition must not depend on mic.
+    lkConnected = true; window.vhInCall = true;
     btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = 'End call';
     try { vhMuteBtnVisibility(true); } catch (_) {}  // show mic-mute toggle next to btn-call
     err.textContent = '';  // no "connected" text — speaker-color in kringel does the talking
-    // rewrite browser URL to /r/<slug> so bookmark + back-button work
     // Preserve query string (esp. ?go=1) so a refresh re-triggers autostart
-    // instead of dumping the user back to the modal mid-call.
     try { history.replaceState(null, '', '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
+    // mic + remote-audio playback need transient user activation. With a real
+    // gesture (button click) run inline. Without one (?go=1 / rejoin autostart)
+    // a gesture-less enable SUCCEEDS into a silent track + suspended analyser ctx
+    // — no throw, so we must NOT take the inline path. Defer the whole bring-up
+    // to the first tap via vhArmAudioOnGesture (#63).
+    if (vhHasGesture()) {
+      try {
+        await lkRoom.localParticipant.setMicrophoneEnabled(true);
+        await vhStartRoomAudio(lkRoom);
+      } catch (micErr) {
+        console.warn('[voicehook] mic/audio deferred (needs a tap):', micErr);
+        vhArmAudioOnGesture(lkRoom);
+      }
+    } else {
+      vhArmAudioOnGesture(lkRoom);
+    }
   } catch (e) {
     console.error('[voicehook] call failed', e);
     err.textContent = 'Connection failed: ' + (e && e.message ? e.message : e);
     try { lkRoom && lkRoom.disconnect(); } catch (_) {}
-    lkRoom = null; lkConnected = false;
+    lkRoom = null; lkConnected = false; window.vhInCall = false;
   vhRestorePalette();
   } finally { btnCall.disabled = false; }
 }
 
 function vhEndCall(fromEvent) {
   try { vhHideSoundGate(); } catch (_) {}
+  try { vhActGateHide(); vhAudioArmed = false; } catch (_) {}
   try { window.lkRoom = null; } catch (_) {}
   try { if (lkAudioEl) { lkAudioEl.remove(); lkAudioEl = null; } } catch (_) {}
   try { if (lkAudioCtx) { lkAudioCtx.close(); lkAudioCtx = null; } } catch (_) {}
@@ -3008,20 +3031,33 @@ async function vhInviteJoinAsHost() {
     vhTrLog('system', `Raum ${room} bereit — du bist drin, warte auf deinen Agent…`);
 
     await lkRoom.connect(tok.url, tok.token);
-    await lkRoom.localParticipant.setMicrophoneEnabled(true);
-    // Unblock remote-audio playback inside this user gesture (autoplay policy).
-    await vhStartRoomAudio(lkRoom);
-    lkConnected = true;
+    // Live on connect — UI out of idle + hang-up armed BEFORE mic/audio (#58),
+    // so a gesture-less autostart is still a controllable call.
+    lkConnected = true; window.vhInCall = true;
     btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = 'End call';
     try { vhMuteBtnVisibility(true); } catch (_) {}  // show mic-mute + speaker-mute toggles (parity with vhStartCall)
     // Preserve query string (esp. ?go=1) so a refresh re-triggers autostart
-    // instead of dumping the user back to the modal mid-call.
     try { history.replaceState(null, '', '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
+    // mic + audio: inline with a gesture, else defer the full bring-up to the
+    // first tap (gesture-less enable silently no-ops → dead call). Parity with
+    // vhStartCall (#63). The previous catch-only path NEVER fired here because a
+    // gesture-less enable doesn't throw — invite-host auto-join had no arm at all.
+    if (vhHasGesture()) {
+      try {
+        await lkRoom.localParticipant.setMicrophoneEnabled(true);
+        await vhStartRoomAudio(lkRoom);
+      } catch (micErr) {
+        console.warn('[voicehook] invite mic/audio deferred (needs a tap):', micErr);
+        vhArmAudioOnGesture(lkRoom);
+      }
+    } else {
+      vhArmAudioOnGesture(lkRoom);
+    }
   } catch (e) {
     console.error('[voicehook] invite call failed', e);
     err.textContent = 'Invite failed: ' + (e && e.message ? e.message : e);
     try { lkRoom && lkRoom.disconnect(); } catch (_) {}
-    lkRoom = null; lkConnected = false;
+    lkRoom = null; lkConnected = false; window.vhInCall = false;
     vhRestorePalette();
   } finally { btnCall.disabled = false; }
 }
@@ -3183,6 +3219,72 @@ function vhHideSoundGate() {
 async function vhStartRoomAudio(room) {
   try { await room.startAudio(); vhHideSoundGate(); }
   catch (_) { /* still blocked — AudioPlaybackStatusChanged surfaces the gate */ }
+}
+
+// ── First-gesture activation for gesture-less auto-joins (#63) ───────────────
+// On a ?go=1 / localStorage-rejoin autostart there is NO user activation this
+// page-load. Two failure modes the catch-based #58 arm missed, because neither
+// throws — they SUCCEED silently into a dead call:
+//   • setMicrophoneEnabled(true) resolves with a *silent* track (gesture-less
+//     capture) → Deepgram sees dur=0 → no STT.
+//   • the analyser AudioContext (lkAudioCtx) is created in 'suspended' state →
+//     getByteFrequencyData returns all zeros → micActive=true but the orb never
+//     moves → looks idle despite being connected.
+// A manual button click only works by accident: the click is the transient
+// activation that resumes the contexts and yields a live mic track. So instead
+// of relying on a throw, when there's been no gesture we show a clear "tap to
+// talk" affordance and run the FULL bring-up inside the user's first tap:
+// resume the analyser ctx → unblock playback → re-toggle the mic to drop the
+// silent track and capture a live one. This is what lifts auto-join into the
+// SAME active state as a manual click.
+let vhAudioArmed = false;
+let vhActGate = null;
+function vhActGateHide() { if (vhActGate) { try { vhActGate.remove(); } catch (_) {} vhActGate = null; } }
+function vhActGateShow(onTap) {
+  if (vhActGate) return;
+  const b = document.createElement('button');
+  b.id = 'vh-activate-gate';
+  b.type = 'button';
+  b.textContent = 'Tippen zum Sprechen';
+  b.setAttribute('aria-label', 'Tippen zum Sprechen — Mikrofon und Ton aktivieren');
+  b.style.cssText = 'position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:9999;' +
+    'padding:12px 22px;border-radius:999px;border:1px solid rgba(109,201,217,0.7);' +
+    'background:rgba(109,201,217,0.16);color:#cfeef4;font:600 0.95rem/1 inherit;cursor:pointer;' +
+    'box-shadow:0 0 0 0 rgba(109,201,217,0.5);animation:vh-act-pulse 1.8s ease-out infinite;';
+  b.addEventListener('click', onTap);
+  document.body.appendChild(b);
+  vhActGate = b;
+}
+function vhArmAudioOnGesture(room) {
+  if (vhAudioArmed) return;
+  const arm = async () => {
+    if (vhAudioArmed) return;
+    vhAudioArmed = true;
+    try {
+      try { if (lkAudioCtx && lkAudioCtx.state === 'suspended') await lkAudioCtx.resume(); } catch (_) {}
+      try { await room.startAudio(); } catch (_) {}
+      // drop the (possibly silent) pre-gesture track, capture a fresh live one
+      try { await room.localParticipant.setMicrophoneEnabled(false); } catch (_) {}
+      await room.localParticipant.setMicrophoneEnabled(true);
+      if (err.textContent && err.textContent.indexOf('failed') === -1) err.textContent = '';
+      vhActGateHide();
+    } catch (e) {
+      console.warn('[voicehook] activation arm failed — will retry on next gesture:', e);
+      vhAudioArmed = false;  // allow a later gesture to retry
+      return;
+    }
+    window.removeEventListener('pointerdown', arm);
+    window.removeEventListener('keydown', arm);
+  };
+  window.addEventListener('pointerdown', arm);
+  window.addEventListener('keydown', arm);
+  vhActGateShow(arm);
+}
+// True if the user has interacted with the page this load (transient activation
+// available for getUserMedia/AudioContext). Defaults to true on old browsers so
+// we keep the inline path.
+function vhHasGesture() {
+  try { return navigator.userActivation ? navigator.userActivation.hasBeenActive : true; } catch (_) { return true; }
 }
 
 // Wire LiveKit room events that feed the transcript (works for both modes).
@@ -3765,7 +3867,7 @@ vhRecentsRender();
       await lkRoom.connect(tok.url, tok.token);
       await lkRoom.localParticipant.setMicrophoneEnabled(true);
       try { await vhStartRoomAudio(lkRoom); } catch (_) {}
-      lkConnected = true;
+      lkConnected = true; window.vhInCall = true;
       try { history.replaceState(null, '', '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
 
       _setCallUi('in-call', 'in call · invite URL copied: ' + inviteUrl);
