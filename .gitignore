@@ -36,3 +36,6 @@ build/
 *.log
 /tmp/
 _orphans-*/
+
+# playwright-cli browser snapshots (local automation scratch)
+.playwright-cli/

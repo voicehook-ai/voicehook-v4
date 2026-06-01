@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import re
-
 import pytest
 from fastapi.testclient import TestClient
 
 from agent.server import app
+from agent.slug import SLUG_RE
 from agent.tokens import mint_invite
 
 SECRET = "test-secret-do-not-use"
@@ -111,9 +110,6 @@ def test_api_token_validates_payload_shape():
 
 
 # ----- /api/host-call (#20) ------------------------------------------------
-_SLUG_RX = re.compile(r"^[a-z]+-[a-z]+-[a-z]+-[A-Z0-9]{4}$")
-
-
 def test_host_call_mints_fresh_server_generated_room():
     c = TestClient(app)
     r = c.post("/api/host-call", json={"identity": "host1"},
@@ -123,7 +119,7 @@ def test_host_call_mints_fresh_server_generated_room():
     assert body["identity"] == "host1"
     assert body["url"] == "wss://rtc.test"
     assert body["token"].count(".") == 2
-    assert _SLUG_RX.match(body["room"]), f"slug {body['room']} must match client regex"
+    assert SLUG_RE.match(body["room"]), f"slug {body['room']} must match client regex"
 
 
 def test_host_call_rooms_are_unique():
