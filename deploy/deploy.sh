@@ -55,9 +55,9 @@ remote "set -e
   .venv/bin/pip install --quiet --upgrade pip wheel
   .venv/bin/pip install --quiet -e ."
 
-echo "==> systemd unit + start"
+echo "==> systemd unit + start (.env LIVEKIT_URL synced to wss://${RTC} first)"
 rsync_file "${REPO}/infra/systemd/voicehook-agent.service" /etc/systemd/system/voicehook-agent.service
-remote "systemctl daemon-reload && systemctl enable --now voicehook-agent.service && systemctl restart voicehook-agent.service"
+remote "{ [ -f /opt/voicehook/.env ] && sed -i 's|^LIVEKIT_URL=.*|LIVEKIT_URL=wss://${RTC}|' /opt/voicehook/.env || true; }; systemctl daemon-reload && systemctl enable --now voicehook-agent.service && systemctl restart voicehook-agent.service"
 
 echo "==> Caddyfile (rendered from ${DOMAIN} + ${RTC})"
 TMP=$(mktemp)
