@@ -12,24 +12,24 @@ from agent.tokens import verify_invite
 
 def test_invite_prints_join_url(capsys, monkeypatch):
     monkeypatch.setenv("INVITE_SECRET", "test-secret")
-    rc = main(["invite", "demo-room-abc"])
+    rc = main(["invite", "demo-room-live-ABC5"])
     assert rc == 0
     out = capsys.readouterr().out.strip()
     u = urlparse(out)
     assert u.scheme == "https"
     assert u.netloc == "voicehook.ai"
-    assert u.path == "/r/demo-room-abc"
+    assert u.path == "/r/demo-room-live-ABC5"
     code = parse_qs(u.query)["invite"][0]
-    v = verify_invite(code, "demo-room-abc", secret="test-secret")
+    v = verify_invite(code, "demo-room-live-ABC5", secret="test-secret")
     assert v.valid
 
 
 def test_invite_custom_base(capsys, monkeypatch):
     monkeypatch.setenv("INVITE_SECRET", "x")
-    rc = main(["invite", "room-y", "--base", "https://staging.voicehook.ai", "--ttl", "300"])
+    rc = main(["invite", "drift-signal-crisp-PDM5", "--base", "https://staging.voicehook.ai", "--ttl", "300"])
     assert rc == 0
     out = capsys.readouterr().out.strip()
-    assert out.startswith("https://staging.voicehook.ai/r/room-y?")
+    assert out.startswith("https://staging.voicehook.ai/r/drift-signal-crisp-PDM5?")
 
 
 def test_invite_fails_without_secret(monkeypatch):
