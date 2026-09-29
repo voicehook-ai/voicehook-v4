@@ -3440,6 +3440,17 @@ function vhMuteBtnVisibility(visible) {
 }
 window.addEventListener('beforeunload', () => { try { lkRoom && lkRoom.disconnect(); } catch (_) {} });
 
+// Footer-menu links (Aufladen, Setup, Start, ...) are plain same-tab links.
+// During a live call a same-tab navigation fires beforeunload above and ends
+// the call. While connected, open them in a new tab so the call survives.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest && e.target.closest('#vh-foot-menu a[href]');
+  if (!a || !lkConnected || a.target === '_blank') return;
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  window.open(a.href, '_blank', 'noopener');
+});
+
 // One-tap join gate (#58). A gesture-less autostart published the mic but
 // Chrome delivered 0 audio — mic capture AND remote-audio playback require a
 // real user gesture, so the call looked "half-joined": no STT, no transcript,
