@@ -73,7 +73,7 @@ REC="${HEAD}"; [ -n "${DIRTY}" ] && REC="${HEAD}+dirty"
 OLD="$(remote "cat ${SHA_FILE} 2>/dev/null || true" | tr -d '[:space:]')" \
   || { echo "!! cannot read ${SHA_FILE} on ${BOX_HOST}" >&2; exit 1; }
 CHANGED=""
-if [ -n "${OLD}" ] && [ "${OLD}" = "${OLD%+dirty}" ] && git -C "${REPO}" cat-file -e "${OLD}^{commit}" 2>/dev/null; then
+if [ -n "${OLD}" ] && [ "${OLD}" = "${OLD%%+*}" ] && git -C "${REPO}" cat-file -e "${OLD}^{commit}" 2>/dev/null; then
   CHANGED="$( { git -C "${REPO}" diff --name-only "${OLD}" HEAD; printf '%s\n' "${DIRTY}"; } | sed '/^$/d' | sort -u)"
   NONWEB="$(printf '%s\n' "${CHANGED}" | grep -v '^web/' | sed '/^$/d' || true)"
   if [ "${MODE}" = auto ]; then
@@ -99,6 +99,9 @@ if [ "${MODE}" = web ]; then
   echo "==> web-only: sync web/ → /var/www/voicehook (no pip, no restart, no caddy reload)"
   run "mkdir -p /var/www/voicehook"
   rs "${EXCL[@]}" "${REPO}/web/" "$(dst /var/www/voicehook)/"
+  # Only web/ went out: if the box state before was unknown or non-web changes
+  # were skipped, mark the SHA so the next auto run goes full instead of "up to date".
+  if [ -z "${CHANGED}" ] || [ -n "${NONWEB:-}" ]; then REC="${REC%%+*}+webonly"; fi
   finish; exit 0
 fi
 
