@@ -42,6 +42,7 @@ def test_live_unit_has_no_http_and_own_agent_name():
     assert "VOICEHOOK_HTTP_DISABLED=1" in u          # kein zweiter Server auf :7400
     assert "VOICEHOOK_AGENT_NAME=voice-ai-live" in u  # nie als voice-ai dispatchbar
     assert "VOICEHOOK_PIPELINE=live" in u
+    assert "VH_MAX_CALL_SECONDS=1200" in u            # engerer Kostendeckel für Live
 
 
 def test_terraform_files_present():

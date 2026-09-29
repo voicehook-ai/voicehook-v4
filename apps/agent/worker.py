@@ -10,10 +10,17 @@ Run locally:
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
+import re
+import time
+from collections.abc import Callable
+from typing import Any
 
-from livekit.agents import AgentSession, AutoSubscribe, JobContext, WorkerOptions, cli
+from livekit import rtc
+from livekit.agents import AgentSession, AutoSubscribe, JobContext, WorkerOptions, cli, room_io
 
 from .llm import build_llm
 from .relay import DEFAULT_PERSONA, RelayAgent, build_relay_handlers, topic_dispatch
@@ -22,6 +29,194 @@ from .voice import build_stt, build_tts
 logger = logging.getLogger("voicehook.worker")
 
 AGENT_NAME = os.environ.get("VOICEHOOK_AGENT_NAME", "voice-ai")
+
+# ---------------------------------------------------------------------------
+# Cost caps (Oliver, absolute): no paid call (STT/TTS/LLM) may run unbounded,
+# test calls included. Both caps are ALWAYS on — invalid / <=0 env values fall
+# back to the default instead of disabling the cap.
+# ---------------------------------------------------------------------------
+DEFAULT_MAX_CALL_SECONDS = 3600.0
+DEFAULT_IDLE_NO_HUMAN_SECONDS = 60.0
+MAX_CALL_ANNOUNCEMENT = "Maximale Gesprächsdauer erreicht. Ich beende den Call."
+# Every teardown step is bounded so the teardown itself can never hang.
+TEARDOWN_STEP_TIMEOUT = 10.0
+
+# Non-human identities — mirrors vhPresenceSlotFor() in web/voice.html:
+# voice-ai worker (`voice-ai`, `agent-AJ_*`) and senior CLIs (claude-*, hermes-*, …).
+_NON_HUMAN_IDENTITY = re.compile(
+    r"^(voice-ai|agent-AJ_)"
+    r"|^(claude|hermes|cursor|openclaw|zeroclaw|codex|gemini|gpt|grok|llama|qwen|deepseek|senior|agent-cli)-",
+    re.IGNORECASE,
+)
+
+
+def _positive_env_seconds(name: str, default: float) -> float:
+    raw = os.environ.get(name, "")
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def max_call_seconds() -> float:
+    return _positive_env_seconds("VH_MAX_CALL_SECONDS", DEFAULT_MAX_CALL_SECONDS)
+
+
+def idle_no_human_seconds() -> float:
+    return _positive_env_seconds("VH_IDLE_NO_HUMAN_SECONDS", DEFAULT_IDLE_NO_HUMAN_SECONDS)
+
+
+def is_human(participant: Any) -> bool:
+    """True for a remote participant that is (probably) a person.
+
+    Agent-kind participants and known bot identities are not human. Unknown
+    identities count as human (never cut a real person); the hard max-duration
+    cap is the backstop for those.
+    """
+    if getattr(participant, "kind", None) == rtc.ParticipantKind.PARTICIPANT_KIND_AGENT:
+        return False
+    return not _NON_HUMAN_IDENTITY.search(getattr(participant, "identity", "") or "")
+
+
+class CallGuard:
+    """Enforces the per-call cost caps for one voice-ai job.
+
+    - hard cap: after `max_seconds` announce briefly, end the session, delete the room.
+    - idle cap: no human in the room for `idle_seconds` → end session, delete the room.
+    - any other session close (e.g. linked participant left) → leave the room
+      (and delete it when no human is left), so voice-ai never lingers.
+    Every end logs exactly one structured `call_end` line (reason + duration).
+    """
+
+    def __init__(
+        self,
+        ctx: Any,
+        session: Any,
+        *,
+        max_seconds: float,
+        idle_seconds: float,
+        clock: Callable[[], float] = time.monotonic,
+        live: bool = False,
+    ) -> None:
+        self._live = live
+        self._ctx = ctx
+        self._session = session
+        self._max_seconds = max_seconds
+        self._idle_seconds = idle_seconds
+        self._clock = clock
+        self._started_at = clock()
+        self._ended = False
+        self._max_task: asyncio.Task | None = None
+        self._idle_task: asyncio.Task | None = None
+        self._end_task: asyncio.Task | None = None
+        self.end_reason: str | None = None
+
+    # -- wiring -------------------------------------------------------------
+    def start(self) -> None:
+        room = self._ctx.room
+        room.on("participant_connected", self._on_participant_connected)
+        room.on("participant_disconnected", self._on_participant_disconnected)
+        self._session.on("close", self._on_session_close)
+        self._max_task = asyncio.create_task(self._max_duration_timer())
+        self._reevaluate_idle()
+
+    def human_count(self) -> int:
+        return sum(1 for p in self._ctx.room.remote_participants.values() if is_human(p))
+
+    # -- events -------------------------------------------------------------
+    def _on_participant_connected(self, participant: Any) -> None:
+        self._reevaluate_idle()
+
+    def _on_participant_disconnected(self, participant: Any) -> None:
+        self._reevaluate_idle()
+
+    def _on_session_close(self, ev: Any) -> None:
+        reason = getattr(getattr(ev, "reason", None), "value", None) or str(
+            getattr(ev, "reason", "unknown")
+        )
+        self._schedule_end(f"session_close:{reason}", delete_room=self.human_count() == 0)
+
+    # -- timers -------------------------------------------------------------
+    def _reevaluate_idle(self) -> None:
+        if self._ended:
+            return
+        if self.human_count() > 0:
+            if self._idle_task is not None:
+                self._idle_task.cancel()
+                self._idle_task = None
+        elif self._idle_task is None:
+            self._idle_task = asyncio.create_task(self._idle_timer())
+
+    async def _idle_timer(self) -> None:
+        await asyncio.sleep(self._idle_seconds)
+        if self.human_count() == 0:
+            await self.end("idle_no_human", delete_room=True)
+        else:
+            self._idle_task = None
+
+    async def _max_duration_timer(self) -> None:
+        await asyncio.sleep(self._max_seconds)
+        await self.end("max_duration", delete_room=True, announce=MAX_CALL_ANNOUNCEMENT)
+
+    # -- teardown -----------------------------------------------------------
+    def _schedule_end(self, reason: str, *, delete_room: bool) -> None:
+        if self._ended or self._end_task is not None:
+            return
+        self._end_task = asyncio.create_task(self.end(reason, delete_room=delete_room))
+
+    async def end(self, reason: str, *, delete_room: bool, announce: str | None = None) -> None:
+        """Idempotent, bounded teardown: announce → close session → delete room → leave job."""
+        if self._ended:
+            return
+        self._ended = True
+        self.end_reason = reason
+        current = asyncio.current_task()
+        for task in (self._max_task, self._idle_task):
+            if task is not None and task is not current:
+                task.cancel()
+        duration = self._clock() - self._started_at
+        room_name = getattr(self._ctx.room, "name", "")
+        logger.info(
+            "call_end %s",
+            json.dumps(
+                {
+                    "event": "call_end",
+                    "reason": reason,
+                    "duration_s": round(duration, 1),
+                    "room": room_name,
+                    "job": getattr(getattr(self._ctx, "job", None), "id", ""),
+                    "humans": self.human_count(),
+                    "delete_room": delete_room,
+                    "max_s": self._max_seconds,
+                    "idle_s": self._idle_seconds,
+                }
+            ),
+        )
+        try:
+            if announce:
+                await self._bounded("announce", self._announce(announce))
+            if not reason.startswith("session_close:"):
+                await self._bounded("session_close", self._session.aclose())
+            if delete_room:
+                await self._bounded("delete_room", self._ctx.delete_room(room_name))
+        finally:
+            self._ctx.shutdown(reason=f"call_guard:{reason}")
+
+    async def _announce(self, text: str) -> None:
+        if self._live:  # Realtime-Modell hat kein TTS für say()
+            handle = self._session.generate_reply(
+                instructions=f"Sag jetzt wörtlich und nur das: {text}", allow_interruptions=False
+            )
+        else:
+            handle = self._session.say(text, allow_interruptions=False)
+        await handle.wait_for_playout()
+
+    async def _bounded(self, step: str, aw: Any) -> None:
+        try:
+            await asyncio.wait_for(aw, timeout=TEARDOWN_STEP_TIMEOUT)
+        except Exception as e:  # noqa: BLE001 — teardown must always reach shutdown
+            logger.warning("[call_guard] %s failed: %r", step, e)
 
 
 def is_live() -> bool:
@@ -57,9 +252,6 @@ async def entrypoint(ctx: JobContext) -> None:
     agent = RelayAgent(instructions=DEFAULT_PERSONA)
     handlers = build_relay_handlers(session, agent, room=ctx.room, live=live_mode)
     routes = topic_dispatch(handlers)
-
-    import asyncio
-    import json
 
     @ctx.room.on("data_received")
     def _on_data(packet) -> None:  # noqa: ANN001
@@ -122,7 +314,22 @@ async def entrypoint(ctx: JobContext) -> None:
                     logger.warning("[agent-transcript publish] %s", e)
             asyncio.create_task(_send())
 
-    await session.start(agent=agent, room=ctx.room)
+    # Cost caps armed BEFORE session.start so even a hanging start is bounded.
+    CallGuard(
+        ctx,
+        session,
+        max_seconds=max_call_seconds(),
+        idle_seconds=idle_no_human_seconds(),
+        live=live_mode,
+    ).start()
+    # Explicit room options (don't rely on lib defaults): close the session when
+    # the linked participant leaves. Room deletion is owned by CallGuard so it
+    # only happens when no human is left (or on the hard cap).
+    await session.start(
+        agent=agent,
+        room=ctx.room,
+        room_options=room_io.RoomOptions(close_on_disconnect=True, delete_room_on_close=False),
+    )
 
 
 def build_worker_options() -> WorkerOptions:
