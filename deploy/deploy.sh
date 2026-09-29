@@ -101,7 +101,7 @@ if [ "${MODE}" = web ]; then
   rs "${EXCL[@]}" "${REPO}/web/" "$(dst /var/www/voicehook)/"
   # Only web/ went out: if the box state before was unknown or non-web changes
   # were skipped, mark the SHA so the next auto run goes full instead of "up to date".
-  if [ -z "${CHANGED}" ] || [ -n "${NONWEB:-}" ]; then REC="${REC%%+*}+webonly"; fi
+  if [ -z "${OLD}" ] || [ "${OLD}" != "${OLD%%+*}" ] || [ -n "${NONWEB:-}" ]; then REC="${REC%%+*}+webonly"; fi
   finish; exit 0
 fi
 
