@@ -32,9 +32,8 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
   --vh-btn-fg:         rgba(255, 255, 255, 0.85);
   --vh-btn-fg-hov:     rgba(255, 255, 255, 1.00);
   --vh-btn-blur:       blur(8px);
-  /* Transkript-Farben (Olli 30.09.): Delta (role agent) blau, Operator/[SAY] rot */
+  /* Transkript-Farbe Delta (role agent, Olli 30.09.): blau. Operator = Agent-Chip-Farbe. */
   --vh-tr-blue:        #6fa8ff;
-  --vh-tr-red:         #ff6b6b;
 }
 body.theme-light {
   --vh-btn-bg:         rgba(255, 255, 255, 0.55);
@@ -44,7 +43,6 @@ body.theme-light {
   --vh-btn-fg:         rgba(0, 0, 0, 0.78);
   --vh-btn-fg-hov:     rgba(0, 0, 0, 1.00);
   --vh-tr-blue:        #1f5fd1;
-  --vh-tr-red:         #c62828;
 }
 body { background: var(--vh-bg-0); overflow: hidden; font-family: var(--vh-mono); color: var(--vh-fg-0); }
 
@@ -645,18 +643,26 @@ body.theme-light .vh-invite-hint .hd{color:#1f7f90;}
 #vh-transcript .vh-tr-row.user{color:var(--vh-user-color,#6dc9d9);align-self:flex-start;}
 #vh-transcript .vh-tr-row.agent{color:var(--vh-tr-blue);align-self:flex-end;flex-direction:row-reverse;text-align:right;}
 /* `senior` = external LLM-agent (`Agent`-chip) pushing via senior.say — distinct color + boxed for clear separation from voice-ai turns */
+/* Punkt L: Operator-Text ([SAY]/senior und role operator) in der Farbe des
+   Agent-Chips (--vh-senior-color, dynamisch aus vhApplySpeakerColorsToTranscript);
+   Light-Theme abgedunkelt, damit lesbar. */
 #vh-transcript .vh-tr-row.senior,
 #vh-transcript .vh-tr-row.operator{
-  color:var(--vh-tr-red);align-self:flex-end;
+  --vh-op-color:var(--vh-senior-color,#e88bff);
+  color:var(--vh-op-color);align-self:flex-end;
   flex-direction:row-reverse;text-align:right;font-weight:500;
-  border:1px solid color-mix(in srgb, var(--vh-tr-red) 38%, transparent);
-  background:color-mix(in srgb, var(--vh-tr-red) 8%, transparent);
+  border:1px solid color-mix(in srgb, var(--vh-op-color) 38%, transparent);
+  background:color-mix(in srgb, var(--vh-op-color) 8%, transparent);
   padding:5px 9px;border-radius:6px;margin:2px 0;
 }
 /* `senior_text` (Issue #7) = silent push from external agent — visible in
    transcript but voice-ai never speaks it. Muted, italic, left-bordered as a
    "quiet note" so the user can clearly distinguish a silent status/code/URL
    ping from a spoken senior.say turn. */
+body.theme-light #vh-transcript .vh-tr-row.senior,
+body.theme-light #vh-transcript .vh-tr-row.operator{
+  --vh-op-color:color-mix(in srgb, var(--vh-senior-color,#e88bff) 62%, #000);
+}
 #vh-transcript .vh-tr-row.senior_text{
   color:color-mix(in srgb, var(--vh-senior-color,#e88bff) 55%, #aaa);
   align-self:flex-end;flex-direction:row-reverse;text-align:right;
@@ -1887,7 +1893,7 @@ function vhRingLayout(force) {
   let h = innerHeight;
   if (!full) {
     const top = wrap.getBoundingClientRect().top;
-    const gap = 10;
+    const gap = 18;  // Puffer für Kamera-Drift + lose Satelliten-Partikel
     const frac = vhRingBottomFrac();
     h = Math.min(innerHeight, Math.floor((top - gap) / frac));
     h = Math.max(200, h);
@@ -3173,7 +3179,7 @@ function vhTrTick(role, text) {
   vhTrTicker.textContent = String(text || '');
   vhTrTicker.dataset.role = role;
   vhTrTicker.style.color = (role === 'agent') ? 'var(--vh-tr-blue)'
-    : (role === 'operator' || role === 'senior') ? 'var(--vh-tr-red)' : '';
+    : (role === 'operator' || role === 'senior') ? 'var(--vh-senior-color, #e88bff)' : '';
   vhTrTicker.classList.add('show');
   if (vhTrTickTimer) clearTimeout(vhTrTickTimer);
   vhTrTickTimer = setTimeout(() => vhTrTicker.classList.remove('show'), 5000);
@@ -3595,32 +3601,20 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
       return;
     }
     if (!topic) return;
-    // Nur Steuernachrichten des Operators gehören ins Transkript; alles andere
-    // (cost, agent.heartbeat, künftige Themen) nie als Zeile anzeigen.
+    // Nur Operator-Themen lösen etwas aus (Chip-Puls); alles andere (cost,
+    // agent.heartbeat, künftige Themen) wird ignoriert.
     if (!/^(operator|senior)\./.test(topic)) return;
-    // senior.* control plane events — but skip senior.say (voice-ai re-publishes
-    // it as a transcript [SAY]-row which renders prettier with senior-role color).
-    // Persona / interrupt / inject have no transcript-echo so we log them here.
-    if (topic === 'senior.say') {
-      // visibility-only: pulse agent-chip (handled below)
-    } else try {
-      const txt = new TextDecoder().decode(payload);
-      let obj; try { obj = JSON.parse(txt); } catch { obj = { raw: txt }; }
-      const preview = obj.text ? `"${String(obj.text).slice(0,120)}"`
-                    : JSON.stringify(obj).slice(0, 160);
-      vhTrLog('system', `${topic}  ·  ${preview}`);
-      // Visibility: pulse agent-chip for 2s on every senior.* event so the
-      // operator SEES the senior agent is onboard + pushing.
-      try {
-        vhPresenceSet('agent', 'speak');
-        setTimeout(() => {
-          const el = document.querySelector('#vh-presence .vh-pres-chip[data-slot="agent"]');
-          if (el && el.classList.contains('speak')) el.classList.remove('speak');
-        }, 2000);
-      } catch (_) {}
-    } catch (_) {
-      vhTrLog('system', `· ${topic}  from ${from}  <binary>`);
-    }
+    // Punkt L (Olli 30.09.): operator.*/senior.* nie als Logzeile ins Transkript.
+    // Operator-Text erscheint nur als gesprochener Text (transcript-Event mit
+    // role "operator" nach dem Aussprechen). Hier nur Sichtbarkeit: Agent-Chip
+    // pulsiert 2 s, damit man sieht, dass der externe Agent schiebt.
+    try {
+      vhPresenceSet('agent', 'speak');
+      setTimeout(() => {
+        const el = document.querySelector('#vh-presence .vh-pres-chip[data-slot="agent"]');
+        if (el && el.classList.contains('speak')) el.classList.remove('speak');
+      }, 2000);
+    } catch (_) {}
   });
 }
 
