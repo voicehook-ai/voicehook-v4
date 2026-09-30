@@ -41,17 +41,25 @@ which voicehook-agent || uv tool install git+https://github.com/voicehook-ai/voi
 Zero-install per-call equivalent (no persistent state):
 
 ```bash
-uvx --from git+https://github.com/voicehook-ai/voicehook-agent voicehook-agent join <INVITE_URL> --name <yourbrand> --json
+uvx --from git+https://github.com/voicehook-ai/voicehook-agent voicehook-agent join <INVITE_URL> --name <YourName> --model <your-model-id> --json
 ```
 
 After the PyPI release, `uv tool install voicehook-agent` / `uvx voicehook-agent`
 will work too — both packaging routes are intentionally supported.
 
-### 3. Start the CLI in tmux — ALWAYS pass `--name <yourbrand>` AND `--json`
+### 3. Start the CLI in tmux — ALWAYS pass `--name`, `--model` AND `--json`
 
-The `--name` flag becomes the identity prefix and the visible chip-label.
-Use your actual brand: `claude`, `hermes`, `openclaw`, `cursor`, `codex`,
-`gemini`, `gpt`, etc.
+`--name` and `--model` are **mandatory** (0.4.0): `join` without both exits
+with code 2 and an error explaining what to pass — no call is joined. You
+choose them yourself (see 3a): `--name` is your display name (`Claude`,
+`Hermes`, `Cursor`, `Codex`, …), `--model` the exact model you run on. The
+web call UI shows them in the Agent chip as **"Name · model"** (e.g.
+`Claude · opus-5.5`); until you have joined, that chip shows a loading ring.
+`--name` also becomes the identity prefix and the name spoken in the auto-greet.
+
+```bash
+voicehook-agent join https://voicehook.ai/r/<slug> --name Claude --model opus-5.5 --json
+```
 
 The `--json` flag is REQUIRED — without it the Hotswap-Persona push in step 4a
 would be spoken literally as TTS instead of being routed to the control plane.
@@ -144,19 +152,21 @@ Look for two markers in the capture-pane output:
 - `{"role":"system","text":"greet auto-pushed","topic":"_meta"}` — self-intro landed
 
 The auto-greet is **composed by the CLI from the self-report flags** (see 3a).
-If you see `self-report incomplete` instead, you forgot `--name`/`--identity`
-or `--model` — fill them and retry; never fall back to a guessed brand.
+If the CLI exits with `Selbstauskunft fehlt: join braucht --name UND --model`,
+you forgot one of them — fill them and retry; never fall back to a guessed brand.
 
 ### 3a. MANDATORY: Self-Report (Pflichtangaben) — never hardcode a vendor
 
-The CLI does NOT know what model you are. YOU do. So you must pass the three
-self-report fields, derived from your own runtime, **not** from the operator:
+The CLI does NOT know what model you are. YOU do. So you must pass the
+self-report fields, derived from your own runtime, **not** from the operator.
+`--name` + `--model` are enforced (exit 2 without them) and shown in the web
+Agent chip as "Name · model":
 
-| Flag | Wert | Quelle |
-|---|---|---|
-| `--name` | deine Brand / Agent-Name | eigene Identität (nicht "claude" wenn du deepseek bist) |
-| `--model` | exaktes Model-ID | eigener System-Context / Runtime |
-| `--topic` | worum der Call geht (≤5 Wörter) | Session-Kontext |
+| Flag | Pflicht | Wert | Quelle |
+|---|---|---|---|
+| `--name` | ja | dein Anzeigename (`Claude`, `Hermes`, …) | eigene Identität (nicht "Claude" wenn du DeepSeek bist) |
+| `--model` | ja | exaktes Model-ID (`opus-5.5`) | eigener System-Context / Runtime |
+| `--topic` | empfohlen | worum der Call geht (≤5 Wörter) | Session-Kontext |
 
 Optionale Felder für den voice-freundlichen Gruß:
 | Flag | Zweck |
@@ -173,9 +183,9 @@ Optionale Felder für den voice-freundlichen Gruß:
 4. Kompakt — Gruß ≤ 2 Sätze, topic ≤ 5 Wörter.
 5. Kein Secret-Leak — nie Keys/Tokens/PII in name/model/topic/prompt.
 6. Konsistenz — name/model/topic identisch in Persona und Gruß.
-7. Fallback — Modell nicht bestimmbar → weglassen/bridgen, nie raten.
+7. Fallback — Modell nicht bestimmbar → `--model unbekannt` ehrlich angeben, nie raten.
 
-**Gruß-Template** (spricht die CLI automatisch, wenn `--name`+`--model` gesetzt):
+**Gruß-Template** (spricht die CLI automatisch; `--no-greet` schaltet ihn ab):
 
 > "Hallo {username}, hier ist {name}. Ich bin dem Call beigetreten, wir waren gerade dabei {topic}. {prompt}"
 

@@ -687,7 +687,7 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
   <p><strong>Invite an agent:</strong> You get an invite snippet — paste it into another LLM session (Claude Code, Cursor, ZeroClaw, Hermes). The external agent joins as a second brain and can push TTS replies through your call.</p>
   <p><strong>Presence chips (top):</strong> grey = not in room · teal = joined · green pulse = speaking right now.</p>
   <p><strong>Transcript:</strong> Hit ≡ at the bottom or press Esc for fullscreen. Wheel-scroll works inside the transcript; outside it zooms the dome.</p>
-  <p>Agent CLI: <code>uvx voicehook-agent join &lt;url&gt;</code> · Skill doc: <a href="/agent/SKILL.md" target="_blank" rel="noopener">/agent/SKILL.md</a></p>
+  <p>Agent CLI: <code>uvx voicehook-agent join &lt;url&gt; --name &lt;Name&gt; --model &lt;model&gt;</code> · Skill doc: <a href="/agent/SKILL.md" target="_blank" rel="noopener">/agent/SKILL.md</a></p>
 </div>
 <button id="btn-theme" title="theme" aria-label="theme"></button>
 <div id="label">
@@ -2975,10 +2975,10 @@ async function vhModalOpenInvite() {
     const snippet =
 `voicehook.ai call — join as agent (paste & run):
 
-  uvx --from git+https://github.com/voicehook-ai/voicehook-agent voicehook-agent join ${inviteUrl} --name <yourbrand> --json
+  uvx --from git+https://github.com/voicehook-ai/voicehook-agent voicehook-agent join ${inviteUrl} --name <YourName> --model <your-model-id> --json
 
 First-time agent? Read the skill FIRST: ${location.origin}/agent/SKILL.md
-(--json is required for driving · push senior.say/persona via stdin · §0 of the skill: how a voice-ai gets in the room)`;
+(--name + --model are required: your display name + exact model, shown in the call · --json is required for driving · push senior.say/persona via stdin · §0 of the skill: how a voice-ai gets in the room)`;
 
     vhInvitePrepared = { tok, room, snippet };
     vhInviteBtnShow();  // persistent invite-copy button in footer
