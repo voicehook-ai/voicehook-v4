@@ -315,27 +315,26 @@ async def entrypoint(ctx: JobContext) -> None:
                 logger.debug("[cost publish] %s", e)
         asyncio.create_task(_send_cost())
 
-    if live_mode:
+    # Alles tatsächlich Gesprochene (Eigenantworten + Operator-Sätze, beide Modi)
+    # -> Browser-Transkript; bei Abbruch nur der gesprochene Teil (synchronized transcript)
+    @session.on("conversation_item_added")
+    def _on_item(ev) -> None:  # noqa: ANN001
+        item = getattr(ev, "item", None)
+        if getattr(item, "role", None) != "assistant":
+            return
+        text = (getattr(item, "text_content", "") or "").strip()
+        from .live import NO_SPEECH_MARKERS
 
-        # Was Gemini tatsächlich gesagt hat -> Browser-Transkript (+ Operator liest mit)
-        @session.on("conversation_item_added")
-        def _on_item(ev) -> None:  # noqa: ANN001
-            item = getattr(ev, "item", None)
-            if getattr(item, "role", None) != "assistant":
-                return
-            text = (getattr(item, "text_content", "") or "").strip()
-            from .live import NO_SPEECH_MARKERS
+        if not text or text in NO_SPEECH_MARKERS:
+            return
+        payload = json.dumps({"role": "agent", "text": text}).encode()
 
-            if not text or text in NO_SPEECH_MARKERS:
-                return
-            payload = json.dumps({"role": "agent", "text": text}).encode()
-
-            async def _send() -> None:
-                try:
-                    await ctx.room.local_participant.publish_data(payload=payload, topic="transcript")
-                except Exception as e:  # noqa: BLE001
-                    logger.warning("[agent-transcript publish] %s", e)
-            asyncio.create_task(_send())
+        async def _send() -> None:
+            try:
+                await ctx.room.local_participant.publish_data(payload=payload, topic="transcript")
+            except Exception as e:  # noqa: BLE001
+                logger.warning("[agent-transcript publish] %s", e)
+        asyncio.create_task(_send())
 
     # Cost caps armed BEFORE session.start so even a hanging start is bounded.
     CallGuard(

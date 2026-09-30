@@ -76,13 +76,14 @@ async def test_say_calls_session_say_verbatim():
     h = build_relay_handlers(session, agent)
     await h.on_say(_pkt(TOPIC_SAY, {"text": "Hallo Welt"}))
     session.say.assert_called_once_with("Hallo Welt", allow_interruptions=True)
-    # Vertrag seit Supersede: auch das erste say stoppt eine laufende Eigenantwort
-    session.interrupt.assert_called_once_with(force=True)
+    # nichts Eigenes offen: einreihen, laufende Eigenantwort NICHT abbrechen
+    session.interrupt.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_say_publishes_transcript_when_room_given():
-    """PR-12: operator.say must also publish {role:agent,text} on transcript topic."""
+async def test_say_does_not_publish_transcript_itself():
+    """Transkript kommt vom Worker (conversation_item_added, tatsächlich Gesprochenes),
+    damit Eigenantworten erscheinen und Operator-Sätze nicht doppelt."""
     from unittest.mock import AsyncMock
     session, agent = _fake_session(), _fake_agent()
     room = MagicMock()
@@ -90,13 +91,9 @@ async def test_say_publishes_transcript_when_room_given():
     room.local_participant.publish_data = AsyncMock()
     h = build_relay_handlers(session, agent, room=room)
     await h.on_say(_pkt(TOPIC_SAY, {"text": "Hallo Olli"}))
-    await asyncio.sleep(0)  # let the asyncio.create_task fire
     await asyncio.sleep(0)
-    room.local_participant.publish_data.assert_called_once()
-    call = room.local_participant.publish_data.await_args
-    assert call.kwargs["topic"] == "transcript"
-    payload = json.loads(call.kwargs["payload"])
-    assert payload == {"role": "agent", "text": "Hallo Olli"}
+    room.local_participant.publish_data.assert_not_called()
+    session.say.assert_called_once_with("Hallo Olli", allow_interruptions=True)
 
 
 @pytest.mark.asyncio
