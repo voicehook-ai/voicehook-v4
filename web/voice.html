@@ -449,6 +449,9 @@ body.theme-light #fx-ctl input[type="range"]::-webkit-slider-thumb { background:
 body.theme-light #hue-shift::-moz-range-thumb,
 body.theme-light #fx-ctl input[type="range"]::-moz-range-thumb    { background: rgba(0,0,0,0.92); }
 body.theme-light #tagline { color: rgba(0,0,0,0.30); }
+/* Kostenanzeige im Call: gut lesbar (Olli 30.09.: "zu unsichtbar") */
+#tagline.vh-cost-on { color: rgba(255,255,255,0.88); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; }
+body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
 
 /* ── Mobile: kompaktes Layout — alle 4 Buttons in EINER Reihe + alle Slider sichtbar ─ */
 @media (max-width: 640px) {
@@ -3203,12 +3206,13 @@ function vhCostRender() {
 function vhCostStart() {
   if (vhCost.timer) return;
   vhCost = { usd: 0, start: Date.now(), timer: setInterval(vhCostRender, 1000), mode: '' };
+  if (vhTagline) vhTagline.classList.add('vh-cost-on');
   vhCostRender();
 }
 function vhCostStop() {
   if (vhCost.timer) clearInterval(vhCost.timer);
   vhCost = { usd: 0, start: 0, timer: null, mode: '' };
-  if (vhTagline) { vhTagline.textContent = VH_TAGLINE_TEXT; vhTagline.title = ''; }
+  if (vhTagline) { vhTagline.textContent = VH_TAGLINE_TEXT; vhTagline.title = ''; vhTagline.classList.remove('vh-cost-on'); }
 }
 
 function vhWireRoomEvents(room, RoomEvent, Track) {
