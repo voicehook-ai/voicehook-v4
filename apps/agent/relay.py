@@ -10,10 +10,11 @@ Design (mode B, voicehook-v3#28 + Wissenstransfer):
   LLM never produces a turn on its own (pure mouthpiece).
 
 Topics handled here:
-- operator.say        — TTS the text immediately (priority=interrupt drops the floor)
+- operator.say        — TTS the text. Default mode "replace": storniert alles noch
+                        Ungesprochene + die laufende Ausgabe; mode "append" hängt an
 - operator.persona    — replace the agent's instructions (live-injected knowledge)
 - operator.mode       — switch strict/auto generation ({"mode":"strict"|"auto"})
-- operator.interrupt  — drop the current say
+- operator.interrupt  — drop the current say AND everything queued behind it
 - operator.inject     — synthetic user-turn (test harness; operator reads transcript)
 
 PR-12 adds: every operator.say also publishes {role:"agent",text:...} on the
@@ -101,6 +102,13 @@ def _publish_transcript_safe(room: Room | None, role: str, text: str) -> None:
     asyncio.create_task(_send())
 
 
+def _is_done(handle: object) -> bool:
+    try:
+        return bool(handle.done())
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def build_relay_handlers(
     session: AgentSession,
     agent: RelayAgent,
@@ -114,19 +122,52 @@ def build_relay_handlers(
     can render the agent turn. (v3 parity, PR-12.)
     """
 
+    # Noch nicht fertig gesprochene operator.say-Ausgaben. session.say() hängt
+    # nur hinten an die Queue an; ohne Buchführung spricht der Agent Minuten
+    # später Aussagen, die der Operator längst revidiert hat.
+    pending: list = []
+
+    def _cancel_all() -> int:
+        """Storniert alles Ungesprochene + die laufende Ausgabe (auch Eigenantworten).
+
+        force=True ist nötig: livekit wirft sonst RuntimeError statt zu stoppen,
+        sobald die laufende Ausgabe keine Unterbrechung erlaubt.
+        """
+        dropped = 0
+        for handle in pending:
+            try:
+                if not handle.done():
+                    handle.interrupt(force=True)
+                    dropped += 1
+            except Exception as e:  # noqa: BLE001
+                logger.debug("[operator.say] cancel handle: %s", e)
+        pending.clear()
+        try:
+            session.interrupt(force=True)
+        except Exception as e:  # noqa: BLE001 — nichts läuft / Session gestoppt
+            logger.debug("[operator.say] session.interrupt: %s", e)
+        return dropped
+
     async def on_say(packet: DataPacket) -> None:
         data = _decode(packet.data)
         text = (data.get("text") or "").strip()
         if not text:
             return
-        priority = data.get("priority")
-        if priority == "interrupt":
-            session.interrupt()
+        # Default "replace": die neue Aussage ersetzt alles noch Ungesprochene.
+        # "append" nur für bewusst mehrteilige Ausgaben (Teil 1, Teil 2, ...).
+        mode = (data.get("mode") or "replace").strip().lower()
+        if mode != "append" or data.get("priority") == "interrupt":
+            dropped = _cancel_all()
+            if dropped:
+                logger.info("[operator.say] %d veraltete Ausgabe(n) storniert", dropped)
         logger.info("[operator.say] %s", text[:200])
         _publish_transcript_safe(room, "agent", text)
         # allow_interruptions=True = full-duplex barge-in: the user can comment
         # while the mouthpiece is speaking and the STT keeps hearing them.
-        session.say(text, allow_interruptions=True)
+        handle = session.say(text, allow_interruptions=True)
+        pending[:] = [h for h in pending if not _is_done(h)]
+        if handle is not None:
+            pending.append(handle)
 
     async def on_persona(packet: DataPacket) -> None:
         data = _decode(packet.data)
@@ -143,8 +184,7 @@ def build_relay_handlers(
         logger.info("[operator.mode] strict=%s", agent.strict)
 
     async def on_interrupt(_packet: DataPacket) -> None:
-        logger.info("[operator.interrupt]")
-        session.interrupt()
+        logger.info("[operator.interrupt] %d Ausgabe(n) storniert", _cancel_all())
 
     async def on_inject(packet: DataPacket) -> None:
         data = _decode(packet.data)

@@ -76,7 +76,8 @@ async def test_say_calls_session_say_verbatim():
     h = build_relay_handlers(session, agent)
     await h.on_say(_pkt(TOPIC_SAY, {"text": "Hallo Welt"}))
     session.say.assert_called_once_with("Hallo Welt", allow_interruptions=True)
-    session.interrupt.assert_not_called()
+    # Vertrag seit Supersede: auch das erste say stoppt eine laufende Eigenantwort
+    session.interrupt.assert_called_once_with(force=True)
 
 
 @pytest.mark.asyncio
@@ -153,3 +154,86 @@ def test_default_persona_includes_relay_discipline():
     assert "operator.say" in DEFAULT_PERSONA
     assert "Operator" in DEFAULT_PERSONA
     assert "erfindest NICHTS" in DEFAULT_PERSONA  # no invention
+
+
+# ── Supersede: ein neues operator.say ersetzt alles noch nicht Gesprochene ──────
+
+def _handle(done: bool = False) -> MagicMock:
+    h = MagicMock()
+    h.done = MagicMock(return_value=done)
+    h.interrupt = MagicMock()
+    return h
+
+
+def _session_with_handles(*handles: MagicMock) -> MagicMock:
+    sess = _fake_session()
+    sess.say = MagicMock(side_effect=list(handles))
+    return sess
+
+
+@pytest.mark.asyncio
+async def test_say_replaces_pending_say_by_default():
+    first, second = _handle(), _handle()
+    session = _session_with_handles(first, second)
+    h = build_relay_handlers(session, _fake_agent())
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "alte Aussage"}))
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "neue Entscheidung"}))
+    first.interrupt.assert_called_once_with(force=True)   # veraltete Ausgabe storniert
+    second.interrupt.assert_not_called()
+    assert session.say.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_say_default_also_stops_current_speech_forced():
+    # auch eine laufende Eigenantwort des Agents (auto mode) wird gestoppt
+    session = _session_with_handles(_handle())
+    h = build_relay_handlers(session, _fake_agent())
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "x"}))
+    session.interrupt.assert_called_once_with(force=True)
+
+
+@pytest.mark.asyncio
+async def test_say_append_mode_keeps_queue():
+    first, second = _handle(), _handle()
+    session = _session_with_handles(first, second)
+    h = build_relay_handlers(session, _fake_agent())
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "Teil 1", "mode": "append"}))
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "Teil 2", "mode": "append"}))
+    first.interrupt.assert_not_called()
+    session.interrupt.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_say_skips_already_finished_handles():
+    first, second = _handle(done=True), _handle()
+    session = _session_with_handles(first, second)
+    h = build_relay_handlers(session, _fake_agent())
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "a"}))
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "b"}))
+    first.interrupt.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_interrupt_clears_whole_queue():
+    a, b = _handle(), _handle()
+    session = _session_with_handles(a, b)
+    h = build_relay_handlers(session, _fake_agent())
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "a", "mode": "append"}))
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "b", "mode": "append"}))
+    await h.on_interrupt(_pkt(TOPIC_INTERRUPT, {}))
+    a.interrupt.assert_called_once_with(force=True)
+    b.interrupt.assert_called_once_with(force=True)
+    session.interrupt.assert_called_with(force=True)
+
+
+@pytest.mark.asyncio
+async def test_cancel_survives_runtime_error_from_livekit():
+    # livekit wirft RuntimeError, wenn nichts läuft / Session nicht läuft
+    bad = _handle()
+    bad.interrupt.side_effect = RuntimeError("not running")
+    session = _session_with_handles(bad, _handle())
+    session.interrupt.side_effect = RuntimeError("session not running")
+    h = build_relay_handlers(session, _fake_agent())
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "a"}))
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "b"}))   # darf nicht werfen
+    assert session.say.call_count == 2
