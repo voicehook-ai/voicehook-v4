@@ -258,6 +258,23 @@ body.vh-transcript-expanded #vh-transcript-close { display: inline-flex; }
 .vh-pres-chip.in .vh-pres-dot   { color: #6dc9d9; }
 .vh-pres-chip.speak              { color: #fff; border-color: rgba(109,201,217,0.4); }
 .vh-pres-chip.speak .vh-pres-dot { color: #9ddb6d; text-shadow: 0 0 6px #9ddb6d; }
+/* Agent chip: loading ring while a call runs but no external agent has joined
+   yet (#vh-presence.vh-in-call set on room wire-up, cleared on reset). Replaces
+   the ∆ glyph in place; label = self-reported "Name · model", ellipsized. */
+.vh-pres-chip .vh-pres-spin { display: none; width: 9px; height: 9px; flex-shrink: 0;
+  box-sizing: border-box; border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.18); border-top-color: #6dc9d9;
+  animation: vh-pres-spin .9s linear infinite; }
+#vh-presence.vh-in-call .vh-pres-chip[data-slot="agent"]:not(.in) .vh-pres-spin { display: inline-block; }
+#vh-presence.vh-in-call .vh-pres-chip[data-slot="agent"]:not(.in) .vh-pres-dot { display: none; }
+body.theme-light .vh-pres-chip .vh-pres-spin { border-color: rgba(0,0,0,0.18); border-top-color: #2a9bb0; }
+/* light theme: .in sets white text → the agent's name would vanish on the light
+   chip background (mobile default theme). Keep it readable. */
+body.theme-light .vh-pres-chip[data-slot="agent"].in { color: var(--vh-btn-fg); }
+@keyframes vh-pres-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .vh-pres-chip .vh-pres-spin { animation: none; } }
+.vh-pres-chip[data-slot="agent"] .vh-pres-label { max-width: 24ch; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
 /* Per-chip color selection (Olli 2026-05-19): clicking a chip scopes palette+hue
    changes to that chip's role only. Default target is 'user'. */
 .vh-pres-chip { cursor: pointer; }
@@ -670,7 +687,7 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
   <p><strong>Invite an agent:</strong> You get an invite snippet — paste it into another LLM session (Claude Code, Cursor, ZeroClaw, Hermes). The external agent joins as a second brain and can push TTS replies through your call.</p>
   <p><strong>Presence chips (top):</strong> grey = not in room · teal = joined · green pulse = speaking right now.</p>
   <p><strong>Transcript:</strong> Hit ≡ at the bottom or press Esc for fullscreen. Wheel-scroll works inside the transcript; outside it zooms the dome.</p>
-  <p>Agent CLI: <code>uvx voicehook-agent join &lt;url&gt;</code> · Skill doc: <a href="/agent/SKILL.md" target="_blank" rel="noopener">/agent/SKILL.md</a></p>
+  <p>Agent CLI: <code>uvx voicehook-agent join &lt;url&gt; --name &lt;Name&gt; --model &lt;model&gt;</code> · Skill doc: <a href="/agent/SKILL.md" target="_blank" rel="noopener">/agent/SKILL.md</a></p>
 </div>
 <button id="btn-theme" title="theme" aria-label="theme"></button>
 <div id="label">
@@ -767,7 +784,7 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
   <div id="vh-presence">
     <span class="vh-pres-chip" data-slot="user" title="Du — der Mensch im Raum"><span class="vh-pres-dot">∆</span><span class="vh-pres-label">User</span></span>
     <span class="vh-pres-chip" data-slot="voice-ai" title="Delta Agent (voice) — voicehook-interne STT+LLM+TTS pipeline. Moderiert das Gespräch zwischen User und Agent."><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Delta Agent (voice)</span></span>
-    <span class="vh-pres-chip" data-slot="agent" title="Agent — der externe LLM (z.B. Claude Code) der via voicehook-agent CLI eingeklinkt ist"><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Agent</span></span>
+    <span class="vh-pres-chip" data-slot="agent" title="Agent — der externe LLM (z.B. Claude Code) der via voicehook-agent CLI eingeklinkt ist"><span class="vh-pres-spin" aria-hidden="true"></span><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Agent</span></span>
   </div>
   <div id="vh-invite-banner" hidden></div>
   <div id="vh-transcript"><div id="vh-transcript-empty">Transcript — start a call to see live turns.</div></div>
@@ -2850,6 +2867,7 @@ function vhEndCall(fromEvent) {
   try { if (lkAudioCtx) { lkAudioCtx.close(); lkAudioCtx = null; } } catch (_) {}
   if (!fromEvent && lkRoom) { try { lkRoom.disconnect(); } catch (_) {} }
   lkRoom = null; lkConnected = false;
+  try { document.getElementById('vh-presence').classList.remove('vh-in-call'); } catch (_) {}
   analyser = null; freqData = null; micActive = false;
   btnCall.innerHTML = ICON_CALL_START; btnCall.classList.remove('on');
   btnCall.title = 'Start AI call (mic turns on)';
@@ -2957,10 +2975,10 @@ async function vhModalOpenInvite() {
     const snippet =
 `voicehook.ai call — join as agent (paste & run):
 
-  uvx --from git+https://github.com/voicehook-ai/voicehook-agent voicehook-agent join ${inviteUrl} --name <yourbrand> --json
+  uvx --from git+https://github.com/voicehook-ai/voicehook-agent voicehook-agent join ${inviteUrl} --name <YourName> --model <your-model-id> --json
 
 First-time agent? Read the skill FIRST: ${location.origin}/agent/SKILL.md
-(--json is required for driving · push senior.say/persona via stdin · §0 of the skill: how a voice-ai gets in the room)`;
+(--name + --model are required: your display name + exact model, shown in the call · --json is required for driving · push senior.say/persona via stdin · §0 of the skill: how a voice-ai gets in the room)`;
 
     vhInvitePrepared = { tok, room, snippet };
     vhInviteBtnShow();  // persistent invite-copy button in footer
@@ -3070,6 +3088,28 @@ function vhBrandFromIdentity(identity) {
   if (word === 'senior' || word === 'agent') return 'Agent';
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
+// Slot from a LiveKit participant: the operator token carries attributes
+// vh.role=agent (server /api/token?invite=1), so any self-reported name maps to
+// the agent slot even without a known brand prefix. Falls back to identity.
+function vhPresenceSlotForP(p) {
+  if (p && p.attributes && p.attributes['vh.role'] === 'agent') return 'agent';
+  return vhPresenceSlotFor(p && p.identity);
+}
+// Chip label for an external agent: self-report "Name · model" from attributes
+// (vh.name / vh.model), else participant.name, else a readable identity brand.
+const vhAgentLabelById = {};
+function vhAgentLabelFor(p) {
+  if (!p) return 'Agent';
+  const a = p.attributes || {};
+  let nm = String(a['vh.name'] || '').trim();
+  if (!nm && p.name && p.name !== p.identity) nm = String(p.name).trim();
+  if (!nm) nm = vhBrandFromIdentity(p.identity);
+  const model = String(a['vh.model'] || '').trim();
+  return model ? `${nm} · ${model}` : nm;
+}
+function vhRememberAgentLabel(p) {
+  if (p && p.identity) vhAgentLabelById[p.identity] = vhAgentLabelFor(p);
+}
 const VH_SLOT_LABELS = { user: 'User', 'voice-ai': 'Delta Agent (voice)', agent: 'Agent' };
 const VH_SLOT_DESCS  = {
   user: 'Du — der Mensch im Raum',
@@ -3107,7 +3147,7 @@ function vhPresenceSet(slot, state, id) {
     // so the user sees WHICH external LLM joined, not just generic "Agent".
     if (slot === 'agent') {
       const lbl = el.querySelector('.vh-pres-label');
-      if (lbl) lbl.textContent = vhBrandFromIdentity(id);
+      if (lbl) lbl.textContent = vhAgentLabelById[id] || vhBrandFromIdentity(id);
     }
   }
   vhSyncInviteBtnVisibility();
@@ -3124,6 +3164,7 @@ function vhSyncInviteBtnVisibility() {
   } catch (_) {}
 }
 function vhPresenceReset() {
+  try { document.getElementById('vh-presence').classList.remove('vh-in-call'); } catch (_) {}
   // Issue #3: clear slot-owner tracker so a new call starts fresh
   vhSlotCurrentId.user = null;
   vhSlotCurrentId['voice-ai'] = null;
@@ -3274,19 +3315,23 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
   room.on(RoomEvent.Reconnected,  () => vhTrLog('system', '✓ reconnected'));
   // Initial user slot — local participant is already connected when wireup runs
   try { vhPresenceSet('user', 'in', room.localParticipant?.identity); } catch (_) {}
+  // In-call marker: agent chip shows its loading ring until an external agent joins.
+  try { document.getElementById('vh-presence').classList.add('vh-in-call'); } catch (_) {}
   // Sync chips for peers ALREADY in the room when WE joined (otherwise their
   // ParticipantConnected event fired before our listener was attached and we'd
   // miss them — voice-ai often dispatches in <100ms).
   try {
     room.remoteParticipants.forEach((p) => {
-      const slot = vhPresenceSlotFor(p.identity);
+      const slot = vhPresenceSlotForP(p);
+      if (slot === 'agent') vhRememberAgentLabel(p);
       if (slot) vhPresenceSet(slot, 'in', p.identity);
     });
     vhApplySpeakerColorsToTranscript();
   } catch (_) {}
   room.on(RoomEvent.ParticipantConnected, (p) => {
     const id = p.identity || '?';
-    const slot = vhPresenceSlotFor(id);
+    const slot = vhPresenceSlotForP(p);
+    if (slot === 'agent') vhRememberAgentLabel(p);
     // For voice-ai: hold the chip + greeting until the audio-track actually
     // subscribes (TrackSubscribed below). The participant arrives ~100ms
     // before the TTS-pipeline is ready, and Olli's pain was: "ready"-text
@@ -3296,7 +3341,7 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
       return; // chip + "Voice Agent joined" message deferred
     }
     // Senior agents + other peers: announce immediately, audio-pipeline irrelevant.
-    const tag = slot === 'agent' ? 'Agent joined: ' + id : `peer joined: ${id}`;
+    const tag = slot === 'agent' ? `Agent joined: ${vhAgentLabelById[id] || id} (${id})` : `peer joined: ${id}`;
     vhTrLog('system', tag);
     if (slot) vhPresenceSet(slot, 'in', id);
     try { vhApplySpeakerColorsToTranscript(); } catch (_) {}
@@ -3311,7 +3356,7 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
   });
   room.on(RoomEvent.ParticipantDisconnected, (p) => {
     vhTrLog('system', `peer left: ${p.identity}`);
-    const slot = vhPresenceSlotFor(p.identity);
+    const slot = vhPresenceSlotForP(p);
     // Issue #3: pass identity so vhPresenceSet can ignore stale events for an
     // identity that has already been replaced by a fresh peer in the same slot.
     if (slot) vhPresenceSet(slot, 'out', p.identity);
@@ -3319,6 +3364,15 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
     if (vhInvitePrepared && room.numParticipants <= 1) vhInviteBtnShow();
   });
   room.on(RoomEvent.Disconnected, () => { vhTrLog('system', 'disconnected'); vhPresenceReset(); vhEndCall(true); });
+  // Self-report may also arrive/change at runtime (name/attributes update) →
+  // refresh the agent chip label if that identity currently owns the slot.
+  const vhRefreshAgentLabel = (p) => {
+    if (!p || vhPresenceSlotForP(p) !== 'agent') return;
+    vhRememberAgentLabel(p);
+    if (vhSlotCurrentId.agent === p.identity) vhPresenceSet('agent', 'in', p.identity);
+  };
+  if (RoomEvent.ParticipantAttributesChanged) room.on(RoomEvent.ParticipantAttributesChanged, (_c, p) => vhRefreshAgentLabel(p));
+  if (RoomEvent.ParticipantNameChanged) room.on(RoomEvent.ParticipantNameChanged, (_n, p) => vhRefreshAgentLabel(p));
 
   // Idle-mode: 30 min ohne activity → low-activity mode (kein disconnect,
   // nur takt runter — animate-loop überspringt heavy work bis activity resumed).
@@ -3352,7 +3406,7 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
     vhSetSpeaker(localSpeaks ? 'user' : 'agent');
     // mark each speaking participant in presence
     speakers.forEach(p => {
-      const slot = vhPresenceSlotFor(p.identity);
+      const slot = vhPresenceSlotForP(p);
       // Issue #3: pass identity so the slot-ownership tracker stays in sync
       if (slot) vhPresenceSet(slot, 'speak', p.identity);
     });

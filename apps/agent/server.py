@@ -241,9 +241,20 @@ def issue_token(req: TokenRequest) -> TokenResponse:
     return _mint(req.room, req.identity, req.invite, req.ttl_seconds)
 
 
+_LABEL_MAX = 64
+
+
+def _clean_label(v: str) -> str:
+    """Operator self-report label → safe display string: printable only, collapsed
+    whitespace, capped at _LABEL_MAX chars (the chip ellipsizes further)."""
+    v = "".join(" " if ch.isspace() else ch for ch in (v or "") if ch.isspace() or ch.isprintable())
+    return " ".join(v.split())[:_LABEL_MAX]
+
+
 @app.get("/api/token", response_model=TokenResponse)
 def issue_token_get(
-    room: str, identity: str, invite: str = "", ttl_seconds: int = 3600
+    room: str, identity: str, invite: str = "", ttl_seconds: int = 3600,
+    name: str = "", model: str = "",
 ) -> TokenResponse:
     """GET-flavor compat for voicehook-agent CLI (v3 protocol).
 
@@ -255,6 +266,11 @@ def issue_token_get(
     CreateDispatch for voice-ai — LK dedups, so it's a no-op if one is already
     assigned. Net: any operator join guarantees voice-ai is in the room, automatically.
     Otherwise we require a real HMAC invite.
+
+    `name` / `model` (operator self-report, CLI --name/--model) land in the JWT
+    as LK `name` + `attributes` (vh.role/vh.name/vh.model) so the web presence
+    chip can show "Claude · opus-5.5" instead of a guessed brand. Optional —
+    older CLIs without them still get a plain token.
     """
     if invite == "1":
         api_key = os.environ.get("LIVEKIT_API_KEY")
@@ -262,10 +278,16 @@ def issue_token_get(
         livekit_url = os.environ.get("LIVEKIT_URL", "wss://rtc.voicehook.ai")
         if not api_key or not api_secret:
             raise HTTPException(status_code=503, detail="server missing LiveKit credentials")
+        op_name, op_model = _clean_label(name), _clean_label(model)
+        attrs = {"vh.role": "agent"}
+        if op_name:
+            attrs["vh.name"] = op_name
+        if op_model:
+            attrs["vh.model"] = op_model
         token = mint_livekit_token(
             api_key=api_key, api_secret=api_secret,
             room=room, identity=identity, ttl_seconds=ttl_seconds,
-            agent_name=None,
+            agent_name=None, name=op_name or None, attributes=attrs,
         )
         # auto-ensure voice-ai is present (presence-idempotent) — see docstring (#42)
         threading.Thread(

@@ -86,7 +86,7 @@ ist per PEP 668 gesperrt).
 Stand 2026-09-25: **0.3.0**. Kennt weiterhin **kein `--auto` und kein
 `--memory-dir`** — der v4-Zehnzeiler funktioniert also nach wie vor nicht.
 Vorhandene Flags (aus `join --help`, nicht aus dem Gedächtnis):
-`--name --identity --model --topic --username --prompt --greet/--no-greet --json
+`--name --model` (**Pflicht ab 0.4.0**, sonst Exit 2; Web-Chip: Ladekreis, dann "Name · Modell") `--identity --topic --username --prompt --greet/--no-greet --json
 --persona --persona-file --keep-alive/--no-keep-alive --notify-url
 --wake-only-user --wake-all --suppress-echo --say-ttl --strict-relay
 --graph --graph-interval`
@@ -96,10 +96,10 @@ das den ganzen Block.
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
-SESS=vh-call; NAME=claude
+SESS=vh-call; NAME=Claude; MODEL=opus-5.5   # Selbstauskunft: eigener Name + echtes Modell
 mkfifo /tmp/$SESS.in 2>/dev/null
 ( exec -a vh-holder sleep 100000 > /tmp/$SESS.in & )     # hält stdin offen
-( setsid nohup voicehook-agent join "$INVITE_URL" --name $NAME --json \
+( setsid nohup voicehook-agent join "$INVITE_URL" --name "$NAME" --model "$MODEL" --json \
       --persona-file /tmp/$SESS.persona \
       < /tmp/$SESS.in > /tmp/$SESS.out 2>&1 & )
 sleep 7; tail -n 8 /tmp/$SESS.out        # erwartet: connected + persona auto-pushed

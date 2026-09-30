@@ -168,6 +168,53 @@ def test_invite1_auto_dispatches_voice_ai(monkeypatch):
     assert calls == [("auto-disp-room", "voice-ai")]
 
 
+def _jwt_payload(tok: str) -> dict:
+    import base64
+    import json
+    seg = tok.split(".")[1]
+    return json.loads(base64.urlsafe_b64decode(seg + "=" * (-len(seg) % 4)))
+
+
+def test_invite1_carries_operator_name_and_model(monkeypatch):
+    import agent.server as srv
+    monkeypatch.setattr(srv, "_ensure_agent_dispatched", lambda *a, **k: None)
+    c = TestClient(app)
+    r = c.get("/api/token", params={
+        "room": "name-room", "identity": "claude-box-ab12", "invite": "1",
+        "name": "Claude", "model": "opus-5.5",
+    })
+    assert r.status_code == 200
+    p = _jwt_payload(r.json()["token"])
+    assert p["sub"] == "claude-box-ab12"
+    assert p["name"] == "Claude"
+    assert p["attributes"] == {"vh.role": "agent", "vh.name": "Claude", "vh.model": "opus-5.5"}
+
+
+def test_invite1_without_self_report_still_mints(monkeypatch):
+    import agent.server as srv
+    monkeypatch.setattr(srv, "_ensure_agent_dispatched", lambda *a, **k: None)
+    c = TestClient(app)
+    r = c.get("/api/token", params={"room": "plain-room", "identity": "hermes-vm-9f", "invite": "1"})
+    assert r.status_code == 200
+    p = _jwt_payload(r.json()["token"])
+    assert "name" not in p
+    assert p["attributes"] == {"vh.role": "agent"}
+
+
+def test_invite1_label_is_sanitized_and_capped(monkeypatch):
+    import agent.server as srv
+    monkeypatch.setattr(srv, "_ensure_agent_dispatched", lambda *a, **k: None)
+    c = TestClient(app)
+    r = c.get("/api/token", params={
+        "room": "cap-room", "identity": "x-y-z", "invite": "1",
+        "name": "  Evil\x00\nName   " + "A" * 200, "model": "m",
+    })
+    p = _jwt_payload(r.json()["token"])
+    assert len(p["name"]) == 64
+    assert p["name"].startswith("Evil Name ")
+    assert "\x00" not in p["name"] and "\n" not in p["name"]
+
+
 # ----- ensure-dispatch presence-idempotent (#47) ---------------------------
 class _FakeResp:
     def __init__(self, b): self._b = b
