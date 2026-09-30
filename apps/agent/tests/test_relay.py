@@ -310,3 +310,27 @@ async def test_cancel_survives_runtime_error_from_livekit():
     await h.on_say(_pkt(TOPIC_SAY, {"text": "a"}))
     await h.on_say(_pkt(TOPIC_SAY, {"text": "b", "mode": "overwrite"}))   # darf nicht werfen
     assert session.say.call_count == 2
+
+
+# ── Transkript-Farben: Operator (rot) vs. Agent selbst (blau) ────────────────
+@pytest.mark.asyncio
+async def test_is_operator_speech_by_handle_and_text():
+    h1 = _handle()
+    session = _session_with_handles(h1)
+    h = build_relay_handlers(session, _fake_agent())
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "Operator sagt etwas Wichtiges."}))
+    assert h.is_operator_speech(h1, "egal") is True                      # über Handle
+    assert h.is_operator_speech(None, "Operator sagt etwas") is True      # abgebrochen: Anfang
+    assert h.is_operator_speech(None, "Delta antwortet selbst.") is False
+    assert h.is_operator_speech(object(), "") is False
+
+
+@pytest.mark.asyncio
+async def test_is_operator_speech_live_only_by_handle():
+    session = MagicMock()
+    hd = MagicMock()
+    session.generate_reply = MagicMock(return_value=hd)
+    h = build_relay_handlers(session, _fake_agent(), live=True)
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "Termin Dienstag"}))
+    assert h.is_operator_speech(hd, "Der Termin ist am Dienstag.") is True
+    assert h.is_operator_speech(None, "Termin Dienstag") is False        # live: Text zählt nicht

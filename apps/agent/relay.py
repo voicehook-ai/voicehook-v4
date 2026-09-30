@@ -86,6 +86,7 @@ class RelayHandlers:
     on_mode: callable
     on_interrupt: callable
     on_inject: callable
+    is_operator_speech: callable = None  # (handle, text) -> bool, für Transkript-Farben
 
 
 def _decode(payload: bytes) -> dict:
@@ -160,6 +161,9 @@ def build_relay_handlers(
     # der Operator längst revidiert hat, und der Operator weiß nicht, was davon
     # schon gesprochen wurde.
     pending: list[tuple[object, str, object]] = []
+    # Zuletzt ausgegebene Operator-Ausgaben (Handle-ids + Texte) -> Transkript rot/blau
+    operator_handles: set[int] = set()
+    operator_texts: list[str] = []
     held: dict = {"text": None, "task": None}
 
     def _speak(text: str, seq: object = None) -> None:
@@ -183,6 +187,9 @@ def build_relay_handlers(
         pending[:] = [p for p in pending if not _is_done(p[2])]
         if handle is not None:
             pending.append((seq, text, handle))
+            operator_handles.add(id(handle))
+        operator_texts.append(text)
+        del operator_texts[:-20]
 
     def _drop_hold() -> None:
         task = held["task"]
@@ -323,7 +330,17 @@ def build_relay_handlers(
         await agent.update_chat_ctx(ctx)
         logger.info("[operator.inject] %s", text[:200])
 
+    def is_operator_speech(handle: object, text: str) -> bool:
+        """Stammt eine gesprochene Zeile vom Operator (rot) oder vom Agent selbst (blau)?"""
+        if handle is not None and id(handle) in operator_handles:
+            return True
+        t = (text or "").strip()
+        if not t or live:  # live: Gemini formuliert Operator-Vorgaben um -> nur Handle zählt
+            return False
+        return any(o == t or o.startswith(t) for o in operator_texts)
+
     return RelayHandlers(
+        is_operator_speech=is_operator_speech,
         on_say=on_say, on_persona=on_persona, on_mode=on_mode,
         on_interrupt=on_interrupt, on_inject=on_inject,
     )

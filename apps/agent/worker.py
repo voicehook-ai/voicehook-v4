@@ -327,7 +327,8 @@ async def entrypoint(ctx: JobContext) -> None:
 
         if not text or text in NO_SPEECH_MARKERS:
             return
-        payload = json.dumps({"role": "agent", "text": text}).encode()
+        role = "operator" if handlers.is_operator_speech(session.current_speech, text) else "agent"
+        payload = json.dumps({"role": role, "text": text}).encode()
 
         async def _send() -> None:
             try:
