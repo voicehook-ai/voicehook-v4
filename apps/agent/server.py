@@ -127,6 +127,29 @@ def _ensure_agent_dispatched(room: str, agent_name: str = "voice-ai") -> None:
     _dispatch_now(room, _agent_for(room, agent_name))
 
 
+_FRESH_DISPATCH_NS = 60 * 10**9   # Agent braucht ein paar Sekunden zum Beitreten (#47)
+_ACTIVE_JOB = {"JS_PENDING", "JS_RUNNING", None, ""}
+
+
+def _dispatch_plan(dispatches: list[dict], agent_name: str, now_ns: int) -> tuple[bool, list[str]]:
+    """(keep, stale_ids): keep=True wenn ein lebender/frischer Dispatch existiert."""
+    stale = []
+    for d in dispatches:
+        if d.get("agent_name") != agent_name:
+            continue
+        state = d.get("state") or {}
+        if not state.get("created_at"):
+            return True, []  # nicht beurteilbar -> wie bisher: nie doppelt dispatchen (#47)
+        jobs = state.get("jobs") or []
+        if any((j.get("state") or {}).get("status") in _ACTIVE_JOB for j in jobs):
+            return True, []
+        created = int(state.get("created_at") or 0)
+        if not jobs and now_ns - created < _FRESH_DISPATCH_NS:
+            return True, []
+        stale.append(d.get("id"))
+    return False, [x for x in stale if x]
+
+
 def _dispatch_now(room: str, agent_name: str) -> None:
     """Ensure exactly one `agent_name` worker is dispatched for the room.
 
@@ -157,11 +180,19 @@ def _dispatch_now(room: str, agent_name: str) -> None:
         return urllib.request.urlopen(req, timeout=3).read()
 
     with _room_lock(room):
-        # already dispatched? skip (closes the race)
+        # already dispatched and alive? skip (closes the race). A dispatch whose
+        # job ended (agent left after the idle cap) is stale -> delete + recreate,
+        # otherwise the agent would never come back into this room.
         try:
             data = json.loads(_twirp("ListDispatch", {"room": room}) or b"{}")
-            if any(d.get("agent_name") == agent_name for d in data.get("agent_dispatches", [])):
+            keep, stale = _dispatch_plan(data.get("agent_dispatches", []), agent_name, time.time_ns())
+            if keep:
                 return
+            for dispatch_id in stale:
+                try:
+                    _twirp("DeleteDispatch", {"dispatch_id": dispatch_id, "room": room})
+                except (urllib.error.URLError, TimeoutError) as e:
+                    logger.warning("[ensure-dispatch] delete stale %s: %s", dispatch_id, e)
         except (urllib.error.URLError, TimeoutError, ValueError) as e:
             logger.warning("[ensure-dispatch] list %s: %s", room, e)  # fall through to create
         try:

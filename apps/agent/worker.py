@@ -135,7 +135,7 @@ class CallGuard:
         reason = getattr(getattr(ev, "reason", None), "value", None) or str(
             getattr(ev, "reason", "unknown")
         )
-        self._schedule_end(f"session_close:{reason}", delete_room=self.human_count() == 0)
+        self._schedule_end(f"session_close:{reason}", delete_room=False)
 
     # -- timers -------------------------------------------------------------
     def _reevaluate_idle(self) -> None:
@@ -151,7 +151,9 @@ class CallGuard:
     async def _idle_timer(self) -> None:
         await asyncio.sleep(self._idle_seconds)
         if self.human_count() == 0:
-            await self.end("idle_no_human", delete_room=True)
+            # Nur der Agent geht (Kosten stoppen); der Raum bleibt, damit ein wartender
+            # Operator nicht rausfliegt. Kommt ein Mensch zurück, dispatcht der Server neu.
+            await self.end("idle_no_human", delete_room=False)
         else:
             self._idle_task = None
 

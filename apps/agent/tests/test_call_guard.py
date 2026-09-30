@@ -196,7 +196,7 @@ async def test_idle_ends_when_no_human_from_start():
     await _settle(0.2)
     assert guard.end_reason == "idle_no_human"
     assert session.said == []  # no announcement for an empty room
-    assert ctx.deleted == ["test-room"]
+    assert ctx.deleted == []  # Raum bleibt: Operator bleibt drin, Agent kommt per Re-Dispatch zurück
     assert ctx.shutdowns == ["call_guard:idle_no_human"]
 
 
@@ -212,7 +212,7 @@ async def test_idle_ends_after_last_human_leaves(caplog):
     room.leave("gast-1")  # senior CLI stays → used to keep paid TTS alive
     await _settle(0.2)
     assert guard.end_reason == "idle_no_human"
-    assert ctx.deleted == ["test-room"]
+    assert ctx.deleted == []  # Raum bleibt: Operator bleibt drin, Agent kommt per Re-Dispatch zurück
     assert [ln["reason"] for ln in _call_end_lines(caplog)] == ["idle_no_human"]
 
 
@@ -242,7 +242,7 @@ async def test_session_close_by_lib_leaves_and_deletes_when_empty(caplog):
     await _settle(0.05)
     assert guard.end_reason == "session_close:participant_disconnected"
     assert session.closed == 0  # already closed by the lib, don't re-close
-    assert ctx.deleted == ["test-room"]
+    assert ctx.deleted == []  # Raum bleibt: Operator bleibt drin, Agent kommt per Re-Dispatch zurück
     assert ctx.shutdowns == ["call_guard:session_close:participant_disconnected"]
     assert len(_call_end_lines(caplog)) == 1
 

@@ -278,3 +278,47 @@ def test_operator_join_in_live_room_dispatches_live_worker_not_normal(monkeypatc
 def test_normal_rooms_keep_voice_ai(_no_dispatch):
     srv._ensure_agent_dispatched("irgendein-raum-XYZ1")
     assert _no_dispatch == [("irgendein-raum-XYZ1", "voice-ai")]
+
+
+# ----- Re-Dispatch: Agent kommt zurück, wenn er (Leerlauf) gegangen ist -------
+NOW = 2_000_000_000 * 10**9
+
+
+def _disp(name="voice-ai", age_s=600, statuses=()):
+    return {"id": f"AD_{name}_{age_s}", "agent_name": name,
+            "state": {"created_at": str(NOW - int(age_s * 1e9)),
+                      "jobs": [{"id": f"AJ_{i}", "state": {"status": s}} for i, s in enumerate(statuses)]}}
+
+
+def test_dispatch_plan_skips_when_job_running():
+    keep, stale = srv._dispatch_plan([_disp(statuses=["JS_RUNNING"])], "voice-ai", NOW)
+    assert keep and stale == []
+
+
+def test_dispatch_plan_skips_fresh_dispatch_without_job_yet():
+    keep, stale = srv._dispatch_plan([_disp(age_s=5)], "voice-ai", NOW)   # #47-Rennen
+    assert keep and stale == []
+
+
+def test_dispatch_plan_recreates_after_agent_left():
+    d = _disp(statuses=["JS_SUCCESS"])                     # Agent per Leerlauf gegangen
+    keep, stale = srv._dispatch_plan([d], "voice-ai", NOW)
+    assert not keep and stale == [d["id"]]
+
+
+def test_dispatch_plan_recreates_old_dispatch_without_jobs():
+    d = _disp(age_s=600)
+    keep, stale = srv._dispatch_plan([d], "voice-ai", NOW)
+    assert not keep and stale == [d["id"]]
+
+
+def test_dispatch_plan_ignores_other_agent_names():
+    keep, stale = srv._dispatch_plan([_disp(name="", statuses=["JS_RUNNING"])], "voice-ai", NOW)
+    assert not keep and stale == []
+
+
+def test_dispatch_plan_missing_status_counts_as_pending():
+    d = _disp(statuses=[None])
+    d["state"]["jobs"][0]["state"] = {}                    # proto3 lässt Default weg
+    keep, _ = srv._dispatch_plan([d], "voice-ai", NOW)
+    assert keep
