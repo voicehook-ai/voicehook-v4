@@ -85,6 +85,8 @@ def mint_livekit_token(
     ttl_seconds: int = 3600,
     agent_name: str | None = "voice-ai",
     now: int | None = None,
+    name: str | None = None,
+    attributes: dict[str, str] | None = None,
 ) -> str:
     """Mint a LiveKit JWT (HS256) for joining `room` as `identity`.
 
@@ -92,6 +94,10 @@ def mint_livekit_token(
     auto-dispatches that worker on participant join (no separate
     AgentDispatchService.CreateDispatch needed). Pass `None` to mint a plain
     join-only token (e.g. for an operator peer).
+
+    `name` / `attributes` become the LiveKit `name` / `attributes` claims →
+    visible to every peer as participant.name / participant.attributes (the
+    web presence chip shows the operator's self-reported name + model).
     """
     import json
 
@@ -113,6 +119,10 @@ def mint_livekit_token(
     }
     if agent_name:
         payload["roomConfig"] = {"agents": [{"agentName": agent_name}]}
+    if name:
+        payload["name"] = name
+    if attributes:
+        payload["attributes"] = dict(attributes)
     h_b64 = _b64u(json.dumps(header, separators=(",", ":")).encode())
     p_b64 = _b64u(json.dumps(payload, separators=(",", ":")).encode())
     signing_input = f"{h_b64}.{p_b64}".encode("ascii")
