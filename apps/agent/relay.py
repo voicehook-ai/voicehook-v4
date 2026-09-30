@@ -10,11 +10,15 @@ Design (mode B, voicehook-v3#28 + Wissenstransfer):
   LLM never produces a turn on its own (pure mouthpiece).
 
 Topics handled here:
-- operator.say        — TTS the text. Default mode "replace": storniert alles noch
-                        Ungesprochene + die laufende Ausgabe; mode "append" hängt an
+- operator.say        — TTS the text. Ist nichts Ungesprochenes offen: sofort.
+                        Sonst: Ausgabe stoppen, ungesprochene Aussagen per
+                        operator.revise ans Brain zurück, neue Aussage halten, bis
+                        das Brain mit mode "overwrite" die Zusammenfassung schickt
+                        (nach HOLD_S spricht die gehaltene). mode "append": anhängen.
+- operator.revise     — (Agent -> Operator) {unspoken:[...], new, text:Anweisung}
 - operator.persona    — replace the agent's instructions (live-injected knowledge)
 - operator.mode       — switch strict/auto generation ({"mode":"strict"|"auto"})
-- operator.interrupt  — drop the current say AND everything queued behind it
+- operator.interrupt  — alles stoppen, ungesprochene Aussagen per operator.revise melden
 - operator.inject     — synthetic user-turn (test harness; operator reads transcript)
 
 PR-12 adds: every operator.say also publishes {role:"agent",text:...} on the
@@ -24,6 +28,7 @@ PR-12 adds: every operator.say also publishes {role:"agent",text:...} on the
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from dataclasses import dataclass
@@ -42,6 +47,10 @@ TOPIC_PERSONA = "operator.persona"
 TOPIC_MODE = "operator.mode"
 TOPIC_INTERRUPT = "operator.interrupt"
 TOPIC_INJECT = "operator.inject"
+TOPIC_REVISE = "operator.revise"   # agent -> operator: ungesprochene Aussagen zurück
+
+HOLD_S = 8.0  # Olli-Regel "Stille ist der Killer, ab 8s ansagen": so lange wartet ein
+             # zurückgehaltenes say auf das zusammengefasste overwrite des Brains
 
 DEFAULT_PERSONA = (
     "Du bist die Stimme von voicehook.ai. Du antwortest aus deinem Kontext "
@@ -102,6 +111,28 @@ def _publish_transcript_safe(room: Room | None, role: str, text: str) -> None:
     asyncio.create_task(_send())
 
 
+def unspoken_rest(full: str, spoken: str) -> str:
+    """Was von `full` noch nicht gesprochen ist, gegeben den gesprochenen Anfang.
+
+    Das synchronisierte Transkript kann in Groß/Klein und Interpunktion abweichen,
+    daher erst Präfix, dann wortweise.
+    """
+    full, spoken = (full or "").strip(), (spoken or "").strip()
+    if not spoken:
+        return full
+    if full.startswith(spoken):
+        return full[len(spoken):].strip()
+    return " ".join(full.split()[len(spoken.split()):])
+
+
+def _spoken_text(handle: object) -> str:
+    try:
+        items = list(getattr(handle, "chat_items", None) or [])
+    except Exception:  # noqa: BLE001
+        return ""
+    return " ".join((getattr(i, "text_content", "") or "") for i in items).strip()
+
+
 def _is_done(handle: object) -> bool:
     try:
         return bool(handle.done())
@@ -114,6 +145,7 @@ def build_relay_handlers(
     agent: RelayAgent,
     *,
     room: Room | None = None,
+    hold_s: float = HOLD_S,
 ) -> RelayHandlers:
     """Build per-topic handler closures bound to a session + agent.
 
@@ -122,52 +154,115 @@ def build_relay_handlers(
     can render the agent turn. (v3 parity, PR-12.)
     """
 
-    # Noch nicht fertig gesprochene operator.say-Ausgaben. session.say() hängt
-    # nur hinten an die Queue an; ohne Buchführung spricht der Agent Minuten
-    # später Aussagen, die der Operator längst revidiert hat.
-    pending: list = []
+    # Offene operator.say-Ausgaben: (seq, text, handle). session.say() hängt nur
+    # hinten an; ohne Buchführung spricht der Agent Minuten später Aussagen, die
+    # der Operator längst revidiert hat, und der Operator weiß nicht, was davon
+    # schon gesprochen wurde.
+    pending: list[tuple[object, str, object]] = []
+    held: dict = {"text": None, "task": None}
 
-    def _cancel_all() -> int:
-        """Storniert alles Ungesprochene + die laufende Ausgabe (auch Eigenantworten).
+    def _speak(text: str, seq: object = None) -> None:
+        logger.info("[operator.say] %s", text[:200])
+        _publish_transcript_safe(room, "agent", text)
+        # allow_interruptions=True = full-duplex barge-in: the user can comment
+        # while the mouthpiece is speaking and the STT keeps hearing them.
+        handle = session.say(text, allow_interruptions=True)
+        pending[:] = [p for p in pending if not _is_done(p[2])]
+        if handle is not None:
+            pending.append((seq, text, handle))
 
-        force=True ist nötig: livekit wirft sonst RuntimeError statt zu stoppen,
-        sobald die laufende Ausgabe keine Unterbrechung erlaubt.
-        """
-        dropped = 0
-        for handle in pending:
-            try:
-                if not handle.done():
-                    handle.interrupt(force=True)
-                    dropped += 1
-            except Exception as e:  # noqa: BLE001
-                logger.debug("[operator.say] cancel handle: %s", e)
-        pending.clear()
+    def _drop_hold() -> None:
+        task = held["task"]
+        if task is not None and not task.done():
+            task.cancel()
+        held["text"], held["task"] = None, None
+
+    def _stop_session() -> None:
+        # force=True: livekit wirft sonst RuntimeError statt zu stoppen, sobald die
+        # laufende Ausgabe keine Unterbrechung erlaubt. Stoppt auch Eigenantworten.
         try:
             session.interrupt(force=True)
         except Exception as e:  # noqa: BLE001 — nichts läuft / Session gestoppt
             logger.debug("[operator.say] session.interrupt: %s", e)
-        return dropped
+
+    async def _cancel_open() -> list[str]:
+        """Stoppt alle offenen Ausgaben, liefert die ungesprochenen Reste."""
+        open_ = [p for p in pending if not _is_done(p[2])]
+        pending.clear()
+        for _seq, _text, handle in open_:
+            try:
+                handle.interrupt(force=True)
+            except Exception as e:  # noqa: BLE001
+                logger.debug("[operator.say] cancel handle: %s", e)
+        _stop_session()
+        # erst nach dem Abbruch steht fest, was tatsächlich gesprochen wurde
+        waits = [h.wait_for_playout() for _s, _t, h in open_ if hasattr(h, "wait_for_playout")]
+        if waits:
+            # Timeout: dann gilt der gesprochene Stand bis hier
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(asyncio.gather(*waits, return_exceptions=True), timeout=2.0)
+        rest = [unspoken_rest(text, _spoken_text(h)) for _s, text, h in open_]
+        return [r for r in rest if r]
+
+    async def _ask_revise(unspoken: list[str], new: str) -> None:
+        listed = " ".join(f"[{i + 1}] {u}" for i, u in enumerate(unspoken))
+        if new:
+            instr = (
+                f"REVISE: Noch NICHT gesprochen: {listed}. Deine neue Aussage: [neu] {new}. "
+                "Fasse alles zu EINER Aussage zusammen: nichts Wichtiges auslassen, "
+                "Falsches und Überholtes streichen. Sende sie als operator.say mit "
+                f'mode "overwrite". Ohne Antwort in {hold_s:g}s spreche ich [neu].'
+            )
+        else:
+            instr = (
+                f"REVISE: Abgebrochen, noch NICHT gesprochen: {listed}. "
+                'Falls davon noch etwas gilt: zusammengefasst als operator.say mit mode "overwrite" senden.'
+            )
+        logger.info("[operator.revise] %d ungesprochen, neu=%s", len(unspoken), bool(new))
+        if room is None:
+            return
+        payload = json.dumps({"unspoken": unspoken, "new": new, "text": instr}, ensure_ascii=False).encode()
+        try:
+            await room.local_participant.publish_data(payload=payload, topic=TOPIC_REVISE, reliable=True)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("[operator.revise publish] %s", e)
+
+    async def _speak_after_hold(text: str) -> None:
+        await asyncio.sleep(hold_s)
+        if held["text"] == text:
+            held["text"], held["task"] = None, None
+            logger.info("[operator.say] kein overwrite in %.1fs, spreche gehaltene Aussage", hold_s)
+            _speak(text)
 
     async def on_say(packet: DataPacket) -> None:
         data = _decode(packet.data)
         text = (data.get("text") or "").strip()
         if not text:
             return
-        # Default "replace": die neue Aussage ersetzt alles noch Ungesprochene.
-        # "append" nur für bewusst mehrteilige Ausgaben (Teil 1, Teil 2, ...).
-        mode = (data.get("mode") or "replace").strip().lower()
-        if mode != "append" or data.get("priority") == "interrupt":
-            dropped = _cancel_all()
-            if dropped:
-                logger.info("[operator.say] %d veraltete Ausgabe(n) storniert", dropped)
-        logger.info("[operator.say] %s", text[:200])
-        _publish_transcript_safe(room, "agent", text)
-        # allow_interruptions=True = full-duplex barge-in: the user can comment
-        # while the mouthpiece is speaking and the STT keeps hearing them.
-        handle = session.say(text, allow_interruptions=True)
-        pending[:] = [h for h in pending if not _is_done(h)]
-        if handle is not None:
-            pending.append(handle)
+        seq = data.get("seq")
+        mode = (data.get("mode") or "revise").strip().lower()
+        if mode == "append":
+            _speak(text, seq)
+            return
+        if mode == "overwrite":
+            # Zusammenfassung vom Brain: ersetzt alles Offene und Gehaltene
+            _drop_hold()
+            await _cancel_open()
+            _speak(text, seq)
+            return
+        # Default revise
+        _drop_hold()
+        if not any(not _is_done(p[2]) for p in pending):
+            _stop_session()          # auch eine laufende Eigenantwort (auto mode) stoppen
+            _speak(text, seq)
+            return
+        unspoken = await _cancel_open()
+        if not unspoken:
+            _speak(text, seq)
+            return
+        held["text"] = text
+        held["task"] = asyncio.create_task(_speak_after_hold(text))
+        await _ask_revise(unspoken, text)
 
     async def on_persona(packet: DataPacket) -> None:
         data = _decode(packet.data)
@@ -184,7 +279,11 @@ def build_relay_handlers(
         logger.info("[operator.mode] strict=%s", agent.strict)
 
     async def on_interrupt(_packet: DataPacket) -> None:
-        logger.info("[operator.interrupt] %d Ausgabe(n) storniert", _cancel_all())
+        _drop_hold()
+        unspoken = await _cancel_open()
+        logger.info("[operator.interrupt] %d ungesprochen", len(unspoken))
+        if unspoken:
+            await _ask_revise(unspoken, "")
 
     async def on_inject(packet: DataPacket) -> None:
         data = _decode(packet.data)
