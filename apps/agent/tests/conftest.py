@@ -8,3 +8,13 @@ import os
 os.environ.setdefault("DEEPGRAM_API_KEY", "test-deepgram-key-do-not-use")
 os.environ.setdefault("GOOGLE_API_KEY", "test-google-key-do-not-use")
 os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", "/dev/null")
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _isolated_live_budget(tmp_path, monkeypatch):
+    """Kein Test liest/schreibt je das echte Budget-Ledger der Box."""
+    monkeypatch.setenv("VOICEHOOK_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.delenv("VOICEHOOK_LIVE_BUDGET_USD_MONTH", raising=False)

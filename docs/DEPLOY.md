@@ -80,3 +80,10 @@ curl -s -X POST https://voicehook.ai/api/admin/live-room \
 
 Der zurückgegebene Link ist eine normale raumgebundene Einladung (läuft ab). In diesem Raum
 arbeitet der Worker `voice-ai-live` (Gemini 3.8 Live, 20-Min-Deckel), kein `voice-ai`.
+
+**Monatsbudget (Sperre):** Der Live-Worker bucht die Kosten jeder Antwort (Token-Zahlen × Preise
+aus `apps/agent/live.py`) in `/opt/voicehook/state/live-budget.json` (ein Zähler je UTC-Monat).
+Ist `VOICEHOOK_LIVE_BUDGET_USD_MONTH` (Default 10) erreicht, antwortet `/api/admin/live-room`
+mit 402, ein laufender Live-Call wird mit Ansage beendet und neue Live-Jobs starten nicht.
+Unlesbares Ledger oder ungültiger Wert = gesperrt (fail-closed). Stand prüfen:
+`ssh root@voicehook.ai cat /opt/voicehook/state/live-budget.json`.

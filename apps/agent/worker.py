@@ -22,6 +22,7 @@ from typing import Any
 from livekit import rtc
 from livekit.agents import AgentSession, AutoSubscribe, JobContext, WorkerOptions, cli, room_io
 
+from . import budget
 from .llm import build_llm
 from .relay import DEFAULT_PERSONA, RelayAgent, build_relay_handlers, topic_dispatch
 from .voice import build_stt, build_tts
@@ -38,6 +39,7 @@ AGENT_NAME = os.environ.get("VOICEHOOK_AGENT_NAME", "voice-ai")
 DEFAULT_MAX_CALL_SECONDS = 3600.0
 DEFAULT_IDLE_NO_HUMAN_SECONDS = 60.0
 MAX_CALL_ANNOUNCEMENT = "Maximale Gesprächsdauer erreicht. Ich beende den Call."
+LIVE_BUDGET_ANNOUNCEMENT = "Das Live-Budget für diesen Monat ist aufgebraucht. Ich beende den Call."
 # Every teardown step is bounded so the teardown itself can never hang.
 TEARDOWN_STEP_TIMEOUT = 10.0
 
@@ -250,6 +252,11 @@ async def entrypoint(ctx: JobContext) -> None:
     )
 
     live_mode = is_live()
+    if live_mode and budget.exhausted():
+        # Monatsbudget weg: gar nicht erst eine kostenpflichtige Live-Session öffnen.
+        logger.warning("[live-budget] exhausted (%.2f USD), refusing room=%s", budget.spent_usd(), ctx.room.name)
+        ctx.shutdown(reason="live_budget_exhausted")
+        return
     session = build_session()
     if live_mode:
         from .live import LIVE_BASE_INSTRUCTIONS
@@ -287,6 +294,7 @@ async def entrypoint(ctx: JobContext) -> None:
     from .live import metric_cost_usd
 
     totals = {"usd": 0.0, "turns": 0, "sent_at": 0.0}
+    guard_ref: list[CallGuard] = []  # wird unten gesetzt; Budget-Ende braucht den Guard
 
     @session.on("metrics_collected")
     def _on_metrics(ev) -> None:  # noqa: ANN001
@@ -295,6 +303,13 @@ async def entrypoint(ctx: JobContext) -> None:
         if usd <= 0:
             return
         totals["usd"] += usd
+        if live_mode:
+            month = budget.add_usd(usd)
+            if month >= budget.limit_usd() and guard_ref:
+                logger.warning("[live-budget] reached %.4f USD in room=%s, ending call", month, ctx.room.name)
+                asyncio.create_task(
+                    guard_ref[0].end("live_budget", delete_room=False, announce=LIVE_BUDGET_ANNOUNCEMENT)
+                )
         if type(m).__name__ == "RealtimeModelMetrics":
             totals["turns"] += 1
             logger.info(
@@ -338,13 +353,15 @@ async def entrypoint(ctx: JobContext) -> None:
         asyncio.create_task(_send())
 
     # Cost caps armed BEFORE session.start so even a hanging start is bounded.
-    CallGuard(
+    guard = CallGuard(
         ctx,
         session,
         max_seconds=max_call_seconds(),
         idle_seconds=idle_no_human_seconds(),
         live=live_mode,
-    ).start()
+    )
+    guard_ref.append(guard)
+    guard.start()
     # Explicit room options (don't rely on lib defaults): close the session when
     # the linked participant leaves. Room deletion is owned by CallGuard so it
     # only happens when no human is left (or on the hard cap).
