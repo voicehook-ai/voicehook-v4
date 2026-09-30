@@ -383,3 +383,103 @@ def test_admin_live_room_refused_when_month_budget_used_up(monkeypatch, _no_disp
     r = _live_room(c)
     assert r.status_code == 402
     assert _no_dispatch == []
+
+
+# ----- Live-Modus öffentlich (Demo): /api/live/status + /api/live-room -------
+def _pub_live(c, ip, identity="gast"):
+    return c.post("/api/live-room", json={"identity": identity}, headers={"x-forwarded-for": ip})
+
+
+def test_public_live_room_needs_no_key_and_binds_live_worker(monkeypatch, _no_dispatch):
+    monkeypatch.delenv("VOICEHOOK_LIVE_KEY", raising=False)   # kein Admin-Schlüssel nötig
+    monkeypatch.delenv("VOICEHOOK_LIVE_PUBLIC", raising=False)  # Default = an
+    c = TestClient(app)
+    r = _pub_live(c, "10.7.0.1", identity="host-abc")
+    assert r.status_code == 200
+    body = r.json()
+    room = body["room"]
+    # host-call-Format: die Oberfläche kann direkt lkRoom.connect(url, token)
+    assert SLUG_RE.match(room)
+    assert body["identity"] == "host-abc"
+    assert body["url"] == "wss://rtc.test"
+    assert _claim_agents(body["token"]) == ["voice-ai-live"]
+    assert body["agent"] == "voice-ai-live"
+    assert body["expires_in"] == 3600
+    assert srv._agent_for(room) == "voice-ai-live"
+    # Einladungslink für Mitspieler -> auch deren Token geht an den Live-Worker
+    assert body["invite_url"].startswith(f"https://voicehook.ai/r/{room}?invite=")
+    invite = body["invite_url"].split("invite=", 1)[1]
+    t = c.get("/api/token", params={"room": room, "identity": "gast2", "invite": invite})
+    assert t.status_code == 200
+    assert _claim_agents(t.json()["token"]) == ["voice-ai-live"]
+
+
+def test_public_live_room_rooms_are_fresh_and_unique(_no_dispatch):
+    c = TestClient(app)
+    rooms = {_pub_live(c, "10.7.0.2").json()["room"] for _ in range(3)}
+    assert len(rooms) == 3
+
+
+def test_public_live_room_switch_off_is_404(monkeypatch, _no_dispatch):
+    c = TestClient(app)
+    for off in ("0", "false", "off", "no"):
+        monkeypatch.setenv("VOICEHOOK_LIVE_PUBLIC", off)
+        assert _pub_live(c, "10.7.0.3").status_code == 404
+        assert c.get("/api/live/status").json() == {"available": False}
+    monkeypatch.setenv("VOICEHOOK_LIVE_PUBLIC", "1")                 # Positivkontrolle
+    assert _pub_live(c, "10.7.0.3").status_code == 200
+    assert _no_dispatch and _no_dispatch[-1][1] == "voice-ai-live"
+
+
+def test_public_live_room_402_when_budget_used_up(monkeypatch, _no_dispatch):
+    from agent import budget
+
+    monkeypatch.setenv("VOICEHOOK_LIVE_BUDGET_USD_MONTH", "10")
+    c = TestClient(app)
+    budget.add_usd(9.99)
+    assert _pub_live(c, "10.7.0.4").status_code == 200              # Positivkontrolle
+    assert c.get("/api/live/status").json() == {"available": True}
+    _no_dispatch.clear()
+    budget.add_usd(0.01)
+    r = _pub_live(c, "10.7.0.4")
+    assert r.status_code == 402
+    assert _no_dispatch == []
+    s = c.get("/api/live/status")
+    assert s.status_code == 200 and s.json() == {"available": False}   # keine Beträge
+
+
+def test_public_live_room_shares_host_call_rate_limit(_no_dispatch):
+    c = TestClient(app)
+    ip = "10.7.0.5"
+    for _ in range(4):
+        assert _pub_live(c, ip).status_code == 200
+    assert c.post("/api/host-call", json={"identity": "h"},
+                  headers={"x-forwarded-for": ip}).status_code == 200
+    assert _pub_live(c, ip).status_code == 429                      # 6. Start im Fenster
+    assert _pub_live(c, "10.7.0.6").status_code == 200              # andere IP geht weiter
+
+
+def test_public_live_room_not_configured(monkeypatch, _no_dispatch):
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    c = TestClient(app)
+    assert c.get("/api/live/status").json() == {"available": False}
+    assert _pub_live(c, "10.7.0.7").status_code == 503
+    monkeypatch.setenv("GOOGLE_API_KEY", "x")                        # Positivkontrolle
+    assert c.get("/api/live/status").json() == {"available": True}
+    monkeypatch.delenv("LIVEKIT_API_SECRET")
+    assert c.get("/api/live/status").json() == {"available": False}
+
+
+def test_public_live_room_validates_payload(_no_dispatch):
+    c = TestClient(app)
+    assert c.post("/api/live-room", json={}, headers={"x-forwarded-for": "10.7.0.8"}).status_code == 422
+
+
+def test_admin_live_room_unchanged_by_public_switch(monkeypatch, _no_dispatch):
+    monkeypatch.setenv("VOICEHOOK_LIVE_KEY", LIVE_KEY)
+    monkeypatch.setenv("VOICEHOOK_LIVE_PUBLIC", "0")
+    c = TestClient(app)
+    r = _live_room(c)
+    assert r.status_code == 200
+    assert set(r.json()) == {"room", "url", "expires_in"}
