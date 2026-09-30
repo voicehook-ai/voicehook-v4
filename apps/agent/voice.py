@@ -25,13 +25,23 @@ def build_stt(
     *,
     model: str | None = None,
     language: str | None = None,
+    diarize: bool | None = None,
 ) -> DeepgramSTT:
-    """Deepgram Nova-3 STT. Requires DEEPGRAM_API_KEY in the env."""
+    """Deepgram Nova-3 STT. Requires DEEPGRAM_API_KEY in the env.
+
+    `diarize` (Default: Schalter VOICEHOOK_STT_DIARIZE, an) setzt im Plugin
+    `enable_diarization` -> Deepgram-Live-Parameter `diarize=true`; finale
+    Transkripte tragen dann `speaker_id` ("S0", "S1", ...) für den
+    Hauptsprecher-Filter (agent/speaker.py).
+    """
     from livekit.plugins.deepgram import STT
+
+    from .speaker import diarize_enabled
 
     return STT(
         model=model or os.environ.get("VOICEHOOK_STT_MODEL", DEFAULT_STT_MODEL),
         language=language or os.environ.get("VOICEHOOK_LANGUAGE", DEFAULT_LANGUAGE),
+        enable_diarization=diarize_enabled() if diarize is None else diarize,
     )
 
 
