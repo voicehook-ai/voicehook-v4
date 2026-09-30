@@ -12,9 +12,9 @@ dependencies = [
   "fastapi>=0.115",
   "pydantic>=2.7",
   "uvicorn[standard]>=0.30",
-  "livekit-agents>=0.11",
-  "livekit-plugins-deepgram>=0.6",
-  "livekit-plugins-google>=0.6",
+  "livekit-agents==1.8.3",
+  "livekit-plugins-deepgram==1.8.3",
+  "livekit-plugins-google==1.8.3",
 ]
 
 [project.optional-dependencies]
@@ -40,6 +40,9 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
 ignore = ["E501"]  # line-length handled by formatter
+
+[tool.ruff.lint.per-file-ignores]
+"tests/e2e/*.py" = ["E741"]  # Standalone-E2E-Skript, `l` = Zeile
 
 [tool.ruff.lint.isort]
 known-first-party = ["agent"]

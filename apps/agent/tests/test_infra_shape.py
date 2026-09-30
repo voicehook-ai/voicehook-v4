@@ -19,17 +19,30 @@ def _loc(p: Path) -> int:
 
 
 def test_deploy_script_is_lean():
-    assert _loc(ROOT / "deploy" / "deploy.sh") <= 80
+    # 80 -> 230 (30.09.2026): Web-only-Pfad, orb-ssh-agent und vor allem der
+    # LiveKit-Preflight (kein Neustart, solange ein Mensch im Call ist) sind
+    # Sicherheitsgewinne, keine Aufblähung. Weiter wachsen nur mit Begründung.
+    assert _loc(ROOT / "deploy" / "deploy.sh") <= 230
 
 
 def test_caddyfile_template_is_lean():
     assert _loc(ROOT / "infra" / "caddy" / "Caddyfile.tmpl") <= 30
 
 
-def test_single_systemd_unit():
-    units = list((ROOT / "infra" / "systemd").glob("*.service"))
-    assert len(units) == 1, f"expected 1 systemd unit (voicehook-agent), found {units}"
-    assert units[0].name == "voicehook-agent.service"
+def test_systemd_units_are_exactly_main_plus_live_worker():
+    # Hauptdienst (HTTP + Worker voice-ai) plus dedizierter Gemini-Live-Testworker
+    # (Olli 30.09.2026: eigener Worker, damit der bestehende Ablauf nicht bricht).
+    # Weitere Units bleiben verboten.
+    units = sorted(u.name for u in (ROOT / "infra" / "systemd").glob("*.service"))
+    assert units == ["voicehook-agent-live.service", "voicehook-agent.service"], units
+
+
+def test_live_unit_has_no_http_and_own_agent_name():
+    u = (ROOT / "infra" / "systemd" / "voicehook-agent-live.service").read_text()
+    assert "VOICEHOOK_HTTP_DISABLED=1" in u          # kein zweiter Server auf :7400
+    assert "VOICEHOOK_AGENT_NAME=voice-ai-live" in u  # nie als voice-ai dispatchbar
+    assert "VOICEHOOK_PIPELINE=live" in u
+    assert "VH_MAX_CALL_SECONDS=1200" in u            # engerer Kostendeckel für Live
 
 
 def test_terraform_files_present():

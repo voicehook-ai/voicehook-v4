@@ -1669,7 +1669,7 @@ function stopAudio() {
 
 async function startMic() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const stream = await vhGetMicStream();
     const audioCtx = new AudioContext({ latencyHint: 'interactive' });
     const src      = audioCtx.createMediaStreamSource(stream);
     const an       = audioCtx.createAnalyser();
@@ -2813,7 +2813,7 @@ async function vhStartCall() {
     if (currentStream) { try { currentStream.getTracks().forEach(t => t.stop()); } catch (_) {} currentStream = null; }
 
     const { Room, RoomEvent, Track } = window.LivekitClient;
-    lkRoom = new Room({ adaptiveStream: true, dynacast: true });
+    await vhMicRefreshPref(); lkRoom = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: vhMicCaptureDefaults() });
     vhWireRoomEvents(lkRoom, RoomEvent, Track);
 
     await lkRoom.connect(tok.url, tok.token);
@@ -2841,6 +2841,7 @@ async function vhStartCall() {
 
 function vhEndCall(fromEvent) {
   try { vhHideSoundGate(); } catch (_) {}
+  try { vhCostStop(); } catch (_) {}
   try { window.lkRoom = null; } catch (_) {}
   try { if (lkAudioEl) { lkAudioEl.remove(); lkAudioEl = null; } } catch (_) {}
   try { if (lkAudioCtx) { lkAudioCtx.close(); lkAudioCtx = null; } } catch (_) {}
@@ -3003,7 +3004,7 @@ async function vhInviteJoinAsHost() {
     if (!tok || !tok.token || !tok.url) throw new Error('invalid token response');
 
     const { Room, RoomEvent, Track } = window.LivekitClient;
-    lkRoom = new Room({ adaptiveStream: true, dynacast: true });
+    await vhMicRefreshPref(); lkRoom = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: vhMicCaptureDefaults() });
     vhWireRoomEvents(lkRoom, RoomEvent, Track);
     vhTrLog('system', `Raum ${room} bereit — du bist drin, warte auf deinen Agent…`);
 
@@ -3186,7 +3187,32 @@ async function vhStartRoomAudio(room) {
 }
 
 // Wire LiveKit room events that feed the transcript (works for both modes).
+// ── Kostenanzeige im laufenden Call ──────────────────────────────────────────
+// Der Worker schickt auf Topic `cost` die aufgelaufenen Kosten ({usd, mode});
+// der Untertitel unter dem Call-Button zeigt im Call "≈ 0.012 $ · 2:31".
+const vhTagline = document.getElementById('tagline');
+const VH_TAGLINE_TEXT = vhTagline ? vhTagline.textContent : '';
+let vhCost = { usd: 0, start: 0, timer: null, mode: '' };
+function vhCostRender() {
+  if (!vhTagline || !vhCost.start) return;
+  const s = Math.max(0, Math.floor((Date.now() - vhCost.start) / 1000));
+  const t = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  vhTagline.textContent = '≈ ' + vhCost.usd.toFixed(3) + ' $ · ' + t + (vhCost.mode === 'live' ? ' · live' : '');
+  vhTagline.title = 'Geschätzte Kosten dieses Calls (Listenpreise, Sprachdienste)';
+}
+function vhCostStart() {
+  if (vhCost.timer) return;
+  vhCost = { usd: 0, start: Date.now(), timer: setInterval(vhCostRender, 1000), mode: '' };
+  vhCostRender();
+}
+function vhCostStop() {
+  if (vhCost.timer) clearInterval(vhCost.timer);
+  vhCost = { usd: 0, start: 0, timer: null, mode: '' };
+  if (vhTagline) { vhTagline.textContent = VH_TAGLINE_TEXT; vhTagline.title = ''; }
+}
+
 function vhWireRoomEvents(room, RoomEvent, Track) {
+  room.on(RoomEvent.Connected, () => { try { vhCostStart(); } catch (_) {} });
   // Expose the room so the playback gate (and tests) can observe canPlaybackAudio.
   try { window.lkRoom = room; } catch (_) {}
   // Surface / hide the "Tap to enable sound" affordance as playback toggles.
@@ -3337,6 +3363,13 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
   room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
     vhBumpActivity();
     const from = participant?.identity || '?';
+    if (topic === 'cost') {
+      try {
+        const c = JSON.parse(new TextDecoder().decode(payload));
+        if (typeof c.usd === 'number') { vhCostStart(); vhCost.usd = c.usd; vhCost.mode = c.mode || ''; vhCostRender(); }
+      } catch (_) {}
+      return;
+    }
     if (topic === 'transcript') {
       try {
         const obj = JSON.parse(new TextDecoder().decode(payload));
@@ -3440,6 +3473,17 @@ function vhMuteBtnVisibility(visible) {
 }
 window.addEventListener('beforeunload', () => { try { lkRoom && lkRoom.disconnect(); } catch (_) {} });
 
+// Footer-menu links (Aufladen, Setup, Start, ...) are plain same-tab links.
+// During a live call a same-tab navigation fires beforeunload above and ends
+// the call. While connected, open them in a new tab so the call survives.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest && e.target.closest('#vh-foot-menu a[href]');
+  if (!a || !lkConnected || a.target === '_blank') return;
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  window.open(a.href, '_blank', 'noopener');
+});
+
 // One-tap join gate (#58). A gesture-less autostart published the mic but
 // Chrome delivered 0 audio — mic capture AND remote-audio playback require a
 // real user gesture, so the call looked "half-joined": no STT, no transcript,
@@ -3504,6 +3548,88 @@ function vhBurgerToggle() {
   if (vhBurger) vhBurger.setAttribute('aria-expanded', String(!open));
 }
 if (vhBurger) vhBurger.addEventListener('click', vhBurgerToggle);
+
+// ── Mikrofon-Auswahl ───────────────────────────────────────────────────────
+// Gewähltes Eingabegerät steht in localStorage ('' = System-Standard). Gilt für
+// Call-Start (audioCaptureDefaults), Music-Mode (getUserMedia) und wird im
+// laufenden Call per switchActiveDevice ohne Auflegen umgeschaltet.
+const VH_MIC_KEY = 'vh-mic-v1';
+const vhMicList  = document.getElementById('vh-foot-mics');
+function vhMicPref() { try { return localStorage.getItem(VH_MIC_KEY) || ''; } catch (_) { return ''; } }
+function vhMicPrefLabel() { try { return localStorage.getItem(VH_MIC_KEY + '-label') || ''; } catch (_) { return ''; } }
+function vhMicSetPref(id, label) {
+  try {
+    if (id) { localStorage.setItem(VH_MIC_KEY, id); localStorage.setItem(VH_MIC_KEY + '-label', label || ''); }
+    else    { localStorage.removeItem(VH_MIC_KEY); localStorage.removeItem(VH_MIC_KEY + '-label'); }
+  } catch (_) {}
+}
+// Browser vergeben Geräte-IDs teils neu (Sitzung, Safari). Dann über den
+// gespeicherten Namen wiederfinden und die ID nachziehen.
+function vhMicResolve(devs) {
+  const id = vhMicPref(); if (!id) return '';
+  if (devs.some(d => d.deviceId === id)) return id;
+  const lbl = vhMicPrefLabel();
+  const hit = lbl && devs.find(d => d.label === lbl);
+  if (hit) { vhMicSetPref(hit.deviceId, hit.label); return hit.deviceId; }
+  return id;
+}
+async function vhMicRefreshPref() {
+  if (!vhMicPref() || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+  try { vhMicResolve((await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput')); } catch (_) {}
+}
+function vhMicCaptureDefaults() { const id = vhMicPref(); return id ? { deviceId: id } : {}; }
+async function vhGetMicStream() {
+  let id = vhMicPref();
+  if (id) { try { id = vhMicResolve((await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput')); } catch (_) {} }
+  if (id) {
+    try { return await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: id } }, video: false }); }
+    catch (e) { console.warn('[voicehook] gewähltes Mikro nicht verfügbar, nutze Standard:', e && e.name); vhMicSetPref(''); }
+  }
+  return navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+}
+async function vhMicSelect(id, label) {
+  vhMicSetPref(id, label);
+  if (lkRoom && lkConnected) {
+    try { await lkRoom.switchActiveDevice('audioinput', id || 'default'); }
+    catch (e) { console.warn('[voicehook] Mikro-Wechsel im Call fehlgeschlagen:', e); }
+  } else if (micActive) {
+    try { stopAudio(); await startMic(); } catch (_) {}
+  }
+  vhMicRender();
+}
+async function vhMicRender() {
+  if (!vhMicList || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+  let devs = [];
+  try { devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications'); } catch (_) {}
+  const cur = vhMicResolve(devs);
+  vhMicList.textContent = '';
+  const add = (id, label) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'vh-foot-style vh-foot-mic' + (id === cur ? ' on' : '');
+    b.setAttribute('role', 'menuitemradio'); b.setAttribute('aria-checked', String(id === cur));
+    b.textContent = label; b.title = label;
+    b.addEventListener('click', (e) => { e.stopPropagation(); vhMicSelect(id, label); });
+    vhMicList.appendChild(b);
+  };
+  add('', 'System-Standard');
+  const labeled = devs.filter(d => d.label);
+  if (!labeled.length) {
+    // Browser zeigt Gerätenamen erst nach Mikro-Freigabe
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'vh-foot-style vh-foot-mic'; b.textContent = 'Mikros anzeigen …';
+    b.title = 'Einmal Mikro-Zugriff erlauben, dann erscheinen alle Geräte';
+    b.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      try { const st = await navigator.mediaDevices.getUserMedia({ audio: true }); st.getTracks().forEach(t => t.stop()); } catch (_) {}
+      vhMicRender();
+    });
+    vhMicList.appendChild(b);
+    return;
+  }
+  labeled.forEach(d => add(d.deviceId, d.label));
+}
+if (vhBurger) vhBurger.addEventListener('click', () => { if (vhFootMenu && !vhFootMenu.hasAttribute('hidden')) vhMicRender(); });
+if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', () => { if (vhFootMenu && !vhFootMenu.hasAttribute('hidden')) vhMicRender(); });
 
 // Persistent invite-button: shown whenever an invite snippet has been
 // prepared (i.e. Olli chose "Agent einladen" once this session). One click
@@ -3790,7 +3916,7 @@ vhRecentsRender();
         }
       } catch (_) {}
       const { Room, RoomEvent, Track } = window.LivekitClient;
-      lkRoom = new Room({ adaptiveStream: true, dynacast: true });
+      await vhMicRefreshPref(); lkRoom = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: vhMicCaptureDefaults() });
       vhWireRoomEvents(lkRoom, RoomEvent, Track);
       await lkRoom.connect(tok.url, tok.token);
       await lkRoom.localParticipant.setMicrophoneEnabled(true);
@@ -3851,6 +3977,8 @@ vhRecentsRender();
 #vh-foot-recents .vh-foot-recent-copy{background:transparent;border:1px solid rgba(109,201,217,0.35);color:#6dc9d9;border-radius:3px;font-family:inherit;font-size:9.5px;padding:1px 5px;cursor:pointer;letter-spacing:0.04em;}
 #vh-foot-recents .vh-foot-recent-copy:hover{background:rgba(109,201,217,0.18);border-color:#6dc9d9;}
 #vh-foot-recents .vh-foot-recent-copy.copied{color:#9ddb6d;border-color:rgba(157,219,109,0.55);}
+#vh-foot-mics{display:flex;flex-direction:column;gap:4px;padding:4px 10px 6px;width:0;min-width:100%;box-sizing:border-box;}
+.vh-foot-mic{text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
 #vh-foot-styles{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px 10px 6px;}
 .vh-foot-style{background:var(--vh-btn-bg);border:1px solid var(--vh-btn-border);color:var(--vh-btn-fg);padding:5px 6px;border-radius:5px;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;cursor:pointer;letter-spacing:0.02em;backdrop-filter:var(--vh-btn-blur);-webkit-backdrop-filter:var(--vh-btn-blur);transition:background .15s,border-color .15s,color .15s;}
 .vh-foot-style:hover{background:rgba(109,201,217,0.12);border-color:rgba(109,201,217,0.45);color:#6dc9d9;}
@@ -3886,6 +4014,9 @@ body.settings-collapsed #vh-build{display:none !important;}
     <div id="vh-foot-recents" class="vh-foot-recents">
       <div class="vh-foot-recents-empty">noch keine — beim ersten Invite hier sichtbar</div>
     </div>
+    <div class="vh-foot-sep"></div>
+    <div class="vh-foot-meta">Mikrofon</div>
+    <div id="vh-foot-mics" class="vh-foot-mics"></div>
     <div class="vh-foot-sep"></div>
     <div class="vh-foot-meta">Style</div>
     <div id="vh-foot-styles" class="vh-foot-styles">

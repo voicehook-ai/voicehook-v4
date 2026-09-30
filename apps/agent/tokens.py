@@ -91,7 +91,7 @@ def mint_livekit_token(
     `agent_name` adds a `roomConfig.agents=[{agentName}]` claim → LiveKit
     auto-dispatches that worker on participant join (no separate
     AgentDispatchService.CreateDispatch needed). Pass `None` to mint a plain
-    join-only token (e.g. for a senior brain peer).
+    join-only token (e.g. for an operator peer).
     """
     import json
 

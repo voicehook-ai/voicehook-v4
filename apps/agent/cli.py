@@ -15,6 +15,7 @@ import os
 import sys
 from urllib.parse import urlencode
 
+from .slug import is_valid_slug
 from .tokens import mint_invite
 
 
@@ -22,6 +23,16 @@ def cmd_invite(args: argparse.Namespace) -> int:
     secret = os.environ.get("INVITE_SECRET")
     if not secret:
         print("INVITE_SECRET env var not set", file=sys.stderr)
+        return 2
+    # Root cause of the 2026-05-29 "broken call": invites were minted for slugs
+    # the client auto-join silently rejects (e.g. `nvu-GKJM`). Refuse here so a
+    # bad slug fails loud at mint time instead of as a dead deeplink.
+    if not is_valid_slug(args.room):
+        print(
+            f"invalid room slug {args.room!r}: need 3 lowercase words + a 4-8 char "
+            "suffix (e.g. drift-signal-crisp-PDM5) — the client would reject it",
+            file=sys.stderr,
+        )
         return 2
     code = mint_invite(args.room, ttl_seconds=args.ttl, secret=secret)
     qs = urlencode({"invite": code})

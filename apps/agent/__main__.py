@@ -24,7 +24,10 @@ def _serve_http() -> None:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    threading.Thread(target=_serve_http, daemon=True, name="vh-http").start()
+    # Der Live-Testworker (voice-ai-live) läuft als zweiter Dienst ohne HTTP;
+    # Web/API + Raum->Worker-Zuordnung bleiben beim Hauptdienst auf :7400.
+    if os.environ.get("VOICEHOOK_HTTP_DISABLED", "") != "1":
+        threading.Thread(target=_serve_http, daemon=True, name="vh-http").start()
     run_worker()  # blocks until worker exits / SIGTERM
 
 

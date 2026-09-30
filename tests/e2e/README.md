@@ -45,3 +45,26 @@ push). The real-audio test runs:
 - [ ] Ship `tests/e2e/sample-de.wav` (10kB short clip, "Hallo, kannst du mich hören?")
 - [ ] `.github/workflows/e2e.yml` workflow_dispatch with org-level secrets
 - [ ] Run against staging box; capture log artifact on failure
+
+## `real_call.py` — web/voice.html against PROD (costs money)
+
+Swaps only the `/r/<slug>` document for a local HTML file; API, LiveKit and
+voice-ai are real. Cost caps are mandatory and built in:
+
+- internal deadline `--deadline` (default 90s, max 120s) + watchdog; always run
+  under an outer `timeout 120`
+- teardown in `finally`: browser closed, observer (`--no-keep-alive`) killed by
+  its own process group
+- preflight: `lk_rooms.sh` (box-local LiveKit ListRooms over SSH, key via orb)
+  must work BEFORE a room is created, else exit 3 and nothing is created
+- post-run: the room must be gone or empty within 60s, else FAIL + DeleteRoom
+  (only if no human participant is left)
+
+```bash
+timeout 120 python3 tests/e2e/real_call.py --scenario joingate --width 390
+timeout 120 python3 tests/e2e/real_call.py --scenario menulink --expect keep --width 1280
+timeout 120 python3 tests/e2e/real_call.py --scenario menulink --expect drop --html <old voice.html>
+timeout 60  python3 tests/e2e/real_call.py --scenario joingate --offline   # 0 cost, no room
+```
+
+Test rooms are named `etest-<word>-<word>-<CODE>`.
