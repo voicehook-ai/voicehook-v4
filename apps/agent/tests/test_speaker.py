@@ -23,10 +23,17 @@ def _deepgram_final(words: list[tuple[str, float, float, int | None]]) -> dict:
     return {"channel": {"alternatives": [{"transcript": " ".join(w[0] for w in words), "confidence": 0.9, "words": ws}]}}
 
 
-def _final(words: list[tuple[str, float, float, int | None]]) -> stt.SpeechEvent:
+def _final(words: list[tuple[str, float, float, int | None]], request_id: str = "r") -> stt.SpeechEvent:
     """Finales Ereignis, gebaut mit der echten Plugin-Umwandlung (kein erfundenes Format)."""
     alts = live_transcription_to_speech_data("de", _deepgram_final(words), is_final=True, start_time_offset=0.0)
-    return stt.SpeechEvent(type=stt.SpeechEventType.FINAL_TRANSCRIPT, request_id="r", alternatives=alts)
+    return stt.SpeechEvent(type=stt.SpeechEventType.FINAL_TRANSCRIPT, request_id=request_id, alternatives=alts)
+
+
+def _seg(text: str, start: float, end: float, spk: int, request_id: str = "r") -> stt.SpeechEvent:
+    """Ein finales Segment eines Sprechers (Wörter gleichmäßig über [start, end])."""
+    ws = text.split()
+    step = (end - start) / len(ws)
+    return _final([(w, start + i * step, start + (i + 1) * step, spk) for i, w in enumerate(ws)], request_id)
 
 
 def _interim(text: str) -> stt.SpeechEvent:
@@ -122,6 +129,111 @@ async def test_hauptsprecher_wechselt_bei_mehr_sprechzeit():
     out = await _run(filt, [_final(kurz), _final(lang), _final(kurz)])
     assert _final_texts(out) == ["Hallo", "ich rede lange"]
     assert filt.primary == "S0"
+
+
+@pytest.mark.asyncio
+async def test_verworfene_segmente_zaehlen_nicht():
+    filt = PrimarySpeakerFilter(min_primary_s=3.0)
+    await _run(filt, [_final(OLIVER), _final(NACHBAR), _final(NACHBAR)])
+    assert "S1" not in filt.heard
+    assert filt.dropped["S1"].words == 6
+
+
+@pytest.mark.asyncio
+async def test_fernseher_konstant_im_hintergrund_oliver_bleibt():
+    """TV redet dauernd mit (sogar etwas mehr als Oliver), aber nie doppelt so viel."""
+    filt = PrimarySpeakerFilter(min_primary_s=3.0)
+    evs = [_seg("ich bin Oliver und rede", 0.0, 4.0, 0)]
+    t = 4.0
+    for _ in range(12):  # ~72 s Call
+        evs.append(_seg("Tagesschau Nachrichten Wetter", t, t + 3.0, 1))
+        evs.append(_seg("und weiter gehts", t + 3.5, t + 5.5, 0))
+        t += 6.0
+    out = await _run(filt, evs)
+    texts = _final_texts(out)
+    assert filt.primary == "S0"
+    assert texts.count("und weiter gehts") == 12  # Positivkontrolle: Oliver immer durch
+    assert "Tagesschau Nachrichten Wetter" not in texts
+    assert filt.dropped["S1"].seconds == pytest.approx(36.0)
+
+
+@pytest.mark.asyncio
+async def test_fernseher_zuerst_dann_oliver_uebernimmt_und_bleibt():
+    filt = PrimarySpeakerFilter(min_primary_s=3.0)
+    tv_start = [_seg("Guten Abend meine Damen und Herren", 0.0, 4.0, 1)]
+    oliver = [_seg(f"Oliver redet Satz {i}", 5.0 + 4 * i, 8.0 + 4 * i, 0) for i in range(4)]
+    tv_spaeter = [_seg("Werbung", 21.5, 22.5, 1), _seg("mehr Werbung hier", 26.0, 28.0, 1)]
+    oliver_spaeter = [_seg("Oliver nochmal", 23.0, 25.0, 0), _seg("Oliver zuletzt", 29.0, 31.0, 0)]
+    evs = tv_start + oliver + [tv_spaeter[0], oliver_spaeter[0], tv_spaeter[1], oliver_spaeter[1]]
+    out = await _run(filt, evs)
+    texts = _final_texts(out)
+    assert filt.primary == "S0"
+    # TV lief in der Einlernphase durch; Olivers erste zwei Sätze (3s, 6s < 2x4s)
+    # wurden verworfen, ab dem dritten (9s >= 8s) ist Oliver Hauptsprecher.
+    assert texts[0] == "Guten Abend meine Damen und Herren"
+    assert "Oliver redet Satz 0" not in texts and "Oliver redet Satz 1" not in texts
+    assert "Oliver redet Satz 2" in texts and "Oliver redet Satz 3" in texts
+    assert "Oliver nochmal" in texts and "Oliver zuletzt" in texts
+    assert "Werbung" not in texts and "mehr Werbung hier" not in texts
+
+
+# --- Neue STT-Verbindung: Deepgram nummeriert Sprecher neu -----------------------
+
+OLIVER_S1 = [(w, s, e, 1) for w, s, e, _ in OLIVER]
+TV_S0 = [("Tagesschau", 5.0, 5.5, 0), ("heute", 5.5, 6.0, 0)]
+
+
+@pytest.mark.asyncio
+async def test_neue_request_id_setzt_zurueck_labeltausch():
+    """Reconnect (neue request_id): Oliver ist jetzt S1, TV S0. Oliver darf nicht verworfen werden."""
+    filt = PrimarySpeakerFilter(min_primary_s=3.0)
+    evs = [_final(OLIVER, "a"), _final(NACHBAR, "a"), _final(OLIVER_S1, "b"), _final(TV_S0, "b")]
+    out = await _run(filt, evs)
+    texts = _final_texts(out)
+    assert texts == ["Hallo ich bin Oliver", "Hallo ich bin Oliver"]
+    assert filt.primary == "S1"
+    assert filt.resets == 2  # Stream-Start + Reconnect
+
+
+@pytest.mark.asyncio
+async def test_ohne_reset_waere_oliver_verworfen():
+    """Positivkontrolle: gleiche Folge ohne Verbindungswechsel verwirft Oliver (der Reset macht den Unterschied)."""
+    filt = PrimarySpeakerFilter(min_primary_s=3.0)
+    evs = [_final(OLIVER, "a"), _final(NACHBAR, "a"), _final(OLIVER_S1, "a")]
+    out = await _run(filt, evs)
+    assert _final_texts(out) == ["Hallo ich bin Oliver"]
+
+
+@pytest.mark.asyncio
+async def test_nach_reset_wieder_einlernphase():
+    filt = PrimarySpeakerFilter(min_primary_s=3.0)
+    evs = [_final(OLIVER, "a"), _final(NACHBAR, "b")]  # nach Reconnect: Nachbar kommt in Einlernphase durch
+    out = await _run(filt, evs)
+    assert _final_texts(out) == ["Hallo ich bin Oliver", "Fick deine Eltern"]
+    assert filt.primary is None
+
+
+@pytest.mark.asyncio
+async def test_filter_neustart_setzt_zurueck():
+    """Pump-Neuaufbau: filter() startet neu, auch bei gleicher request_id wird neu gelernt."""
+    filt = PrimarySpeakerFilter(min_primary_s=3.0)
+    await _run(filt, [_final(OLIVER), _final(OLIVER), _final(NACHBAR)])
+    assert filt.primary == "S0"
+    out = await _run(filt, [_final(OLIVER_S1), _final(TV_S0)])
+    assert _final_texts(out) == ["Hallo ich bin Oliver"]
+    assert filt.primary == "S1"
+
+
+@pytest.mark.asyncio
+async def test_usage_ereignis_mit_alter_request_id_setzt_nicht_zurueck():
+    """RECOGNITION_USAGE trägt die zuletzt gesehene request_id, zählt nicht als Verbindungswechsel."""
+    filt = PrimarySpeakerFilter(min_primary_s=3.0)
+    usage = stt.SpeechEvent(
+        type=stt.SpeechEventType.RECOGNITION_USAGE, request_id="alt",
+        recognition_usage=stt.RecognitionUsage(audio_duration=1.0),
+    )
+    out = await _run(filt, [_final(OLIVER), usage, _final(NACHBAR)])
+    assert _final_texts(out) == ["Hallo ich bin Oliver"]
 
 
 @pytest.mark.asyncio
