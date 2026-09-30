@@ -369,3 +369,17 @@ def test_dispatch_plan_missing_status_counts_as_pending():
     d["state"]["jobs"][0]["state"] = {}                    # proto3 lässt Default weg
     keep, _ = srv._dispatch_plan([d], "voice-ai", NOW)
     assert keep
+
+
+def test_admin_live_room_refused_when_month_budget_used_up(monkeypatch, _no_dispatch):
+    from agent import budget
+
+    monkeypatch.setenv("VOICEHOOK_LIVE_KEY", LIVE_KEY)
+    monkeypatch.setenv("VOICEHOOK_LIVE_BUDGET_USD_MONTH", "10")
+    c = TestClient(app)
+    budget.add_usd(9.99)
+    assert _live_room(c).status_code == 200  # Positivkontrolle: knapp drunter geht
+    budget.add_usd(0.01)
+    r = _live_room(c)
+    assert r.status_code == 402
+    assert _no_dispatch == []

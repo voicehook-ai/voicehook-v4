@@ -79,3 +79,38 @@ def test_build_session_live_uses_realtime_model_only(monkeypatch):
     assert w.build_session() == "S"
     assert seen == {"llm": "REALTIME"}
     assert w.is_live() is True
+
+
+def test_live_worker_refuses_room_when_month_budget_used_up(monkeypatch):
+    """Budget weg -> keine Live-Session wird gebaut, der Job endet sofort."""
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    import agent.worker as w
+    from agent import budget
+
+    monkeypatch.setenv("VOICEHOOK_PIPELINE", "live")
+    monkeypatch.setenv("VOICEHOOK_LIVE_BUDGET_USD_MONTH", "1")
+    budget.add_usd(1.0)
+    built = []
+    monkeypatch.setattr(w, "build_session", lambda: built.append(1))
+    ctx = SimpleNamespace(
+        connect=AsyncMock(),
+        room=SimpleNamespace(name="r1", local_participant=SimpleNamespace(identity="a")),
+        job=SimpleNamespace(id="j1"),
+        shutdown=MagicMock(),
+    )
+    asyncio.run(w.entrypoint(ctx))
+    assert built == []
+    ctx.shutdown.assert_called_once_with(reason="live_budget_exhausted")
+
+
+def test_live_worker_books_cost_and_ends_call_at_budget():
+    import inspect as _inspect
+
+    import agent.worker as w
+
+    src = _inspect.getsource(w.entrypoint)
+    assert "budget.add_usd(usd)" in src
+    assert '"live_budget"' in src

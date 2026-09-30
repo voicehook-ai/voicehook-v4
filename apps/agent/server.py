@@ -24,6 +24,7 @@ import urllib.request
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from . import budget
 from .health import probe_all
 from .slug import gen_slug
 from .tokens import mint_invite, mint_livekit_token, verify_invite
@@ -361,6 +362,8 @@ def admin_live_room(req: LiveRoomRequest, request: Request) -> LiveRoomResponse:
     given = auth[7:] if auth.lower().startswith("bearer ") else ""
     if not _live_key_ok(given):
         raise HTTPException(status_code=401, detail="unauthorized")
+    if budget.exhausted():
+        raise HTTPException(status_code=402, detail="live budget for this month is used up")
     room = gen_slug()
     _set_room_agent(room, LIVE_AGENT_NAME)
     invite = mint_invite(room, req.ttl_seconds)
