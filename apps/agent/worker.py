@@ -263,7 +263,10 @@ async def entrypoint(ctx: JobContext) -> None:
 
         agent = RelayAgent(instructions=LIVE_BASE_INSTRUCTIONS)
     else:
-        agent = RelayAgent(instructions=DEFAULT_PERSONA)
+        from .gate import SpeechGate, gate_enabled, load_vad
+
+        gate = SpeechGate(load_vad()) if gate_enabled() else None
+        agent = RelayAgent(instructions=DEFAULT_PERSONA, gate=gate)
     handlers = build_relay_handlers(session, agent, room=ctx.room, live=live_mode)
     routes = topic_dispatch(handlers)
 
