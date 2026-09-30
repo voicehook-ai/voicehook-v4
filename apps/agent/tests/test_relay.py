@@ -76,13 +76,14 @@ async def test_say_calls_session_say_verbatim():
     h = build_relay_handlers(session, agent)
     await h.on_say(_pkt(TOPIC_SAY, {"text": "Hallo Welt"}))
     session.say.assert_called_once_with("Hallo Welt", allow_interruptions=True)
-    # Vertrag seit Supersede: auch das erste say stoppt eine laufende Eigenantwort
-    session.interrupt.assert_called_once_with(force=True)
+    # nichts Eigenes offen: einreihen, laufende Eigenantwort NICHT abbrechen
+    session.interrupt.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_say_publishes_transcript_when_room_given():
-    """PR-12: operator.say must also publish {role:agent,text} on transcript topic."""
+async def test_say_does_not_publish_transcript_itself():
+    """Transkript kommt vom Worker (conversation_item_added, tatsächlich Gesprochenes),
+    damit Eigenantworten erscheinen und Operator-Sätze nicht doppelt."""
     from unittest.mock import AsyncMock
     session, agent = _fake_session(), _fake_agent()
     room = MagicMock()
@@ -90,13 +91,9 @@ async def test_say_publishes_transcript_when_room_given():
     room.local_participant.publish_data = AsyncMock()
     h = build_relay_handlers(session, agent, room=room)
     await h.on_say(_pkt(TOPIC_SAY, {"text": "Hallo Olli"}))
-    await asyncio.sleep(0)  # let the asyncio.create_task fire
     await asyncio.sleep(0)
-    room.local_participant.publish_data.assert_called_once()
-    call = room.local_participant.publish_data.await_args
-    assert call.kwargs["topic"] == "transcript"
-    payload = json.loads(call.kwargs["payload"])
-    assert payload == {"role": "agent", "text": "Hallo Olli"}
+    room.local_participant.publish_data.assert_not_called()
+    session.say.assert_called_once_with("Hallo Olli", allow_interruptions=True)
 
 
 @pytest.mark.asyncio
@@ -313,3 +310,27 @@ async def test_cancel_survives_runtime_error_from_livekit():
     await h.on_say(_pkt(TOPIC_SAY, {"text": "a"}))
     await h.on_say(_pkt(TOPIC_SAY, {"text": "b", "mode": "overwrite"}))   # darf nicht werfen
     assert session.say.call_count == 2
+
+
+# ── Transkript-Farben: Operator (rot) vs. Agent selbst (blau) ────────────────
+@pytest.mark.asyncio
+async def test_is_operator_speech_by_handle_and_text():
+    h1 = _handle()
+    session = _session_with_handles(h1)
+    h = build_relay_handlers(session, _fake_agent())
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "Operator sagt etwas Wichtiges."}))
+    assert h.is_operator_speech(h1, "egal") is True                      # über Handle
+    assert h.is_operator_speech(None, "Operator sagt etwas") is True      # abgebrochen: Anfang
+    assert h.is_operator_speech(None, "Delta antwortet selbst.") is False
+    assert h.is_operator_speech(object(), "") is False
+
+
+@pytest.mark.asyncio
+async def test_is_operator_speech_live_only_by_handle():
+    session = MagicMock()
+    hd = MagicMock()
+    session.generate_reply = MagicMock(return_value=hd)
+    h = build_relay_handlers(session, _fake_agent(), live=True)
+    await h.on_say(_pkt(TOPIC_SAY, {"text": "Termin Dienstag"}))
+    assert h.is_operator_speech(hd, "Der Termin ist am Dienstag.") is True
+    assert h.is_operator_speech(None, "Termin Dienstag") is False        # live: Text zählt nicht
