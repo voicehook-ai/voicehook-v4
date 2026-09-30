@@ -40,3 +40,17 @@ def test_defaults_match_v3_inventory():
     assert DEFAULT_STT_MODEL == "nova-3"
     assert DEFAULT_LANGUAGE == "de"
     assert DEFAULT_TTS_VOICE == "de-DE-Chirp3-HD-Charon"
+
+
+def test_build_stt_diarize_default_an(monkeypatch):
+    monkeypatch.delenv("VOICEHOOK_STT_DIARIZE", raising=False)
+    stt = build_stt()
+    assert stt._opts.enable_diarization is True
+    assert stt.capabilities.diarization is True
+
+
+def test_build_stt_diarize_schalter_aus(monkeypatch):
+    monkeypatch.setenv("VOICEHOOK_STT_DIARIZE", "0")
+    assert build_stt()._opts.enable_diarization is False
+    # explizites Argument schlägt den Schalter
+    assert build_stt(diarize=True)._opts.enable_diarization is True

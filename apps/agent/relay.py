@@ -36,6 +36,8 @@ from typing import TYPE_CHECKING
 
 from livekit.agents import Agent, StopResponse
 
+from .speaker import PrimarySpeakerFilter, diarize_enabled
+
 if TYPE_CHECKING:
     from livekit.agents import AgentSession
     from livekit.rtc import DataPacket, Room
@@ -61,21 +63,34 @@ DEFAULT_PERSONA = (
 )
 
 
+_AUTO = object()  # RelayAgent(speakers=...) nicht angegeben -> Schalter entscheidet
+
+
 class RelayAgent(Agent):
     """Mouthpiece with two modes:
       - auto (default): the LLM answers simple questions from its persona
         (the pushed knowledge-graph); operator.say overrides substantive content.
       - strict: StopResponse on every turn — the LLM never speaks on its own."""
 
-    def __init__(self, *, instructions: str = "", strict: bool = False, gate=None, **kwargs) -> None:  # noqa: ANN001, ANN003
+    def __init__(  # noqa: ANN001, ANN003
+        self, *, instructions: str = "", strict: bool = False, gate=None, speakers=_AUTO, **kwargs
+    ) -> None:
         super().__init__(instructions=instructions, **kwargs)
         self.strict = strict
         self.gate = gate  # SpeechGate: nur Sprache geht zur (minutenweise bezahlten) STT
+        # Hauptsprecher-Filter: nur die Stimme des Hauptsprechers erreicht das LLM.
+        # Ohne Angabe entscheidet der Schalter VOICEHOOK_STT_DIARIZE (Default an).
+        if speakers is _AUTO:
+            speakers = PrimarySpeakerFilter() if diarize_enabled() else None
+        self.speakers = speakers
 
     def stt_node(self, audio, model_settings):  # noqa: ANN001, ANN201
         if self.gate is not None:
             audio = self.gate.filter(audio)
-        return Agent.default.stt_node(self, audio, model_settings)
+        events = Agent.default.stt_node(self, audio, model_settings)
+        if self.speakers is not None:
+            return self.speakers.filter(events)
+        return events
 
     async def on_user_turn_completed(self, *args, **kwargs) -> None:  # noqa: D401, ANN001
         if self.strict:
