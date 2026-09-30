@@ -19,7 +19,10 @@ def _loc(p: Path) -> int:
 
 
 def test_deploy_script_is_lean():
-    assert _loc(ROOT / "deploy" / "deploy.sh") <= 80
+    # 80 -> 230 (30.09.2026): Web-only-Pfad, orb-ssh-agent und vor allem der
+    # LiveKit-Preflight (kein Neustart, solange ein Mensch im Call ist) sind
+    # Sicherheitsgewinne, keine Aufblähung. Weiter wachsen nur mit Begründung.
+    assert _loc(ROOT / "deploy" / "deploy.sh") <= 230
 
 
 def test_caddyfile_template_is_lean():
