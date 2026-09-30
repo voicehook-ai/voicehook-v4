@@ -32,6 +32,8 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
   --vh-btn-fg:         rgba(255, 255, 255, 0.85);
   --vh-btn-fg-hov:     rgba(255, 255, 255, 1.00);
   --vh-btn-blur:       blur(8px);
+  /* Transkript-Farbe Delta (role agent, Olli 30.09.): blau. Operator = Agent-Chip-Farbe. */
+  --vh-tr-blue:        #6fa8ff;
 }
 body.theme-light {
   --vh-btn-bg:         rgba(255, 255, 255, 0.55);
@@ -40,6 +42,7 @@ body.theme-light {
   --vh-btn-border-hov: rgba(0, 0, 0, 0.32);
   --vh-btn-fg:         rgba(0, 0, 0, 0.78);
   --vh-btn-fg-hov:     rgba(0, 0, 0, 1.00);
+  --vh-tr-blue:        #1f5fd1;
 }
 body { background: var(--vh-bg-0); overflow: hidden; font-family: var(--vh-mono); color: var(--vh-fg-0); }
 
@@ -206,41 +209,52 @@ button.on {
 #palettes button:hover::after { opacity: 1; }
 
 /* 2026-05-28: bottom-bar Button-Styles entfernt (btn-mute/speaker/btn/btn-rec/btn-call/btn-settings/btn-transcript) */
-/* Expanded mode: transcript fills viewport as transparent overlay */
-/* Olli 2026-05-29: transcript-hidden state retired. Wrap is ALWAYS visible.
-   Selector kept for backwards-compat in case any external stylesheet/script
-   still toggles the class — but as no-op. */
+/* Transkript-Modi (Olli 30.09.): ein Knopf rechts neben den Presence-Pills
+   schaltet zyklisch minimiert -> normal -> Vollbild. Kein Modus legt sich über
+   den Kringel: normal/minimiert sitzen im Band unter dem Ring (JS reserviert es
+   über die Canvas-Höhe, siehe vhRingLayout), Vollbild blendet den Kringel aus.
+   body.vh-transcript-min      = minimiert (nur Pills + kurz eingeblendeter letzter Satz)
+   (keine Klasse)              = normal
+   body.vh-transcript-expanded = Vollbild */
 body.vh-transcript-hidden #vh-transcript-wrap { display: flex; }
+body.vh-transcript-min #vh-transcript { display: none; }
 body.vh-transcript-expanded #vh-transcript-wrap {
-  position: fixed; inset: 0; left: 0; top: 0; bottom: 56px; right: 0;
-  transform: none; width: auto; max-width: none; padding: 56px 24px 16px;
-  z-index: 40; background: rgba(8,9,13,0.78); backdrop-filter: blur(10px);
+  position: fixed; inset: 0; left: 0; top: 0; bottom: 64px; right: 0;
+  transform: none; width: auto; max-width: none; max-height: none; height: auto; padding: 60px 24px 12px;
+  z-index: 40; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none;
   border: 0; border-radius: 0; box-shadow: none;
   display: flex; flex-direction: column; align-items: stretch;
 }
+@media (max-width: 640px) { body.vh-transcript-expanded #vh-transcript-wrap { bottom: 58px; padding: 64px 12px 10px; } }
 body.vh-transcript-expanded #vh-transcript {
   max-height: none; flex: 1; width: min(880px, 100%); margin: 0 auto;
   font-size: 13px; padding: 16px 22px;
-  background: transparent; border-color: rgba(255,255,255,0.06);
 }
+/* Vollbild: Kringel komplett aus (Render-Loop pausiert zusätzlich in animate()) */
+body.vh-transcript-expanded > canvas { display: none !important; }  /* three.js setzt display:block inline */
 /* keep presence chips compact in fullscreen (don't let them stretch) */
 body.vh-transcript-expanded #vh-presence {
   flex-direction: row; flex-wrap: wrap; justify-content: center;
   font-size: 10.5px; margin: 0 auto 8px; max-width: min(880px, 100%);
 }
 body.vh-transcript-expanded .vh-pres-chip { padding: 3px 9px; }
-/* 2026-05-28: bottom #ui-Bar entfernt — z-index override obsolet */
-#vh-transcript-close {
-  position: fixed; top: 14px; right: 18px; z-index: 41;
-  background: var(--vh-btn-bg); border: 1px solid var(--vh-btn-border);
-  color: var(--vh-btn-fg); border-radius: 4px;
-  width: 34px; height: 34px; cursor: pointer; font-size: 18px; line-height: 1;
-  display: none; align-items: center; justify-content: center;
-  backdrop-filter: var(--vh-btn-blur);
-  -webkit-backdrop-filter: var(--vh-btn-blur);
-}
-body.vh-transcript-expanded #vh-transcript-close { display: inline-flex; }
-#vh-transcript-close:hover { color: var(--vh-btn-fg-hov); border-color: var(--vh-btn-border-hov); background: var(--vh-btn-bg-hover); }
+/* Modus-Knopf: gleicher Glas-Stil wie .vh-pres-chip, rund, sitzt als letztes
+   Element in #vh-presence direkt rechts neben dem Agent-Chip. */
+#vh-tr-mode { display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0; border-radius: 12px; cursor: pointer;
+  background: var(--vh-btn-bg); border: 1px solid var(--vh-btn-border); color: var(--vh-btn-fg);
+  backdrop-filter: var(--vh-btn-blur); -webkit-backdrop-filter: var(--vh-btn-blur);
+  transition: color .2s, border-color .2s, background .2s; flex-shrink: 0; }
+#vh-tr-mode:hover { color: var(--vh-btn-fg-hov); border-color: var(--vh-btn-border-hov); background: var(--vh-btn-bg-hover); }
+#vh-tr-mode svg { width: 12px; height: 12px; display: block; }
+body.vh-transcript-expanded #vh-tr-mode { color: #6dc9d9; border-color: rgba(109,201,217,0.5); }
+/* Minimiert: letzter Satz einzeilig, dezent, blendet nach ein paar Sekunden aus */
+#vh-tr-ticker { display: none; max-width: 100%; margin-top: 6px; padding: 0 4px;
+  font-family: ui-monospace,Menlo,monospace; font-size: 11px; line-height: 1.5;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;
+  color: var(--vh-btn-fg); opacity: 0; transition: opacity .6s; }
+body.vh-transcript-min #vh-tr-ticker { display: block; }
+#vh-tr-ticker.show { opacity: 0.85; }
 /* Presence bar — 3 fixed slots above transcript: user · voice-ai · agent */
 #vh-presence { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
   font-family: ui-monospace,Menlo,monospace; font-size: 10.5px; margin-bottom: 6px; }
@@ -258,19 +272,21 @@ body.vh-transcript-expanded #vh-transcript-close { display: inline-flex; }
 .vh-pres-chip.in .vh-pres-dot   { color: #6dc9d9; }
 .vh-pres-chip.speak              { color: #fff; border-color: rgba(109,201,217,0.4); }
 .vh-pres-chip.speak .vh-pres-dot { color: #9ddb6d; text-shadow: 0 0 6px #9ddb6d; }
-/* Agent chip: loading ring while a call runs but no external agent has joined
-   yet (#vh-presence.vh-in-call set on room wire-up, cleared on reset). Replaces
-   the ∆ glyph in place; label = self-reported "Name · model", ellipsized. */
+/* Agent chip (Olli 30.09.): erst sichtbar, wenn wirklich ein externer Agent-
+   Teilnehmer joint. Ladekreis (.joining) nur zwischen ParticipantConnected und
+   erstem Track bzw. Selbstauskunft (vh.name); ersetzt den ∆ an Ort und Stelle.
+   Label = "Name · model", gekürzt. */
+.vh-pres-chip[data-slot="agent"]:not(.in):not(.joining) { display: none; }
 .vh-pres-chip .vh-pres-spin { display: none; width: 9px; height: 9px; flex-shrink: 0;
   box-sizing: border-box; border-radius: 50%;
   border: 1.5px solid rgba(255,255,255,0.18); border-top-color: #6dc9d9;
   animation: vh-pres-spin .9s linear infinite; }
-#vh-presence.vh-in-call .vh-pres-chip[data-slot="agent"]:not(.in) .vh-pres-spin { display: inline-block; }
-#vh-presence.vh-in-call .vh-pres-chip[data-slot="agent"]:not(.in) .vh-pres-dot { display: none; }
+.vh-pres-chip[data-slot="agent"].joining .vh-pres-spin { display: inline-block; }
+.vh-pres-chip[data-slot="agent"].joining .vh-pres-dot { display: none; }
 body.theme-light .vh-pres-chip .vh-pres-spin { border-color: rgba(0,0,0,0.18); border-top-color: #2a9bb0; }
 /* light theme: .in sets white text → the agent's name would vanish on the light
    chip background (mobile default theme). Keep it readable. */
-body.theme-light .vh-pres-chip[data-slot="agent"].in { color: var(--vh-btn-fg); }
+body.theme-light .vh-pres-chip.in { color: var(--vh-btn-fg); }  /* alle Chips (User-Label war im Light-Theme weiß auf hell) */
 @keyframes vh-pres-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .vh-pres-chip .vh-pres-spin { animation: none; } }
 .vh-pres-chip[data-slot="agent"] .vh-pres-label { max-width: 24ch; overflow: hidden;
@@ -310,8 +326,7 @@ body.settings-collapsed #hue-ctl { display: none; }
 /* Top-right pills (theme · info · music) share size + spacing.
    Olli 2026-05-28: "alle kreise oben rechts gleich groß". */
 #btn-info,
-#btn-vh-music,
-#btn-vh-transcript-toggle {
+#btn-vh-music {
   position: fixed; top: 18px;
   width: 34px; height: 34px; padding: 0; line-height: 1;
   display: flex; align-items: center; justify-content: center;
@@ -326,10 +341,7 @@ body.settings-collapsed #hue-ctl { display: none; }
 #btn-vh-music { right: 98px; }
 #btn-vh-music svg { width: 15px; height: 15px; display: block; }
 #btn-vh-music.on { color: #9ddb6d; border-color: rgba(157,219,109,0.5); background: rgba(157,219,109,0.08); }
-#btn-vh-transcript-toggle { right: 138px; }
-#btn-vh-transcript-toggle svg { width: 15px; height: 15px; display: block; }
-#btn-vh-transcript-toggle.on { color: #6dc9d9; border-color: rgba(109,201,217,0.5); background: rgba(109,201,217,0.08); }
-#btn-info:hover, #btn-vh-music:hover, #btn-vh-transcript-toggle:hover {
+#btn-info:hover, #btn-vh-music:hover {
   color: var(--vh-btn-fg-hov); border-color: var(--vh-btn-border-hov); background: var(--vh-btn-bg-hover);
 }
 /* Visible tooltip above pills with data-tip (replaces native title flicker). */
@@ -480,8 +492,7 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
   #btn-theme    { width: 38px; height: 38px; top: 14px; right: 14px; padding: 0; }
   #btn-info     { width: 38px; height: 38px; top: 14px; right: 60px;  padding: 0; font-size: 17px; }
   #btn-vh-music { width: 38px; height: 38px; top: 14px; right: 106px; padding: 0; }
-  #btn-vh-transcript-toggle { width: 38px; height: 38px; top: 14px; right: 152px; padding: 0; }
-  #btn-theme svg, #btn-vh-music svg, #btn-vh-transcript-toggle svg { width: 17px; height: 17px; }
+  #btn-theme svg, #btn-vh-music svg { width: 17px; height: 17px; }
   #vh-bottom-bar { bottom: 18px; gap: 8px; }
   #btn-vh-call   { padding: 9px 16px; font-size: 11.5px; }
   .vh-bottom-icon { width: 36px; height: 36px; }
@@ -582,6 +593,8 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
    group floats above the donut. fullscreen mode (.vh-transcript-expanded)
    overrides background+padding below — don't break that. */
 #vh-transcript-wrap{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);width:min(560px,82vw);z-index:15;
+  display:flex;flex-direction:column;box-sizing:border-box;
+  height:var(--vh-wrap-h,auto);max-height:calc(100vh - 140px);
   background:var(--vh-btn-bg);
   border:1px solid var(--vh-btn-border);
   border-radius:12px;
@@ -589,10 +602,12 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
   backdrop-filter:var(--vh-btn-blur);
   -webkit-backdrop-filter:var(--vh-btn-blur);
   box-shadow:0 8px 32px rgba(0,0,0,0.28);}
-@media (max-width:640px){#vh-transcript-wrap{bottom:58px;padding:8px 10px;}}
+@media (max-width:640px){#vh-transcript-wrap{bottom:58px;padding:8px 10px;width:calc(100vw - 24px);}}
+/* minimiert: Höhe nach Inhalt (Pills + Ticker [+ Invite-Zeile]) */
+body.vh-transcript-min #vh-transcript-wrap{height:auto;}
 /* inner glass surface — slightly darker/less alpha than the wrap so it
    reads as a distinct inset panel. uses tokens so it auto-flips for theme-light. */
-#vh-transcript{max-height:30vh;overflow-y:auto;font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.55;color:var(--vh-btn-fg,#ddd);background:var(--vh-btn-bg);backdrop-filter:var(--vh-btn-blur);-webkit-backdrop-filter:var(--vh-btn-blur);border:1px solid var(--vh-btn-border);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:3px;
+#vh-transcript{flex:1 1 auto;min-height:0;overflow-y:auto;font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.55;color:var(--vh-btn-fg,#ddd);background:var(--vh-btn-bg);backdrop-filter:var(--vh-btn-blur);-webkit-backdrop-filter:var(--vh-btn-blur);border:1px solid var(--vh-btn-border);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:3px;
   /* hide scrollbar by default, fade in on hover/scroll */
   scrollbar-width:thin;scrollbar-color:transparent transparent;}
 #vh-transcript:hover,#vh-transcript:focus-within{scrollbar-color:rgba(255,255,255,0.22) transparent;}
@@ -601,9 +616,11 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
 #vh-transcript::-webkit-scrollbar-thumb{background:transparent;border-radius:3px;transition:background 0.25s;}
 #vh-transcript:hover::-webkit-scrollbar-thumb,#vh-transcript:active::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.22);}
 #vh-transcript-empty{color:rgba(255,255,255,0.32);font-style:italic;text-align:center;padding:6px 0;}
-.vh-invite-hint{font-style:normal;color:rgba(255,255,255,0.78);text-align:left;max-width:560px;margin:0 auto;padding:6px 12px;}
-.vh-invite-hint .hd{color:#6dc9d9;font-size:12px;letter-spacing:0.02em;margin-bottom:6px;}
-.vh-invite-hint .url{margin:0 0 10px;padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:4px;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:rgba(255,255,255,0.88);white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;}
+.vh-invite-hint{font-style:normal;color:var(--vh-btn-fg);text-align:left;max-width:560px;margin:0 auto;padding:0 2px;
+  display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;align-items:center;}
+.vh-invite-hint .hd{grid-column:1;color:#6dc9d9;font-size:11px;letter-spacing:0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+body.theme-light .vh-invite-hint .hd{color:#1f7f90;}
+.vh-invite-hint .url{grid-column:1 / -1;margin:4px 0 0;padding:3px 8px;background:var(--vh-btn-bg);border:1px solid var(--vh-btn-border);border-radius:4px;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;line-height:1.45;color:var(--vh-btn-fg);white-space:pre;overflow:hidden;text-overflow:ellipsis;user-select:all;}
 .vh-invite-hint ol{margin:0;padding-left:20px;font-size:12px;line-height:1.6;}
 .vh-invite-hint li{margin:2px 0;}
 .vh-invite-hint code{background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:11px;}
@@ -611,28 +628,41 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
 .vh-copy-btn:hover{background:var(--vh-btn-bg-hover);border-color:#6dc9d9;}
 .vh-dismiss-btn{background:var(--vh-btn-bg);border:1px solid var(--vh-btn-border);color:var(--vh-btn-fg);backdrop-filter:var(--vh-btn-blur);-webkit-backdrop-filter:var(--vh-btn-blur);}
 .vh-dismiss-btn:hover{background:var(--vh-btn-bg-hover);border-color:var(--vh-btn-border-hov);color:var(--vh-btn-fg-hov);}
-.vh-invite-actions{display:flex;gap:8px;margin-top:6px;}
-.vh-invite-status{margin-top:8px;font-size:11px;color:rgba(255,255,255,0.55);letter-spacing:0.02em;}
-.vh-invite-status.ok{color:#9ddb6d;}
-#vh-invite-banner{margin:6px auto 8px;max-width:560px;}
+.vh-invite-actions{grid-column:2;grid-row:1;display:flex;gap:8px;}
+.vh-invite-actions .vh-copy-btn{margin-top:0;padding:2px 10px;}
+.vh-invite-status{grid-column:1 / -1;margin-top:3px;font-size:10.5px;color:var(--vh-btn-fg);opacity:0.6;letter-spacing:0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.vh-invite-status.ok{color:#9ddb6d;opacity:1;}
+#vh-invite-banner{margin:6px 0;width:100%;max-width:560px;align-self:center;flex-shrink:0;}
+/* Punkt A: sobald ein externer Agent im Raum ist, Snippet + Copy ausblenden;
+   verlässt er den Raum, erscheint es wieder (Klasse aus vhSyncInviteBtnVisibility). */
+#vh-transcript-wrap.vh-agent-in #vh-invite-banner{display:none;}
 #vh-invite-banner[hidden]{display:none;}
 #vh-transcript .vh-tr-row{display:flex;gap:6px;align-items:flex-start;padding:2px 4px;border-radius:3px;max-width:92%;}
 #vh-transcript .vh-tr-ts{color:#444;font-size:9px;flex-shrink:0;font-variant-numeric:tabular-nums;padding-top:1px;}
 #vh-transcript .vh-tr-txt{flex:1;word-break:break-word;}
 #vh-transcript .vh-tr-row.user{color:var(--vh-user-color,#6dc9d9);align-self:flex-start;}
-#vh-transcript .vh-tr-row.agent{color:var(--vh-agent-color,#9ddb6d);align-self:flex-end;flex-direction:row-reverse;text-align:right;}
+#vh-transcript .vh-tr-row.agent{color:var(--vh-tr-blue);align-self:flex-end;flex-direction:row-reverse;text-align:right;}
 /* `senior` = external LLM-agent (`Agent`-chip) pushing via senior.say — distinct color + boxed for clear separation from voice-ai turns */
-#vh-transcript .vh-tr-row.senior{
-  color:var(--vh-senior-color,#e88bff);align-self:flex-end;
+/* Punkt L: Operator-Text ([SAY]/senior und role operator) in der Farbe des
+   Agent-Chips (--vh-senior-color, dynamisch aus vhApplySpeakerColorsToTranscript);
+   Light-Theme abgedunkelt, damit lesbar. */
+#vh-transcript .vh-tr-row.senior,
+#vh-transcript .vh-tr-row.operator{
+  --vh-op-color:var(--vh-senior-color,#e88bff);
+  color:var(--vh-op-color);align-self:flex-end;
   flex-direction:row-reverse;text-align:right;font-weight:500;
-  border:1px solid color-mix(in srgb, var(--vh-senior-color,#e88bff) 38%, transparent);
-  background:color-mix(in srgb, var(--vh-senior-color,#e88bff) 8%, transparent);
+  border:1px solid color-mix(in srgb, var(--vh-op-color) 38%, transparent);
+  background:color-mix(in srgb, var(--vh-op-color) 8%, transparent);
   padding:5px 9px;border-radius:6px;margin:2px 0;
 }
 /* `senior_text` (Issue #7) = silent push from external agent — visible in
    transcript but voice-ai never speaks it. Muted, italic, left-bordered as a
    "quiet note" so the user can clearly distinguish a silent status/code/URL
    ping from a spoken senior.say turn. */
+body.theme-light #vh-transcript .vh-tr-row.senior,
+body.theme-light #vh-transcript .vh-tr-row.operator{
+  --vh-op-color:color-mix(in srgb, var(--vh-senior-color,#e88bff) 62%, #000);
+}
 #vh-transcript .vh-tr-row.senior_text{
   color:color-mix(in srgb, var(--vh-senior-color,#e88bff) 55%, #aaa);
   align-self:flex-end;flex-direction:row-reverse;text-align:right;
@@ -643,8 +673,7 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
 #vh-transcript .vh-tr-row.senior_text .vh-tr-txt::before{content:"\2710\00a0";opacity:0.6;font-style:normal;}
 #vh-transcript .vh-tr-row.system{color:#888;font-style:italic;opacity:0.55;align-self:center;font-size:10px;}
 @media (max-width:640px){
-  #vh-transcript-wrap{margin:12px auto 18px;}
-  #vh-transcript{font-size:10px;max-height:24vh;}
+  #vh-transcript{font-size:10px;padding:6px 10px;}
   #vh-call-modal .vh-modal-card{padding:22px 20px;}
 }
 </style>
@@ -665,9 +694,6 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
 <button id="btn-vh-music" title="" data-tip="Music mode — mic an, Effekte hoch" aria-label="music mode">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
 </button>
-<button id="btn-vh-transcript-toggle" title="" data-tip="Transcript bottom ↔ fullscreen (Esc)" aria-label="toggle transcript fullscreen">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
-</button>
 <div id="vh-bottom-bar">
   <button id="btn-mute" class="vh-bottom-icon" hidden title="microphone (mute / unmute)" aria-label="microphone mute">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
@@ -686,7 +712,7 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
   <p><strong>Speech / Music mode:</strong> Speech is the AI-call mode. Music turns the dome into a visualizer that reacts to your mic (or whatever is playing in the tab).</p>
   <p><strong>Invite an agent:</strong> You get an invite snippet — paste it into another LLM session (Claude Code, Cursor, ZeroClaw, Hermes). The external agent joins as a second brain and can push TTS replies through your call.</p>
   <p><strong>Presence chips (top):</strong> grey = not in room · teal = joined · green pulse = speaking right now.</p>
-  <p><strong>Transcript:</strong> Hit ≡ at the bottom or press Esc for fullscreen. Wheel-scroll works inside the transcript; outside it zooms the dome.</p>
+  <p><strong>Transcript:</strong> The button right of the presence chips cycles minimized → normal → fullscreen (Esc toggles fullscreen). Wheel-scroll works inside the transcript; outside it zooms the dome.</p>
   <p>Agent CLI: <code>uvx voicehook-agent join &lt;url&gt; --name &lt;Name&gt; --model &lt;model&gt;</code> · Skill doc: <a href="/agent/SKILL.md" target="_blank" rel="noopener">/agent/SKILL.md</a></p>
 </div>
 <button id="btn-theme" title="theme" aria-label="theme"></button>
@@ -704,7 +730,6 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
 <!-- 2026-05-28: bottom-bar #ui + #amp-bar entfernt (Olli "komplette bar mülltonne").
      JS-Referenzen auf btn/btn-call/etc. liefern jetzt null + sind via Null-Guards safe.
      Neue Call-Entry/Exit-UI folgt in nächstem Schritt. -->
-<button id="vh-transcript-close" title="close transcript overlay" aria-label="close">×</button>
 
 <!-- Call-Mode Choice Modal -->
 <div id="vh-call-modal" hidden role="dialog" aria-modal="true" aria-label="Start AI Call">
@@ -785,7 +810,9 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
     <span class="vh-pres-chip" data-slot="user" title="Du — der Mensch im Raum"><span class="vh-pres-dot">∆</span><span class="vh-pres-label">User</span></span>
     <span class="vh-pres-chip" data-slot="voice-ai" title="Delta Agent (voice) — voicehook-interne STT+LLM+TTS pipeline. Moderiert das Gespräch zwischen User und Agent."><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Delta Agent (voice)</span></span>
     <span class="vh-pres-chip" data-slot="agent" title="Agent — der externe LLM (z.B. Claude Code) der via voicehook-agent CLI eingeklinkt ist"><span class="vh-pres-spin" aria-hidden="true"></span><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Agent</span></span>
+    <button type="button" id="vh-tr-mode" aria-label="Transkript-Ansicht wechseln" title="Transkript: minimiert / normal / Vollbild (Esc)"></button>
   </div>
+  <div id="vh-tr-ticker" aria-live="polite"></div>
   <div id="vh-invite-banner" hidden></div>
   <div id="vh-transcript"><div id="vh-transcript-empty">Transcript — start a call to see live turns.</div></div>
 </div>
@@ -1122,7 +1149,7 @@ let mouseInside  = false;
 
 window.addEventListener('mousemove', (e) => {
   mouseNDC.x =  (e.clientX / innerWidth)  * 2 - 1;
-  mouseNDC.y = -(e.clientY / innerHeight) * 2 + 1;
+  mouseNDC.y = -(e.clientY / (renderer.domElement.clientHeight || innerHeight)) * 2 + 1;
   mouseInside = true;
 });
 window.addEventListener('mouseleave', () => { mouseInside = false; });
@@ -1131,7 +1158,7 @@ window.addEventListener('blur',       () => { mouseInside = false; });
 // Touch-Events: gleiche Sphäre-Logik wie Maus, NDC aus Touch-Position
 function setNDCFromTouch(t) {
   mouseNDC.x =  (t.clientX / innerWidth)  * 2 - 1;
-  mouseNDC.y = -(t.clientY / innerHeight) * 2 + 1;
+  mouseNDC.y = -(t.clientY / (renderer.domElement.clientHeight || innerHeight)) * 2 + 1;
   mouseInside = true;
 }
 window.addEventListener('touchstart', (e) => {
@@ -1192,8 +1219,13 @@ let subBassPrev = 0;     // Vorheriger Wert für Attack-Detection
 let ultraDeepEnv = 0;    // Edge-getriggert: nur Sub-Bass-FLANKE pulsiert, kein Sustain
 let ultraDeep   = 0;     // Quadratisch geformt + gecapt → kurzer extremer Push
 
+let vhLayoutTick = 0;
 function animate() {
   requestAnimationFrame(animate);
+  // Transkript-Vollbild: Kringel ist ausgeblendet -> Render-Loop pausieren.
+  if (document.body.classList.contains('vh-transcript-expanded')) return;
+  // Alle ~0.5 s prüfen, ob Zoom/Profil/Panelhöhe die Ring-Unterkante verschoben hat.
+  if ((++vhLayoutTick % 30) === 0) { try { vhRingLayout(false); } catch (_) {} }
   clock += 0.016;
 
   const amp = readAudio();
@@ -1639,6 +1671,7 @@ window.addEventListener('resize', () => {
   const ratio = (typeof hdOn !== 'undefined' && !hdOn) ? 1 : Math.min(2, devicePixelRatio);
   renderer.setPixelRatio(ratio);
   renderer.setSize(innerWidth, innerHeight);
+  try { vhRingLayout(true); } catch (_) {}  // Canvas-Höhe = Platz über dem Transkript
 });
 
 // ── Mic-Controls ─────────────────────────────────────────────────────────────
@@ -1721,11 +1754,20 @@ function applyHd() {
   const ratio = hdOn ? Math.min(2, devicePixelRatio) : 1;
   renderer.setPixelRatio(ratio);
   renderer.setSize(innerWidth, innerHeight);
+  try { vhRingLayout(true); } catch (_) {}  // TDZ beim ersten Aufruf, danach aktiv
   btnHd.classList.toggle('on', hdOn);
   btnHd.textContent = hdOn ? 'HD' : 'SD';
+  const footHd = document.getElementById('vh-foot-hd');
+  if (footHd) {
+    footHd.classList.toggle('on', hdOn);
+    footHd.textContent = hdOn ? 'HD' : 'SD';
+    footHd.setAttribute('aria-checked', String(hdOn));
+  }
   try { localStorage.setItem(HD_KEY, hdOn ? '1' : '0'); } catch {}
 }
 btnHd.addEventListener('click', () => { hdOn = !hdOn; applyHd(); });
+{ const footHd = document.getElementById('vh-foot-hd');
+  if (footHd) footHd.addEventListener('click', (e) => { e.stopPropagation(); hdOn = !hdOn; applyHd(); }); }
 applyHd();
 
 // Theme-Toggle (mond/sonne) — body.theme-light togglen + persist
@@ -1750,47 +1792,57 @@ btnSettings.addEventListener('click', () => {
   btnSettings.classList.toggle('on', !collapsed);
 });
 
-// Transcript-Toggle (Olli 2026-05-29 "transcript nicht sichtbar bitte mach
-// das instant immer"): nur noch 2-state BOTTOM ↔ EXPANDED. KEIN hidden mehr.
-// Transcript ist immer sichtbar, sofort beim Page-Load, und Toggle
-// schaltet nur zwischen normaler Mini-Panel-Höhe und Fullscreen.
-// Cleanup any stale 'hidden' class from prior sessions/state.
+// Transkript-Modi (Olli 30.09.): EIN Knopf rechts neben den Presence-Pills
+// schaltet zyklisch minimiert -> normal -> Vollbild -> minimiert. Modus bleibt
+// in localStorage. Esc schaltet Vollbild an/aus (zurück in den vorigen Modus).
+// Alt-Klassen: vh-transcript-hidden bleibt ausgemustert (2026-05-29).
 document.body.classList.remove('vh-transcript-hidden');
 const btnTranscript    = _vhById('btn-transcript');
-const btnTranscriptToggle = document.getElementById('btn-vh-transcript-toggle');
-const btnTranscriptClose = document.getElementById('vh-transcript-close');
-const VH_TR_STATES = ['bottom', 'expanded'];
+const btnTrMode        = document.getElementById('vh-tr-mode');
+const VH_TR_KEY    = 'vh-tr-mode-v1';
+const VH_TR_STATES = ['min', 'bottom', 'expanded'];
+const VH_TR_ICONS = {
+  // minimiert: eine Linie unten
+  min:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="5" y1="18" x2="19" y2="18"/></svg>',
+  // normal: Panel mit Zeilen
+  bottom:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="10" x2="17" y2="10"/><line x1="7" y1="14" x2="14" y2="14"/></svg>',
+  // Vollbild aktiv: Pfeile nach innen (= schließen)
+  expanded: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
+};
+const VH_TR_NAMES = { min: 'minimiert', bottom: 'normal', expanded: 'Vollbild' };
+let vhTrPrev = 'bottom';
 function vhTranscriptState() {
   if (document.body.classList.contains('vh-transcript-expanded')) return 'expanded';
-  if (document.body.classList.contains('vh-transcript-hidden'))   return 'hidden';
+  if (document.body.classList.contains('vh-transcript-min'))      return 'min';
   return 'bottom';
 }
 function vhTranscriptSet(state) {
-  if (state === 'hidden') state = 'bottom';  // hidden retired (Olli 2026-05-29)
-  document.body.classList.remove('vh-transcript-expanded', 'vh-transcript-hidden');
+  if (!VH_TR_STATES.includes(state)) state = 'bottom';  // 'hidden' u.a. -> normal
+  const cur = vhTranscriptState();
+  if (state === 'expanded' && cur !== 'expanded') vhTrPrev = cur;
+  document.body.classList.remove('vh-transcript-expanded', 'vh-transcript-hidden', 'vh-transcript-min');
   if (state === 'expanded') document.body.classList.add('vh-transcript-expanded');
-  if (btnTranscript) {
-    btnTranscript.classList.toggle('on', state === 'expanded');
-    btnTranscript.title = state === 'expanded'
-      ? 'Transcript → bottom panel'
-      : 'Transcript → fullscreen overlay';
+  if (state === 'min')      document.body.classList.add('vh-transcript-min');
+  try { localStorage.setItem(VH_TR_KEY, state); } catch (_) {}
+  if (btnTranscript) btnTranscript.classList.toggle('on', state === 'expanded');
+  if (btnTrMode) {
+    const next = VH_TR_STATES[(VH_TR_STATES.indexOf(state) + 1) % VH_TR_STATES.length];
+    btnTrMode.innerHTML = VH_TR_ICONS[state];
+    btnTrMode.dataset.mode = state;
+    btnTrMode.title = 'Transkript: ' + VH_TR_NAMES[state] + ' · Klick: ' + VH_TR_NAMES[next] + (state === 'expanded' ? ' (Esc schließt)' : '');
+    btnTrMode.setAttribute('aria-label', btnTrMode.title);
   }
-  if (btnTranscriptToggle) {
-    btnTranscriptToggle.classList.toggle('on', state === 'expanded');
-  }
-  if (state === 'expanded') {
-    const el = document.getElementById('vh-transcript');
-    if (el) el.scrollTop = el.scrollHeight;
-  }
+  const el = document.getElementById('vh-transcript');
+  if (el && state !== 'min') el.scrollTop = el.scrollHeight;
+  try { vhRingLayout(true); } catch (_) {}
 }
 function vhTranscriptCycle() {
   const cur = vhTranscriptState();
-  const next = VH_TR_STATES[(VH_TR_STATES.indexOf(cur) + 1) % VH_TR_STATES.length];
-  vhTranscriptSet(next);
+  vhTranscriptSet(VH_TR_STATES[(VH_TR_STATES.indexOf(cur) + 1) % VH_TR_STATES.length]);
 }
-if (btnTranscript)        btnTranscript.addEventListener('click', () => vhTranscriptCycle());
-if (btnTranscriptToggle)  btnTranscriptToggle.addEventListener('click', () => vhTranscriptCycle());
-if (btnTranscriptClose)   btnTranscriptClose.addEventListener('click', () => vhTranscriptSet('bottom'));
+if (btnTranscript) btnTranscript.addEventListener('click', () => vhTranscriptCycle());
+if (btnTrMode) btnTrMode.addEventListener('click', (e) => { e.stopPropagation(); vhTranscriptCycle(); });
+vhTranscriptSet((() => { try { return localStorage.getItem(VH_TR_KEY) || 'bottom'; } catch (_) { return 'bottom'; } })());
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   // Don't fight the info-popover or call-modal Esc handlers.
@@ -1799,8 +1851,61 @@ document.addEventListener('keydown', (e) => {
   if (_infoPop && !_infoPop.hasAttribute('hidden')) return;
   const _modal = document.getElementById('vh-call-modal');
   if (_modal && !_modal.hidden) return;
-  vhTranscriptCycle();
+  if (vhTranscriptState() === 'expanded') vhTranscriptSet(vhTrPrev);
+  else vhTranscriptSet('expanded');
 });
+
+// Kringel-Platz (Punkt B): Transkript/Snippet dürfen nie über den Ring ragen.
+// Der Ring ist fest in 3D; seine Unterkante liegt bei ~84 % der Canvas-Höhe.
+// Statt das Panel darüberzulegen, wird die Canvas (oben verankert) so weit
+// verkürzt, dass die Ring-Unterkante über der Panel-Oberkante endet. Der Ring
+// skaliert dabei proportional mit (vertikales FOV). Vollbild: Canvas aus.
+let vhRingCanvasH = 0;
+function vhRingBottomFrac() {
+  // Projektion der Donut-Außenkante (R_MAJOR+R_MINOR, Tube ±R_MINOR) mit der
+  // Ruhe-Kamera inkl. aktuellem Zoom; Rückgabe = Unterkante als Anteil der Höhe.
+  const cam = camera.clone();
+  const distMul = 1 / (zoom || 1);
+  cam.position.set(0, -1.65 * distMul, 8.25 * distMul);
+  cam.lookAt(0, -0.32, 0);
+  cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+  const v = new THREE.Vector3();
+  let minY = 1;
+  for (let a = 0; a < 48; a++) {
+    const ang = -Math.PI / 2 + (a - 24) / 24 * 0.9;  // untere Hälfte reicht
+    for (let t = 0; t < 12; t++) {
+      const ph = t / 12 * Math.PI * 2;
+      const r = R_MAJOR + R_MINOR * Math.cos(ph);
+      v.set(r * Math.cos(ang), r * Math.sin(ang), R_MINOR * Math.sin(ph)).project(cam);
+      if (v.y < minY) minY = v.y;
+    }
+  }
+  return (1 - minY) / 2;
+}
+function vhRingLayout(force) {
+  const full = document.body.classList.contains('vh-transcript-expanded');
+  const wrap = document.getElementById('vh-transcript-wrap');
+  if (!wrap) return;
+  // Normal-Modus: feste Panelhöhe, damit der Ring beim Eintreffen neuer Zeilen
+  // nicht springt. clamp(140px, 22vh, 200px).
+  const wrapH = Math.round(Math.min(200, Math.max(140, innerHeight * 0.22)));
+  document.documentElement.style.setProperty('--vh-wrap-h', wrapH + 'px');
+  let h = innerHeight;
+  if (!full) {
+    const top = wrap.getBoundingClientRect().top;
+    const gap = 18;  // Puffer für Kamera-Drift + lose Satelliten-Partikel
+    const frac = vhRingBottomFrac();
+    h = Math.min(innerHeight, Math.floor((top - gap) / frac));
+    h = Math.max(200, h);
+  }
+  if (!force && Math.abs(h - vhRingCanvasH) < 2) return;
+  vhRingCanvasH = h;
+  camera.aspect = innerWidth / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, h);
+  try { document.documentElement.style.setProperty('--vh-ring-bottom', Math.round(h * vhRingBottomFrac()) + 'px'); } catch (_) {}
+}
+vhRingLayout(true);
 
 // Info-popover: click 'i' button → show/hide explanation. Outside-click / Esc closes.
 const btnInfo  = document.getElementById('btn-info');
@@ -2842,7 +2947,7 @@ async function vhStartCall() {
     await vhStartRoomAudio(lkRoom);
     // "ready"-message comes from TrackSubscribed once voice-ai's audio-track
     // arrives — at this point the user cannot actually talk yet.
-    lkConnected = true;
+    lkConnected = true; try { vhHideJoinGate(); } catch (_) {}
     btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = 'End call';
     try { vhMuteBtnVisibility(true); } catch (_) {}  // show mic-mute toggle next to btn-call
     err.textContent = '';  // no "connected" text — speaker-color in kringel does the talking
@@ -2865,6 +2970,7 @@ function vhEndCall(fromEvent) {
   try { window.lkRoom = null; } catch (_) {}
   try { if (lkAudioEl) { lkAudioEl.remove(); lkAudioEl = null; } } catch (_) {}
   try { if (lkAudioCtx) { lkAudioCtx.close(); lkAudioCtx = null; } } catch (_) {}
+  vhMixGain = null; vhCallAn = null;
   if (!fromEvent && lkRoom) { try { lkRoom.disconnect(); } catch (_) {} }
   lkRoom = null; lkConnected = false;
   try { document.getElementById('vh-presence').classList.remove('vh-in-call'); } catch (_) {}
@@ -3033,7 +3139,7 @@ async function vhInviteJoinAsHost() {
     await lkRoom.localParticipant.setMicrophoneEnabled(true);
     // Unblock remote-audio playback inside this user gesture (autoplay policy).
     await vhStartRoomAudio(lkRoom);
-    lkConnected = true;
+    lkConnected = true; try { vhHideJoinGate(); } catch (_) {}
     btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = 'End call';
     try { vhMuteBtnVisibility(true); } catch (_) {}  // show mic-mute + speaker-mute toggles (parity with vhStartCall)
     // Preserve query string (esp. ?go=1) so a refresh re-triggers autostart
@@ -3063,6 +3169,20 @@ function vhTrLog(role, text) {
   row.appendChild(tsEl); row.appendChild(txtEl);
   vhTranscript.appendChild(row);
   vhTranscript.scrollTop = vhTranscript.scrollHeight;
+  if (role && role !== 'system') vhTrTick(role, text);
+}
+// Minimiert-Modus: letzten gesprochenen Satz einzeilig kurz einblenden.
+const vhTrTicker = document.getElementById('vh-tr-ticker');
+let vhTrTickTimer = null;
+function vhTrTick(role, text) {
+  if (!vhTrTicker) return;
+  vhTrTicker.textContent = String(text || '');
+  vhTrTicker.dataset.role = role;
+  vhTrTicker.style.color = (role === 'agent') ? 'var(--vh-tr-blue)'
+    : (role === 'operator' || role === 'senior') ? 'var(--vh-senior-color, #e88bff)' : '';
+  vhTrTicker.classList.add('show');
+  if (vhTrTickTimer) clearTimeout(vhTrTickTimer);
+  vhTrTickTimer = setTimeout(() => vhTrTicker.classList.remove('show'), 5000);
 }
 
 // Presence chips (user · voice-ai · agent). State per slot: 'out' | 'in' | 'speak'.
@@ -3109,6 +3229,18 @@ function vhAgentLabelFor(p) {
 }
 function vhRememberAgentLabel(p) {
   if (p && p.identity) vhAgentLabelById[p.identity] = vhAgentLabelFor(p);
+  // Ladekreis nur solange der gerade gejointe Agent noch keine Selbstauskunft hat.
+  const a = (p && p.attributes) || {};
+  vhAgentJoiningSet(!(String(a['vh.name'] || '').trim() || (p && p.name && p.name !== p.identity)));
+}
+let vhAgentJoinTimer = null;
+function vhAgentJoiningSet(on) {
+  const el = document.querySelector('#vh-presence .vh-pres-chip[data-slot="agent"]');
+  if (vhAgentJoinTimer) { clearTimeout(vhAgentJoinTimer); vhAgentJoinTimer = null; }
+  if (!el) return;
+  el.classList.toggle('joining', !!on);
+  // Sicherheitsnetz: Agent ohne Track und ohne Namen -> nach 10 s ∆ statt Ladekreis.
+  if (on) vhAgentJoinTimer = setTimeout(() => el.classList.remove('joining'), 10000);
 }
 const VH_SLOT_LABELS = { user: 'User', 'voice-ai': 'Delta Agent (voice)', agent: 'Agent' };
 const VH_SLOT_DESCS  = {
@@ -3132,6 +3264,7 @@ function vhPresenceSet(slot, state, id) {
   if (state === 'in')    el.classList.add('in');
   if (state === 'speak') el.classList.add('in','speak');
   if (state === 'out') {
+    if (slot === 'agent') vhAgentJoiningSet(false);
     // Reset to grey baseline: clear inline-colored dot, restore default label + tooltip
     const dot = el.querySelector('.vh-pres-dot');
     if (dot) { dot.style.color = ''; dot.style.background = ''; }
@@ -3154,6 +3287,12 @@ function vhPresenceSet(slot, state, id) {
 }
 // Issue #5: invite-btn auto-hide when room is full (all 3 chips 'in'), auto-show otherwise (only if prepared)
 function vhSyncInviteBtnVisibility() {
+  // Punkt A: externer Agent im Raum -> Invite-Snippet (Banner) ausblenden.
+  try {
+    const ag = document.querySelector('#vh-presence .vh-pres-chip[data-slot="agent"]');
+    const wrap = document.getElementById('vh-transcript-wrap');
+    if (wrap) wrap.classList.toggle('vh-agent-in', !!(ag && ag.classList.contains('in')));
+  } catch (_) {}
   try {
     const chips = document.querySelectorAll('#vh-presence .vh-pres-chip');
     if (!chips.length) return;
@@ -3176,26 +3315,47 @@ function vhPresenceReset() {
     if (lbl) lbl.textContent = VH_SLOT_LABELS[slot] || slot;
     el.title = VH_SLOT_DESCS[slot] || slot;
   });
+  try { document.getElementById('vh-transcript-wrap').classList.remove('vh-agent-in'); } catch (_) {}
+  try { vhAgentJoiningSet(false); } catch (_) {}
 }
 
 // Hook an audio MediaStreamTrack into the shared analyser. Both local (user
 // mic) and remote (agent TTS) tracks fan-in through a single GainNode so the
 // kringel reacts to whoever is currently speaking.
 let vhMixGain = null;
+let vhCallAn = null;   // Call-Analyser (Mix aus Mic + Remote-TTS), überlebt Musikmodus
 function vhHookTrackToAnalyser(audioTrack) {
   try {
     if (!lkAudioCtx) lkAudioCtx = new AudioContext({ latencyHint: 'interactive' });
-    if (!analyser) {
-      analyser = lkAudioCtx.createAnalyser();
-      analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.0;
-      freqData = new Uint8Array(analyser.frequencyBinCount);
+    // Mix-Knoten pro AudioContext genau einmal; hängt nicht mehr an `analyser`
+    // (der Musikmodus nullt/ersetzt `analyser`, sonst gingen Quellen verloren).
+    if (!vhMixGain || vhMixGain.context !== lkAudioCtx) {
+      vhCallAn = lkAudioCtx.createAnalyser();
+      vhCallAn.fftSize = 2048; vhCallAn.smoothingTimeConstant = 0.0;
       vhMixGain = lkAudioCtx.createGain();
-      vhMixGain.connect(analyser);
+      vhMixGain.connect(vhCallAn);
+    }
+    if (!analyser) {
+      analyser = vhCallAn;
+      freqData = new Uint8Array(analyser.frequencyBinCount);
     }
     const src = lkAudioCtx.createMediaStreamSource(new MediaStream([audioTrack]));
     src.connect(vhMixGain);
     micActive = true;
   } catch (e) { console.warn('[voicehook] visualizer hookup failed', e); }
+}
+
+// Punkt F: Musikmodus im laufenden Call AUS -> Kringel wieder an die Call-Stimmen
+// hängen (vorher nullte stopAudio() den Analyser, der Call-Mix blieb verwaist).
+function vhCallAnalyserRestore() {
+  if (currentStream) { try { currentStream.getTracks().forEach(t => t.stop()); } catch (_) {} currentStream = null; }
+  if (vhCallAn && lkAudioCtx && lkAudioCtx.state !== 'closed') {
+    analyser = vhCallAn;
+    freqData = new Uint8Array(vhCallAn.frequencyBinCount);
+    micActive = true;
+    return true;
+  }
+  return false;
 }
 
 // "Tap to enable sound" affordance. Chrome's autoplay policy can block remote
@@ -3232,31 +3392,25 @@ async function vhStartRoomAudio(room) {
 
 // Wire LiveKit room events that feed the transcript (works for both modes).
 // ── Kostenanzeige im laufenden Call ──────────────────────────────────────────
-// Der Worker schickt auf Topic `cost` die aufgelaufenen Kosten ({usd, mode});
-// der Untertitel unter dem Call-Button zeigt im Call "≈ 0.012 $ · 2:31".
+// Der Worker schickt auf Topic `cost` {usd, mode, basis} (Menge x verifizierter
+// Preis). Untertitel zeigt "0.012 $" (+ " · live"), title = basis. KEINE Uhr,
+// kein Timer, kein "≈" (Olli 30.09.: eine hochzählende Uhr wirkte wie laufende
+// Kosten): Anzeige erscheint erst mit dem ersten echten Payload und ändert sich
+// nur bei neuen Payloads. Ohne Payload bleibt "talk to any AI"; nach Call-Ende zurück.
 const vhTagline = document.getElementById('tagline');
 const VH_TAGLINE_TEXT = vhTagline ? vhTagline.textContent : '';
-let vhCost = { usd: 0, start: 0, timer: null, mode: '' };
-function vhCostRender() {
-  if (!vhTagline || !vhCost.start) return;
-  const s = Math.max(0, Math.floor((Date.now() - vhCost.start) / 1000));
-  const t = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-  vhTagline.textContent = '≈ ' + vhCost.usd.toFixed(3) + ' $ · ' + t + (vhCost.mode === 'live' ? ' · live' : '');
-  vhTagline.title = 'Geschätzte Kosten dieses Calls (Listenpreise, Sprachdienste)';
-}
-function vhCostStart() {
-  if (vhCost.timer) return;
-  vhCost = { usd: 0, start: Date.now(), timer: setInterval(vhCostRender, 1000), mode: '' };
-  if (vhTagline) vhTagline.classList.add('vh-cost-on');
-  vhCostRender();
+function vhCostShow(c) {
+  if (!vhTagline) return;
+  vhTagline.textContent = c.usd.toFixed(3) + ' $' + (c.mode === 'live' ? ' · live' : '');
+  vhTagline.title = String(c.basis || '');
+  vhTagline.classList.add('vh-cost-on');
 }
 function vhCostStop() {
-  if (vhCost.timer) clearInterval(vhCost.timer);
-  vhCost = { usd: 0, start: 0, timer: null, mode: '' };
   if (vhTagline) { vhTagline.textContent = VH_TAGLINE_TEXT; vhTagline.title = ''; vhTagline.classList.remove('vh-cost-on'); }
 }
 
 function vhWireRoomEvents(room, RoomEvent, Track) {
+  room.on(RoomEvent.Connected, () => { try { vhHideJoinGate(); } catch (_) {} });
 
   // Expose the room so the playback gate (and tests) can observe canPlaybackAudio.
   try { window.lkRoom = room; } catch (_) {}
@@ -3279,6 +3433,8 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
     // is actually ready and the user CAN talk into a listening agent.
     const id = p?.identity || '';
     const slot = vhPresenceSlotFor(id);
+    // Erster Track des externen Agenten -> Ladekreis aus.
+    try { if (vhPresenceSlotForP(p) === 'agent') vhAgentJoiningSet(false); } catch (_) {}
     if (slot === 'voice-ai') {
       vhPresenceSet(slot, 'in', id);
       try { vhApplySpeakerColorsToTranscript(); } catch (_) {}
@@ -3421,9 +3577,14 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
   room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
     vhBumpActivity();
     const from = participant?.identity || '?';
-    // Kostenanzeige AUS (Olli 30.09.: nur echte Nutzungsdaten oder gar nichts;
-    // der Worker-Wert ist eine Schätzung Menge x Listenpreis). Topic ignorieren.
-    if (topic === 'cost') return;
+    // Kostenanzeige (wieder an, Olli 30.09.): nur Untertitel, nie ins Transkript.
+    if (topic === 'cost') {
+      try {
+        const c = JSON.parse(new TextDecoder().decode(payload));
+        if (typeof c.usd === 'number' && isFinite(c.usd) && c.usd >= 0 && vhCallLive()) vhCostShow(c);
+      } catch (_) {}
+      return;
+    }
     if (topic === 'transcript') {
       try {
         const obj = JSON.parse(new TextDecoder().decode(payload));
@@ -3440,32 +3601,20 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
       return;
     }
     if (!topic) return;
-    // Nur Steuernachrichten des Operators gehören ins Transkript; alles andere
-    // (cost, agent.heartbeat, künftige Themen) nie als Zeile anzeigen.
+    // Nur Operator-Themen lösen etwas aus (Chip-Puls); alles andere (cost,
+    // agent.heartbeat, künftige Themen) wird ignoriert.
     if (!/^(operator|senior)\./.test(topic)) return;
-    // senior.* control plane events — but skip senior.say (voice-ai re-publishes
-    // it as a transcript [SAY]-row which renders prettier with senior-role color).
-    // Persona / interrupt / inject have no transcript-echo so we log them here.
-    if (topic === 'senior.say') {
-      // visibility-only: pulse agent-chip (handled below)
-    } else try {
-      const txt = new TextDecoder().decode(payload);
-      let obj; try { obj = JSON.parse(txt); } catch { obj = { raw: txt }; }
-      const preview = obj.text ? `"${String(obj.text).slice(0,120)}"`
-                    : JSON.stringify(obj).slice(0, 160);
-      vhTrLog('system', `${topic}  ·  ${preview}`);
-      // Visibility: pulse agent-chip for 2s on every senior.* event so the
-      // operator SEES the senior agent is onboard + pushing.
-      try {
-        vhPresenceSet('agent', 'speak');
-        setTimeout(() => {
-          const el = document.querySelector('#vh-presence .vh-pres-chip[data-slot="agent"]');
-          if (el && el.classList.contains('speak')) el.classList.remove('speak');
-        }, 2000);
-      } catch (_) {}
-    } catch (_) {
-      vhTrLog('system', `· ${topic}  from ${from}  <binary>`);
-    }
+    // Punkt L (Olli 30.09.): operator.*/senior.* nie als Logzeile ins Transkript.
+    // Operator-Text erscheint nur als gesprochener Text (transcript-Event mit
+    // role "operator" nach dem Aussprechen). Hier nur Sichtbarkeit: Agent-Chip
+    // pulsiert 2 s, damit man sieht, dass der externe Agent schiebt.
+    try {
+      vhPresenceSet('agent', 'speak');
+      setTimeout(() => {
+        const el = document.querySelector('#vh-presence .vh-pres-chip[data-slot="agent"]');
+        if (el && el.classList.contains('speak')) el.classList.remove('speak');
+      }, 2000);
+    } catch (_) {}
   });
 }
 
@@ -3533,13 +3682,22 @@ window.addEventListener('beforeunload', () => { try { lkRoom && lkRoom.disconnec
 // Footer-menu links (Aufladen, Setup, Start, ...) are plain same-tab links.
 // During a live call a same-tab navigation fires beforeunload above and ends
 // the call. While connected, open them in a new tab so the call survives.
+// Punkt G: Capture-Phase (läuft vor allen anderen Klick-Handlern, kein
+// stopPropagation kann es abfangen) und "im Call" auch dann, wenn der Raum schon
+// verbunden ist, lkConnected aber noch nicht gesetzt wurde (Connect-Fenster).
+function vhCallLive() {
+  if (lkConnected) return true;
+  try { const r = lkRoom || window.lkRoom; return !!(r && (r.state === 'connected' || r.state === 'reconnecting')); } catch (_) { return false; }
+}
 document.addEventListener('click', (e) => {
-  const a = e.target.closest && e.target.closest('#vh-foot-menu a[href]');
-  if (!a || !lkConnected || a.target === '_blank') return;
-  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const a = e.target && e.target.closest && e.target.closest('#vh-foot-menu a[href]');
+  if (!a || a.target === '_blank' || !vhCallLive()) return;
+  if (e.button !== 0) return;
+  // Jede Variante (auch Modifier-Klick) im Call: nie im selben Tab navigieren.
   e.preventDefault();
-  window.open(a.href, '_blank', 'noopener');
-});
+  try { window.open(a.href, '_blank', 'noopener'); } catch (_) {}
+  try { vhFootMenu && vhFootMenu.setAttribute('hidden', ''); } catch (_) {}
+}, true);
 
 // One-tap join gate (#58). A gesture-less autostart published the mic but
 // Chrome delivered 0 audio — mic capture AND remote-audio playback require a
@@ -3549,7 +3707,7 @@ document.addEventListener('click', (e) => {
 // flows, transcript + orb come alive.
 let vhJoinGate = null;
 function vhShowJoinGate() {
-  if (vhJoinGate || (typeof lkConnected !== 'undefined' && lkConnected)) return;
+  if (vhJoinGate || vhCallLive()) return;
   const b = document.createElement('button');
   b.id = 'vh-join-gate';
   b.type = 'button';
@@ -3560,12 +3718,19 @@ function vhShowJoinGate() {
     'background:rgba(109,201,217,0.14);color:#cfeef4;font:600 1rem/1 inherit;cursor:pointer;' +
     'backdrop-filter:blur(6px);box-shadow:0 4px 24px rgba(0,0,0,0.35);';
   b.addEventListener('click', () => {
-    try { b.remove(); } catch (_) {}
-    vhJoinGate = null;
+    vhHideJoinGate();
+    // Call läuft schon (anderer Connect-Pfad, z. B. Invite/Host-Flow): nur Gate
+    // weg, NICHTS starten – vhStartCall() würde den laufenden Raum trennen.
+    if (vhCallLive()) return;
     vhStartCall().catch(e => console.error('[join-gate]', e));
   }, { once: true });
   document.body.appendChild(b);
   vhJoinGate = b;
+}
+function vhHideJoinGate() {
+  try { if (vhJoinGate) vhJoinGate.remove(); } catch (_) {}
+  vhJoinGate = null;
+  try { const g = document.getElementById('vh-join-gate'); if (g) g.remove(); } catch (_) {}
 }
 
 // Auto-start: ?go=1 (or ?autostart=1) skips the choice modal. v4 (#58): it does
@@ -3744,71 +3909,14 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// Recent-Invites im Foot-Menu (Olli 2026-05-29 "kann dich nicht wieder
-// reinviten" — persistente Liste der letzten Invite-Slugs, jeder Eintrag
-// hat copy-Button der die ORIGINAL skill-discovery-Message neu in
-// Clipboard schreibt). Bis zu 8 entries, neueste oben.
-const VH_RECENTS_KEY = 'vh-recent-invites:v1';
-const VH_RECENTS_MAX = 8;
-function vhRecentsLoad() {
-  try {
-    const raw = localStorage.getItem(VH_RECENTS_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr.slice(0, VH_RECENTS_MAX) : [];
-  } catch (_) { return []; }
-}
-function vhRecentsSave(arr) {
-  try { localStorage.setItem(VH_RECENTS_KEY, JSON.stringify(arr.slice(0, VH_RECENTS_MAX))); } catch (_) {}
-}
-function vhRecentsAdd(slug) {
-  if (!slug) return;
-  const all = vhRecentsLoad().filter(e => e.slug !== slug);
-  all.unshift({ ts: Date.now(), slug: slug });
-  vhRecentsSave(all);
-  vhRecentsRender();
-}
-function vhRecentsRender() {
-  const host = document.getElementById('vh-foot-recents');
-  if (!host) return;
-  const list = vhRecentsLoad();
-  if (!list.length) {
-    host.innerHTML = '<div class="vh-foot-recents-empty">noch keine — beim ersten Invite hier sichtbar</div>';
-    return;
-  }
-  const fmtAgo = (ts) => {
-    const d = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-    if (d < 60) return d + 's';
-    if (d < 3600) return Math.floor(d / 60) + 'm';
-    if (d < 86400) return Math.floor(d / 3600) + 'h';
-    return Math.floor(d / 86400) + 'd';
-  };
-  host.innerHTML = '';
-  list.forEach(e => {
-    const url = location.origin + '/r/' + e.slug;
-    const msg = 'Kannst du bitte meinem voicecall beitreten auf voicehook.ai? ' + url + '\nSkill: ' + location.origin + '/agent/SKILL.md';
-    const row = document.createElement('div');
-    row.className = 'vh-foot-recent';
-    const slug = document.createElement('span'); slug.className = 'vh-foot-recent-slug'; slug.textContent = e.slug;
-    const ts = document.createElement('span');   ts.className   = 'vh-foot-recent-ts';   ts.textContent   = fmtAgo(e.ts);
-    const cp = document.createElement('button'); cp.type = 'button'; cp.className = 'vh-foot-recent-copy'; cp.textContent = 'copy';
-    cp.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(msg);
-        cp.textContent = 'copied'; cp.classList.add('copied');
-        setTimeout(() => { cp.textContent = 'copy'; cp.classList.remove('copied'); }, 1500);
-      } catch (_) {}
-    });
-    row.appendChild(slug); row.appendChild(ts); row.appendChild(cp);
-    host.appendChild(row);
-  });
-}
-vhRecentsRender();
+// Recent-Invites entfernt (Olli 30.09.: Einladungen laufen nach 1 h ab, leere
+// Räume schließen, die Liste bringt nichts). Alten Eintrag einmalig aufräumen.
+try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
 
 // Style-Sektion im Foot-Menü → applyPalette + .on-Highlight (Olli 2026-05-28
 // "style sektion wieder hinzufügen").
 (() => {
-  const styleBtns = document.querySelectorAll('.vh-foot-style');
+  const styleBtns = document.querySelectorAll('.vh-foot-style[data-pal]');
   if (!styleBtns.length) return;
   const refresh = (pal) => styleBtns.forEach(b => b.classList.toggle('on', b.dataset.pal === pal));
   styleBtns.forEach(b => b.addEventListener('click', () => {
@@ -3872,7 +3980,9 @@ vhRecentsRender();
       ['fx-intensity','island','brightness','ring-fx','sat-amount','particle-count','size']
         .forEach(_restoreRange);
       try { applyProfile('speech'); } catch (e) { console.error('[vh-music] revert profile', e); }
-      if (micActive) { try { stopAudio(); } catch (e) { console.error('[vh-music] stopMic', e); } }
+      // Im Call: Mic NICHT stoppen, sondern den Call-Analyser zurückhängen (Punkt F).
+      if (typeof lkConnected !== 'undefined' && lkConnected) { try { vhCallAnalyserRestore(); } catch (e) { console.error('[vh-music] restore call audio', e); } }
+      else if (micActive) { try { stopAudio(); } catch (e) { console.error('[vh-music] stopMic', e); } }
       musicBtn.classList.remove('on');
       return;
     }
@@ -3933,7 +4043,6 @@ vhRecentsRender();
       if (!tok || !tok.token || !tok.url) throw new Error('invalid token response');
 
       const inviteUrl = location.origin + '/r/' + encodeURIComponent(room);
-      try { vhRecentsAdd(room); } catch (_) {}
       let clipOk = true;
 
       if (!window.LivekitClient) throw new Error('LiveKit SDK not loaded');
@@ -3978,7 +4087,7 @@ vhRecentsRender();
       await lkRoom.connect(tok.url, tok.token);
       await lkRoom.localParticipant.setMicrophoneEnabled(true);
       try { await vhStartRoomAudio(lkRoom); } catch (_) {}
-      lkConnected = true;
+      lkConnected = true; try { vhHideJoinGate(); } catch (_) {}
       try { history.replaceState(null, '', '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
 
       _setCallUi('in-call', 'in call · invite URL copied: ' + inviteUrl);
@@ -4025,15 +4134,6 @@ vhRecentsRender();
 #vh-foot-menu a:hover{background:rgba(109,201,217,0.12);color:var(--vh-teal,#6dc9d9);}
 #vh-foot-menu .vh-foot-sep{height:1px;background:var(--vh-btn-border);margin:4px 0;}
 #vh-foot-menu .vh-foot-meta{padding:6px 14px 4px;font-size:0.62rem;color:var(--vh-btn-fg);opacity:0.5;letter-spacing:0.08em;text-transform:uppercase;}
-#vh-foot-recents{display:flex;flex-direction:column;gap:3px;padding:4px 10px 6px;max-height:160px;overflow-y:auto;}
-#vh-foot-recents .vh-foot-recents-empty{font-size:10.5px;color:var(--vh-btn-fg);opacity:0.45;padding:2px 0;font-style:italic;}
-#vh-foot-recents .vh-foot-recent{display:flex;align-items:center;gap:6px;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--vh-btn-fg);padding:3px 4px;border-radius:4px;background:rgba(255,255,255,0.03);}
-#vh-foot-recents .vh-foot-recent:hover{background:rgba(109,201,217,0.10);}
-#vh-foot-recents .vh-foot-recent-slug{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-#vh-foot-recents .vh-foot-recent-ts{opacity:0.45;font-size:9.5px;flex-shrink:0;}
-#vh-foot-recents .vh-foot-recent-copy{background:transparent;border:1px solid rgba(109,201,217,0.35);color:#6dc9d9;border-radius:3px;font-family:inherit;font-size:9.5px;padding:1px 5px;cursor:pointer;letter-spacing:0.04em;}
-#vh-foot-recents .vh-foot-recent-copy:hover{background:rgba(109,201,217,0.18);border-color:#6dc9d9;}
-#vh-foot-recents .vh-foot-recent-copy.copied{color:#9ddb6d;border-color:rgba(157,219,109,0.55);}
 #vh-foot-mics{display:flex;flex-direction:column;gap:4px;padding:4px 10px 6px;width:0;min-width:100%;box-sizing:border-box;}
 .vh-foot-mic{text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
 #vh-foot-styles{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px 10px 6px;}
@@ -4067,11 +4167,6 @@ body.settings-collapsed #vh-build{display:none !important;}
     <a href="/impressum" role="menuitem">Impressum</a>
     <a href="/security" role="menuitem">Security</a>
     <div class="vh-foot-sep"></div>
-    <div class="vh-foot-meta">Recent invites</div>
-    <div id="vh-foot-recents" class="vh-foot-recents">
-      <div class="vh-foot-recents-empty">noch keine — beim ersten Invite hier sichtbar</div>
-    </div>
-    <div class="vh-foot-sep"></div>
     <div class="vh-foot-meta">Mikrofon</div>
     <div id="vh-foot-mics" class="vh-foot-mics"></div>
     <div class="vh-foot-sep"></div>
@@ -4087,6 +4182,8 @@ body.settings-collapsed #vh-build{display:none !important;}
       <button type="button" class="vh-foot-style" data-pal="giraffe" role="menuitem">Giraffe</button>
       <button type="button" class="vh-foot-style" data-pal="leopard" role="menuitem">Leopard</button>
       <button type="button" class="vh-foot-style" data-pal="tiger"   role="menuitem">Tiger</button>
+      <!-- Punkt H: HD-Umschalter des Kringels (lag im seit 2026-05-28 unerreichbaren #fx-ctl) -->
+      <button type="button" class="vh-foot-style" id="vh-foot-hd" role="menuitemcheckbox" aria-checked="true" title="Kringel in voller Auflösung (HD) oder sparsam (SD)">HD</button>
     </div>
     <div class="vh-foot-sep"></div>
     <a href="https://github.com/voicehook-ai" role="menuitem" target="_blank" rel="noopener">GitHub ↗</a>
