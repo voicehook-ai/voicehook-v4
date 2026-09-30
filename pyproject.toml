@@ -12,9 +12,9 @@ dependencies = [
   "fastapi>=0.115",
   "pydantic>=2.7",
   "uvicorn[standard]>=0.30",
-  "livekit-agents>=0.11",
-  "livekit-plugins-deepgram>=0.6",
-  "livekit-plugins-google>=0.6",
+  "livekit-agents==1.8.3",
+  "livekit-plugins-deepgram==1.8.3",
+  "livekit-plugins-google==1.8.3",
 ]
 
 [project.optional-dependencies]
