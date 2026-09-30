@@ -94,7 +94,39 @@ def _room_lock(room: str) -> threading.Lock:
         return _DISPATCH_LOCKS.setdefault(room, threading.Lock())
 
 
+# ----- Gemini-Live-Testmodus ------------------------------------------------
+# Ein eigener Worker (`voice-ai-live`, VOICEHOOK_PIPELINE=live) übernimmt nur
+# Räume, die mit gültigem VOICEHOOK_LIVE_KEY gestartet wurden. Die Zuordnung
+# Raum -> Worker gilt für JEDEN späteren Dispatch (Operator-Join, Invites), damit
+# nie voice-ai und voice-ai-live im selben Raum landen. Ohne Server-Key ist der
+# Modus aus; ein falscher Key fällt still auf den normalen Worker zurück.
+LIVE_AGENT_NAME = os.environ.get("VOICEHOOK_LIVE_AGENT_NAME", "voice-ai-live")
+_ROOM_AGENT: dict[str, str] = {}
+_ROOM_AGENT_MAX = 2000
+
+
+def _live_key_ok(given: str) -> bool:
+    key = os.environ.get("VOICEHOOK_LIVE_KEY", "")
+    return bool(key) and bool(given) and hmac.compare_digest(given, key)
+
+
+def _set_room_agent(room: str, agent_name: str) -> None:
+    if len(_ROOM_AGENT) >= _ROOM_AGENT_MAX:  # alte Einträge verwerfen (Prozess-Speicher)
+        for k in list(_ROOM_AGENT)[: _ROOM_AGENT_MAX // 2]:
+            _ROOM_AGENT.pop(k, None)
+    _ROOM_AGENT[room] = agent_name
+
+
+def _agent_for(room: str, default: str = "voice-ai") -> str:
+    return _ROOM_AGENT.get(room, default)
+
+
 def _ensure_agent_dispatched(room: str, agent_name: str = "voice-ai") -> None:
+    """Dispatch the worker assigned to this room (live rooms -> live worker)."""
+    _dispatch_now(room, _agent_for(room, agent_name))
+
+
+def _dispatch_now(room: str, agent_name: str) -> None:
     """Ensure exactly one `agent_name` worker is dispatched for the room.
 
     Presence-idempotent (#47): under a per-room lock, ListDispatch first and skip
@@ -153,6 +185,8 @@ def _issue(room: str, identity: str, ttl_seconds: int, *, agent_name: str | None
     livekit_url = os.environ.get("LIVEKIT_URL", "wss://rtc.voicehook.ai")
     if not api_key or not api_secret:
         raise HTTPException(status_code=503, detail="server missing LiveKit credentials")
+    if agent_name:
+        agent_name = _agent_for(room, agent_name)  # Live-Räume -> Live-Worker
     token = mint_livekit_token(
         api_key=api_key, api_secret=api_secret,
         room=room, identity=identity, ttl_seconds=ttl_seconds,
@@ -242,6 +276,7 @@ def _host_rate_ok(ip: str) -> bool:
 class HostCallRequest(BaseModel):
     identity: str = Field(..., min_length=1, max_length=200)
     ttl_seconds: int = Field(3600, ge=60, le=86400)
+    live: str = Field("", max_length=200)  # Live-Testmodus-Schlüssel (VOICEHOOK_LIVE_KEY)
 
 
 @app.post("/api/host-call", response_model=TokenResponse)
@@ -251,4 +286,8 @@ def host_call(req: HostCallRequest, request: Request) -> TokenResponse:
     ip = _client_ip(request)
     if not _host_rate_ok(ip):
         raise HTTPException(status_code=429, detail="rate limited — try again later")
-    return _issue(gen_slug(), req.identity, req.ttl_seconds)
+    room = gen_slug()
+    if _live_key_ok(req.live):
+        _set_room_agent(room, LIVE_AGENT_NAME)
+        logger.info("[host-call] live room=%s -> %s", room, LIVE_AGENT_NAME)
+    return _issue(room, req.identity, req.ttl_seconds)

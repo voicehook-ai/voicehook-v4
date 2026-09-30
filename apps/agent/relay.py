@@ -49,6 +49,11 @@ TOPIC_INTERRUPT = "operator.interrupt"
 TOPIC_INJECT = "operator.inject"
 TOPIC_REVISE = "operator.revise"   # agent -> operator: ungesprochene Aussagen zurück
 
+LIVE_SAY_INSTRUCTION = (
+    "Der Operator gibt dir diese Aussage vor. Sag sie jetzt sinngemäß, kurz und "
+    "natürlich auf Deutsch, ohne etwas hinzuzuerfinden: {text}"
+)
+
 HOLD_S = 8.0  # Olli-Regel "Stille ist der Killer, ab 8s ansagen": so lange wartet ein
              # zurückgehaltenes say auf das zusammengefasste overwrite des Brains
 
@@ -146,6 +151,7 @@ def build_relay_handlers(
     *,
     room: Room | None = None,
     hold_s: float = HOLD_S,
+    live: bool = False,
 ) -> RelayHandlers:
     """Build per-topic handler closures bound to a session + agent.
 
@@ -162,11 +168,18 @@ def build_relay_handlers(
     held: dict = {"text": None, "task": None}
 
     def _speak(text: str, seq: object = None) -> None:
-        logger.info("[operator.say] %s", text[:200])
-        _publish_transcript_safe(room, "agent", text)
-        # allow_interruptions=True = full-duplex barge-in: the user can comment
-        # while the mouthpiece is speaking and the STT keeps hearing them.
-        handle = session.say(text, allow_interruptions=True)
+        logger.info("[operator.say]%s %s", " (live)" if live else "", text[:200])
+        if live:
+            # Realtime-Modell hat kein wörtliches TTS: Operator-Text wird Anweisung.
+            # Das tatsächlich Gesprochene publiziert der Worker (conversation_item_added).
+            handle = session.generate_reply(
+                instructions=LIVE_SAY_INSTRUCTION.format(text=text), allow_interruptions=True
+            )
+        else:
+            _publish_transcript_safe(room, "agent", text)
+            # allow_interruptions=True = full-duplex barge-in: the user can comment
+            # while the mouthpiece is speaking and the STT keeps hearing them.
+            handle = session.say(text, allow_interruptions=True)
         pending[:] = [p for p in pending if not _is_done(p[2])]
         if handle is not None:
             pending.append((seq, text, handle))

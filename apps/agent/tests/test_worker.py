@@ -53,3 +53,29 @@ def test_entrypoint_subscribes_to_audio():
     src = _inspect.getsource(entrypoint)
     assert "auto_subscribe=AutoSubscribe.AUDIO_ONLY" in src, \
         "ctx.connect must use AutoSubscribe.AUDIO_ONLY so STT receives audio"
+
+
+# ----- Pipeline-Auswahl: normal (Default) vs. Gemini-Live-Testworker ---------
+def test_build_session_default_is_classic_stt_llm_tts(monkeypatch):
+    import agent.worker as w
+    monkeypatch.delenv("VOICEHOOK_PIPELINE", raising=False)
+    seen = {}
+    monkeypatch.setattr(w, "AgentSession", lambda **kw: seen.update(kw) or "S")
+    monkeypatch.setattr(w, "build_stt", lambda: "STT")
+    monkeypatch.setattr(w, "build_tts", lambda: "TTS")
+    monkeypatch.setattr(w, "build_llm", lambda: "LLM")
+    assert w.build_session() == "S"
+    assert seen == {"stt": "STT", "tts": "TTS", "llm": "LLM"}
+    assert w.is_live() is False
+
+
+def test_build_session_live_uses_realtime_model_only(monkeypatch):
+    import agent.live as live
+    import agent.worker as w
+    monkeypatch.setenv("VOICEHOOK_PIPELINE", "live")
+    seen = {}
+    monkeypatch.setattr(w, "AgentSession", lambda **kw: seen.update(kw) or "S")
+    monkeypatch.setattr(live, "build_live_llm", lambda: "REALTIME")
+    assert w.build_session() == "S"
+    assert seen == {"llm": "REALTIME"}
+    assert w.is_live() is True
