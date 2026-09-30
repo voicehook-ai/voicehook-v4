@@ -3216,7 +3216,7 @@ function vhCostStop() {
 }
 
 function vhWireRoomEvents(room, RoomEvent, Track) {
-  room.on(RoomEvent.Connected, () => { try { vhCostStart(); } catch (_) {} });
+
   // Expose the room so the playback gate (and tests) can observe canPlaybackAudio.
   try { window.lkRoom = room; } catch (_) {}
   // Surface / hide the "Tap to enable sound" affordance as playback toggles.
@@ -3367,13 +3367,9 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
   room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
     vhBumpActivity();
     const from = participant?.identity || '?';
-    if (topic === 'cost') {
-      try {
-        const c = JSON.parse(new TextDecoder().decode(payload));
-        if (typeof c.usd === 'number') { vhCostStart(); vhCost.usd = c.usd; vhCost.mode = c.mode || ''; vhCostRender(); }
-      } catch (_) {}
-      return;
-    }
+    // Kostenanzeige AUS (Olli 30.09.: nur echte Nutzungsdaten oder gar nichts;
+    // der Worker-Wert ist eine Schätzung Menge x Listenpreis). Topic ignorieren.
+    if (topic === 'cost') return;
     if (topic === 'transcript') {
       try {
         const obj = JSON.parse(new TextDecoder().decode(payload));
@@ -3390,6 +3386,9 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
       return;
     }
     if (!topic) return;
+    // Nur Steuernachrichten des Operators gehören ins Transkript; alles andere
+    // (cost, agent.heartbeat, künftige Themen) nie als Zeile anzeigen.
+    if (!/^(operator|senior)\./.test(topic)) return;
     // senior.* control plane events — but skip senior.say (voice-ai re-publishes
     // it as a transcript [SAY]-row which renders prettier with senior-role color).
     // Persona / interrupt / inject have no transcript-echo so we log them here.
