@@ -67,9 +67,15 @@ class RelayAgent(Agent):
         (the pushed knowledge-graph); operator.say overrides substantive content.
       - strict: StopResponse on every turn — the LLM never speaks on its own."""
 
-    def __init__(self, *, instructions: str = "", strict: bool = False, **kwargs) -> None:  # noqa: ANN003
+    def __init__(self, *, instructions: str = "", strict: bool = False, gate=None, **kwargs) -> None:  # noqa: ANN001, ANN003
         super().__init__(instructions=instructions, **kwargs)
         self.strict = strict
+        self.gate = gate  # SpeechGate: nur Sprache geht zur (minutenweise bezahlten) STT
+
+    def stt_node(self, audio, model_settings):  # noqa: ANN001, ANN201
+        if self.gate is not None:
+            audio = self.gate.filter(audio)
+        return Agent.default.stt_node(self, audio, model_settings)
 
     async def on_user_turn_completed(self, *args, **kwargs) -> None:  # noqa: D401, ANN001
         if self.strict:
