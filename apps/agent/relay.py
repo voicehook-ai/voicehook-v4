@@ -49,11 +49,6 @@ TOPIC_INTERRUPT = "operator.interrupt"
 TOPIC_INJECT = "operator.inject"
 TOPIC_REVISE = "operator.revise"   # agent -> operator: ungesprochene Aussagen zurück
 
-LIVE_SAY_INSTRUCTION = (
-    "Der Operator gibt dir diese Aussage vor. Sag sie jetzt sinngemäß, kurz und "
-    "natürlich auf Deutsch, ohne etwas hinzuzuerfinden: {text}"
-)
-
 HOLD_S = 8.0  # Olli-Regel "Stille ist der Killer, ab 8s ansagen": so lange wartet ein
              # zurückgehaltenes say auf das zusammengefasste overwrite des Brains
 
@@ -172,8 +167,12 @@ def build_relay_handlers(
         if live:
             # Realtime-Modell hat kein wörtliches TTS: Operator-Text wird Anweisung.
             # Das tatsächlich Gesprochene publiziert der Worker (conversation_item_added).
+            # als markierter User-Turn (role=user); instructions= würde als
+            # role="model"-Turn ankommen und Gemini hielte es für eigenes Gerede
+            from .live import LIVE_SAY_USER
+
             handle = session.generate_reply(
-                instructions=LIVE_SAY_INSTRUCTION.format(text=text), allow_interruptions=True
+                user_input=LIVE_SAY_USER.format(text=text), allow_interruptions=True
             )
         else:
             _publish_transcript_safe(room, "agent", text)
@@ -281,6 +280,15 @@ def build_relay_handlers(
         data = _decode(packet.data)
         text = (data.get("text") or "").strip()
         if not text:
+            return
+        if live:
+            # Realtime: update_instructions wäre ein model-Turn -> markierter User-Turn
+            from .live import LIVE_PERSONA_USER
+
+            ctx = agent.chat_ctx.copy()
+            ctx.add_message(role="user", content=LIVE_PERSONA_USER.format(text=text))
+            await agent.update_chat_ctx(ctx)
+            logger.info("[operator.persona] (live) %d chars als User-Turn", len(text))
             return
         await agent.update_instructions(text)
         logger.info("[operator.persona] %d chars injected", len(text))
