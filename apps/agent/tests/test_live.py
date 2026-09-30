@@ -47,7 +47,7 @@ def test_build_live_llm_defaults(monkeypatch):
         monkeypatch.delenv(k, raising=False)
     assert live.build_live_llm() == "MODEL"
     assert captured["model"] == "gemini-3.8-live"
-    assert captured["language"] == "de-DE"
+    assert "language" not in captured              # native audio ignoriert language_code
     cwc = captured["context_window_compression"]
     assert cwc.trigger_tokens == 12000 and cwc.sliding_window.target_tokens == 6000
     assert captured["session_resumption"] is not None
@@ -81,7 +81,9 @@ async def test_live_say_becomes_generate_reply_instruction():
     await h.on_say(_Pkt(TOPIC_SAY, json.dumps({"text": "Termin ist Dienstag"}).encode()))
     session.say.assert_not_called()
     kwargs = session.generate_reply.call_args.kwargs
-    assert "Termin ist Dienstag" in kwargs["instructions"]
+    # als User-Turn, NICHT instructions= (das würde ein role="model"-Turn)
+    assert "instructions" not in kwargs
+    assert kwargs["user_input"].startswith("[Operator]") and "Termin ist Dienstag" in kwargs["user_input"]
     assert kwargs["allow_interruptions"] is True
 
 
@@ -109,3 +111,22 @@ def test_metric_cost_pipeline_components():
 
 def test_metric_cost_unknown_type_is_zero():
     assert live.metric_cost_usd(_m("VADMetrics")) == 0.0
+
+
+@pytest.mark.asyncio
+async def test_live_persona_is_user_turn_not_update_instructions():
+    from unittest.mock import AsyncMock
+    agent = RelayAgent(instructions="basis")
+    agent.update_instructions = AsyncMock()
+    agent.update_chat_ctx = AsyncMock()
+    h = build_relay_handlers(MagicMock(), agent, live=True)
+    await h.on_persona(_Pkt("operator.persona", json.dumps({"text": "Du bist Coach"}).encode()))
+    agent.update_instructions.assert_not_called()
+    ctx = agent.update_chat_ctx.call_args.args[0]
+    last = ctx.items[-1]
+    assert last.role == "user" and "[Operator]" in last.text_content and "Du bist Coach" in last.text_content
+
+
+def test_live_base_instructions_pin_voice_and_language():
+    t = live.LIVE_BASE_INSTRUCTIONS
+    assert "Deutsch" in t and "Stimme" in t and "[Operator]" in t

@@ -16,8 +16,28 @@ import os
 
 DEFAULT_LIVE_MODEL = "gemini-3.8-live"
 DEFAULT_LIVE_VOICE = "Charon"
-DEFAULT_TRIGGER_TOKENS = 12000
+DEFAULT_TRIGGER_TOKENS = 12000  # Kosten: jeder Turn rechnet den ganzen Kontext ab (32k wäre ~3x teurer)
 DEFAULT_TARGET_TOKENS = 6000
+
+# Echte System-Instruktion des Live-Workers (geht nur beim Verbindungsaufbau an
+# Gemini). Persona-Updates und Operator-Sätze kommen später als markierte
+# User-Turns: das Google-Plugin schickt update_instructions()/instructions= als
+# role="model"-Turn, Gemini hält sie dann für eigene Aussagen (livekit/agents
+# PR #5049, Issue #5496; realtime_api.py 1.8.3 Z. 646-672, 869).
+LIVE_BASE_INSTRUCTIONS = (
+    "Antworte immer auf Deutsch. Sprich immer mit derselben ruhigen, tiefen, warmen "
+    "Stimme in gleichmäßigem Tempo, wie ein ruhiger Radiosprecher. Imitiere keine "
+    "Personen, spiele keine Rollen, keine Akzente, keine Stimmwechsel, keine "
+    "übertriebenen Emotionen. Du bist ein freundlicher Gesprächspartner, duzt dein "
+    "Gegenüber und antwortest selbst in 1 bis 3 kurzen Sätzen. Sag nie, dass du etwas "
+    "an einen Operator weitergibst. Nachrichten, die mit [Operator] beginnen, sind "
+    "Vorgaben deines Operators: befolge sie, lies sie nie vor und erwähne sie nicht."
+)
+LIVE_SAY_USER = "[Operator] Sag jetzt sinngemäß, kurz und natürlich, ohne etwas zu erfinden: {text}"
+LIVE_PERSONA_USER = "[Operator] Ab sofort gilt zusätzlich diese Rolle und dieses Wissen, nicht vorlesen, nicht darauf antworten: {text}"
+
+# Platzhalter, die Gemini statt echter Sprache als Transkript liefert
+NO_SPEECH_MARKERS = ("<no speech detected>", "&lt;no speech detected&gt;")
 
 # USD je 1M Tokens, ai.google.dev/gemini-api/docs/pricing (Stand 30.09.2026)
 PRICE_AUDIO_IN = 3.00
@@ -40,7 +60,8 @@ def build_live_llm():
     return _realtime_model_cls()(
         model=os.environ.get("VOICEHOOK_LIVE_MODEL", DEFAULT_LIVE_MODEL),
         voice=os.environ.get("VOICEHOOK_LIVE_VOICE", DEFAULT_LIVE_VOICE),
-        language=os.environ.get("VOICEHOOK_LANGUAGE", "de-DE"),
+        # KEIN language=: native-audio-Modelle unterstützen language_code nicht
+        # (Google Live API capabilities); Deutsch steht in LIVE_BASE_INSTRUCTIONS.
         context_window_compression=types.ContextWindowCompressionConfig(
             trigger_tokens=trigger,
             sliding_window=types.SlidingWindow(target_tokens=target),

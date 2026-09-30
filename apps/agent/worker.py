@@ -251,7 +251,12 @@ async def entrypoint(ctx: JobContext) -> None:
 
     live_mode = is_live()
     session = build_session()
-    agent = RelayAgent(instructions=DEFAULT_PERSONA)
+    if live_mode:
+        from .live import LIVE_BASE_INSTRUCTIONS
+
+        agent = RelayAgent(instructions=LIVE_BASE_INSTRUCTIONS)
+    else:
+        agent = RelayAgent(instructions=DEFAULT_PERSONA)
     handlers = build_relay_handlers(session, agent, room=ctx.room, live=live_mode)
     routes = topic_dispatch(handlers)
 
@@ -318,8 +323,10 @@ async def entrypoint(ctx: JobContext) -> None:
             item = getattr(ev, "item", None)
             if getattr(item, "role", None) != "assistant":
                 return
-            text = getattr(item, "text_content", "") or ""
-            if not text:
+            text = (getattr(item, "text_content", "") or "").strip()
+            from .live import NO_SPEECH_MARKERS
+
+            if not text or text in NO_SPEECH_MARKERS:
                 return
             payload = json.dumps({"role": "agent", "text": text}).encode()
 
