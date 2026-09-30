@@ -239,7 +239,7 @@ def build_relay_handlers(
         text = (data.get("text") or "").strip()
         if not text:
             return
-        seq = data.get("seq")
+        seq = data.get("seq", data.get("_seq"))  # CLI taggt _seq
         mode = (data.get("mode") or "revise").strip().lower()
         if mode == "append":
             _speak(text, seq)
