@@ -1,11 +1,11 @@
-"""Server-side auto-greet, heartbeat, backchannel — kill senior-roundtrip lag.
+"""Server-side auto-greet, heartbeat, backchannel — kill operator-roundtrip lag.
 
-voicehook-v3#61: the senior brain previously had to push a greet right after
+voicehook-v3#61: the operator previously had to push a greet right after
 `persona auto-pushed`, an 8s heartbeat during work, and a 3-word backchannel
 when the user spoke >6s. Round-trip CLI lag ate the window. v4 fires these
-server-side; senior brain only pushes substantive replies.
+server-side; operator only pushes substantive replies.
 
-- AutoGreeter         — fires senior.say once when first persona arrives
+- AutoGreeter         — fires operator.say once when first persona arrives
 - HeartbeatPublisher  — emits heartbeat_payload() on TOPIC_HEARTBEAT every 30s
 - BackchannelWatcher  — when user has been speaking >6s and the agent hasn't
                         spoken, auto-fire one of ["mhm","ja","ok"] (cycling)
@@ -44,7 +44,7 @@ class AutoGreeter:
             return
         self._fired = True
         logger.info("[auto-greet] %s", self._greet)
-        self._session.say(self._greet, allow_interruptions=False)
+        self._session.say(self._greet, allow_interruptions=True)
 
     @property
     def fired(self) -> bool:

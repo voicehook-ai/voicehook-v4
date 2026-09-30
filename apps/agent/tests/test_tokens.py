@@ -112,7 +112,7 @@ def test_livekit_token_auto_dispatches_voice_ai_by_default():
 
 
 def test_livekit_token_no_dispatch_when_agent_name_none():
-    """Pass agent_name=None to mint a plain join token (senior brain peer)."""
+    """Pass agent_name=None to mint a plain join token (operator peer)."""
     import json as _j
     tok = mint_livekit_token(
         api_key="K", api_secret="S", room="r", identity="i",

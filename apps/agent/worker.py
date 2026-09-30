@@ -1,7 +1,7 @@
 """LiveKit worker — joins dispatched rooms as `voice-ai`.
 
 PR-5 wires the full mouthpiece: connect → start AgentSession(stt+tts+llm) →
-bind senior.* data-channel handlers → RelayAgent.on_user_turn_completed
+bind operator.* data-channel handlers → RelayAgent.on_user_turn_completed
 raises StopResponse so the model never produces a turn on its own.
 
 Run locally:
@@ -25,7 +25,7 @@ AGENT_NAME = os.environ.get("VOICEHOOK_AGENT_NAME", "voice-ai")
 
 
 async def entrypoint(ctx: JobContext) -> None:
-    """Connect, start the mouthpiece session, bind senior.* handlers."""
+    """Connect, start the mouthpiece session, bind operator.* handlers."""
     # Explicitly subscribe to participant audio so STT always has an input track.
     # Plain ctx.connect() leaves auto-subscribe to the lib default, which has
     # bitten us repeatedly: VAD ("speaking") still fires server-side but the

@@ -1,21 +1,22 @@
-"""senior.* data-channel relay — the agent is a STRICT MOUTHPIECE.
+"""operator.* data-channel relay — knowledge-transfer mouthpiece.
 
-Design (from PLAN-v4.md + voicehook-v3#28):
-- The senior brain (a Claude/external agent) pushes content over the LiveKit
-  data channel. The voice-ai may speak ONLY:
-    1) what `senior.say` delivers (verbatim TTS),
-    2) what is in the injected `senior.persona` (bounded knowledge),
-    3) verbatim web-search quotes (single self-tool, not in PR-5).
-- The agent NEVER auto-generates a reply. RelayAgent.on_user_turn_completed
-  raises StopResponse so the LLM never produces a turn on its own.
+Design (mode B, voicehook-v3#28 + Wissenstransfer):
+- Default: the voice-ai MAY answer simple questions from its persona (the
+  pushed knowledge-graph) — RelayAgent does NOT stop the LLM. For anything
+  substantive/unknown the persona instructs it to defer to the operator, who
+  pushes the verbatim answer via `operator.say`.
+- Strict mode: `operator.mode`={"mode":"strict"} (the CLI's --strict-relay)
+  flips RelayAgent.strict → on_user_turn_completed raises StopResponse, so the
+  LLM never produces a turn on its own (pure mouthpiece).
 
 Topics handled here:
-- senior.say        — TTS the text immediately (priority=interrupt drops the floor)
-- senior.persona    — replace the agent's instructions (live-injected knowledge)
-- senior.interrupt  — drop the current say
-- senior.inject     — synthetic user-turn (test harness; senior brain reads transcript)
+- operator.say        — TTS the text immediately (priority=interrupt drops the floor)
+- operator.persona    — replace the agent's instructions (live-injected knowledge)
+- operator.mode       — switch strict/auto generation ({"mode":"strict"|"auto"})
+- operator.interrupt  — drop the current say
+- operator.inject     — synthetic user-turn (test harness; operator reads transcript)
 
-PR-12 adds: every senior.say also publishes {role:"agent",text:...} on the
+PR-12 adds: every operator.say also publishes {role:"agent",text:...} on the
 `transcript` topic so the browser UI can render it (v3 parity).
 """
 
@@ -35,24 +36,35 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("voicehook.relay")
 
-TOPIC_SAY = "senior.say"
-TOPIC_PERSONA = "senior.persona"
-TOPIC_INTERRUPT = "senior.interrupt"
-TOPIC_INJECT = "senior.inject"
+TOPIC_SAY = "operator.say"
+TOPIC_PERSONA = "operator.persona"
+TOPIC_MODE = "operator.mode"
+TOPIC_INTERRUPT = "operator.interrupt"
+TOPIC_INJECT = "operator.inject"
 
 DEFAULT_PERSONA = (
-    "Du bist die Stimme von voicehook.ai. Du sagst NUR was dir explizit "
-    "via senior.say geschickt wird oder was in deiner persona steht. "
-    "Du erfindest NICHTS. Wenn nicht im Wissen: 'Moment, frag ich Claude'."
+    "Du bist die Stimme von voicehook.ai. Du antwortest aus deinem Kontext "
+    "(was dir der Operator als Persona/Graph gegeben hat). Simple Fragen "
+    "beantwortest du selbst, kurz und praezise. Fuer alles Substantielle, "
+    "Technische oder Unbekannte sagst du 'Moment, ich geb das an den Operator' "
+    "und wartest auf operator.say. Du erfindest NICHTS."
 )
 
 
 class RelayAgent(Agent):
-    """Mouthpiece agent: never generates its own reply, only relays senior.*."""
+    """Mouthpiece with two modes:
+      - auto (default): the LLM answers simple questions from its persona
+        (the pushed knowledge-graph); operator.say overrides substantive content.
+      - strict: StopResponse on every turn — the LLM never speaks on its own."""
+
+    def __init__(self, *, instructions: str = "", strict: bool = False, **kwargs) -> None:  # noqa: ANN003
+        super().__init__(instructions=instructions, **kwargs)
+        self.strict = strict
 
     async def on_user_turn_completed(self, *args, **kwargs) -> None:  # noqa: D401, ANN001
-        # NEVER auto-respond — the senior brain decides what to say.
-        raise StopResponse()
+        if self.strict:
+            raise StopResponse()
+        # auto mode: fall through → the LLM answers from its persona (knowledge transfer).
 
 
 @dataclass
@@ -61,6 +73,7 @@ class RelayHandlers:
 
     on_say: callable
     on_persona: callable
+    on_mode: callable
     on_interrupt: callable
     on_inject: callable
 
@@ -96,7 +109,7 @@ def build_relay_handlers(
 ) -> RelayHandlers:
     """Build per-topic handler closures bound to a session + agent.
 
-    `room` is optional — when passed, every senior.say also publishes a
+    `room` is optional — when passed, every operator.say also publishes a
     {role:"agent",text:...} packet on the `transcript` topic so the browser UI
     can render the agent turn. (v3 parity, PR-12.)
     """
@@ -109,9 +122,11 @@ def build_relay_handlers(
         priority = data.get("priority")
         if priority == "interrupt":
             session.interrupt()
-        logger.info("[senior.say] %s", text[:200])
+        logger.info("[operator.say] %s", text[:200])
         _publish_transcript_safe(room, "agent", text)
-        session.say(text, allow_interruptions=False)
+        # allow_interruptions=True = full-duplex barge-in: the user can comment
+        # while the mouthpiece is speaking and the STT keeps hearing them.
+        session.say(text, allow_interruptions=True)
 
     async def on_persona(packet: DataPacket) -> None:
         data = _decode(packet.data)
@@ -119,10 +134,16 @@ def build_relay_handlers(
         if not text:
             return
         await agent.update_instructions(text)
-        logger.info("[senior.persona] %d chars injected", len(text))
+        logger.info("[operator.persona] %d chars injected", len(text))
+
+    async def on_mode(packet: DataPacket) -> None:
+        data = _decode(packet.data)
+        mode = (data.get("mode") or "").strip().lower()
+        agent.strict = mode == "strict"
+        logger.info("[operator.mode] strict=%s", agent.strict)
 
     async def on_interrupt(_packet: DataPacket) -> None:
-        logger.info("[senior.interrupt]")
+        logger.info("[operator.interrupt]")
         session.interrupt()
 
     async def on_inject(packet: DataPacket) -> None:
@@ -135,16 +156,20 @@ def build_relay_handlers(
         ctx = agent.chat_ctx.copy()
         ctx.add_message(role=data.get("role", "user"), content=text)
         await agent.update_chat_ctx(ctx)
-        logger.info("[senior.inject] %s", text[:200])
+        logger.info("[operator.inject] %s", text[:200])
 
-    return RelayHandlers(on_say=on_say, on_persona=on_persona, on_interrupt=on_interrupt, on_inject=on_inject)
+    return RelayHandlers(
+        on_say=on_say, on_persona=on_persona, on_mode=on_mode,
+        on_interrupt=on_interrupt, on_inject=on_inject,
+    )
 
 
 def topic_dispatch(handlers: RelayHandlers) -> dict[str, callable]:
-    """Map senior.* topic → handler. Used by the worker's data-channel subscription."""
+    """Map operator.* topic → handler. Used by the worker's data-channel subscription."""
     return {
         TOPIC_SAY: handlers.on_say,
         TOPIC_PERSONA: handlers.on_persona,
+        TOPIC_MODE: handlers.on_mode,
         TOPIC_INTERRUPT: handlers.on_interrupt,
         TOPIC_INJECT: handlers.on_inject,
     }

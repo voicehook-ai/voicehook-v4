@@ -41,7 +41,7 @@ def test_auto_greet_fires_once_on_first_persona():
     assert not g.fired
     g.on_persona()
     assert g.fired
-    s.say.assert_called_once_with(DEFAULT_GREET, allow_interruptions=False)
+    s.say.assert_called_once_with(DEFAULT_GREET, allow_interruptions=True)
 
 
 def test_auto_greet_idempotent_across_personas():
@@ -57,7 +57,7 @@ def test_auto_greet_custom_text():
     s = _fake_session()
     g = AutoGreeter(s, greet="Hallo, Marie hier.")
     g.on_persona()
-    s.say.assert_called_once_with("Hallo, Marie hier.", allow_interruptions=False)
+    s.say.assert_called_once_with("Hallo, Marie hier.", allow_interruptions=True)
 
 
 # ---------- HeartbeatPublisher --------------------------------------------

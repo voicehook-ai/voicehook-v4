@@ -1,4 +1,4 @@
-"""senior.* relay tests — handler dispatch + StopResponse discipline."""
+"""operator.* relay tests — handler dispatch + StopResponse discipline."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from agent.relay import (
     DEFAULT_PERSONA,
     TOPIC_INJECT,
     TOPIC_INTERRUPT,
+    TOPIC_MODE,
     TOPIC_PERSONA,
     TOPIC_SAY,
     RelayAgent,
@@ -44,11 +45,29 @@ def _fake_agent() -> RelayAgent:
 
 
 @pytest.mark.asyncio
-async def test_relay_agent_blocks_auto_generation():
-    """on_user_turn_completed must raise StopResponse → no auto-reply ever."""
-    agent = _fake_agent()
+async def test_relay_agent_auto_mode_does_not_stop():
+    """Default (auto) mode: on_user_turn_completed returns normally → the LLM
+    answers from its persona (knowledge transfer)."""
+    agent = _fake_agent()  # strict=False by default
+    await agent.on_user_turn_completed()  # must NOT raise StopResponse
+
+
+@pytest.mark.asyncio
+async def test_relay_agent_strict_mode_raises_stop():
+    """Strict mode: StopResponse → the LLM never speaks on its own."""
+    agent = RelayAgent(instructions="placeholder", strict=True)
     with pytest.raises(StopResponse):
         await agent.on_user_turn_completed()
+
+
+@pytest.mark.asyncio
+async def test_mode_handler_switches_strict():
+    session, agent = _fake_session(), _fake_agent()
+    h = build_relay_handlers(session, agent)
+    await h.on_mode(_pkt(TOPIC_MODE, {"mode": "strict"}))
+    assert agent.strict is True
+    await h.on_mode(_pkt(TOPIC_MODE, {"mode": "auto"}))
+    assert agent.strict is False
 
 
 @pytest.mark.asyncio
@@ -56,13 +75,13 @@ async def test_say_calls_session_say_verbatim():
     session, agent = _fake_session(), _fake_agent()
     h = build_relay_handlers(session, agent)
     await h.on_say(_pkt(TOPIC_SAY, {"text": "Hallo Welt"}))
-    session.say.assert_called_once_with("Hallo Welt", allow_interruptions=False)
+    session.say.assert_called_once_with("Hallo Welt", allow_interruptions=True)
     session.interrupt.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_say_publishes_transcript_when_room_given():
-    """PR-12: senior.say must also publish {role:agent,text} on transcript topic."""
+    """PR-12: operator.say must also publish {role:agent,text} on transcript topic."""
     from unittest.mock import AsyncMock
     session, agent = _fake_session(), _fake_agent()
     room = MagicMock()
@@ -85,7 +104,7 @@ async def test_say_priority_interrupt_drops_floor_then_speaks():
     h = build_relay_handlers(session, agent)
     await h.on_say(_pkt(TOPIC_SAY, {"text": "Stopp", "priority": "interrupt"}))
     session.interrupt.assert_called_once()
-    session.say.assert_called_once_with("Stopp", allow_interruptions=False)
+    session.say.assert_called_once_with("Stopp", allow_interruptions=True)
 
 
 @pytest.mark.asyncio
@@ -123,14 +142,14 @@ async def test_interrupt_drops_current_say():
     session.interrupt.assert_called_once()
 
 
-def test_topic_dispatch_maps_all_four_topics():
+def test_topic_dispatch_maps_all_five_topics():
     session, agent = _fake_session(), _fake_agent()
     h = build_relay_handlers(session, agent)
     routes = topic_dispatch(h)
-    assert set(routes.keys()) == {TOPIC_SAY, TOPIC_PERSONA, TOPIC_INTERRUPT, TOPIC_INJECT}
+    assert set(routes.keys()) == {TOPIC_SAY, TOPIC_PERSONA, TOPIC_MODE, TOPIC_INTERRUPT, TOPIC_INJECT}
 
 
 def test_default_persona_includes_relay_discipline():
-    assert "NUR" in DEFAULT_PERSONA  # mouthpiece rule
-    assert "senior.say" in DEFAULT_PERSONA
-    assert "NICHTS" in DEFAULT_PERSONA  # no invention
+    assert "operator.say" in DEFAULT_PERSONA
+    assert "Operator" in DEFAULT_PERSONA
+    assert "erfindest NICHTS" in DEFAULT_PERSONA  # no invention

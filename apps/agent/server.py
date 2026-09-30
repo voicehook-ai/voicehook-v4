@@ -4,7 +4,7 @@ PR-2 scope: HMAC-gated /api/token mint + /healthz. PR-6 added /status.
 PR-12 adds belt-and-suspenders agent dispatch: on every POST /api/token we
 fire `AgentDispatchService.CreateDispatch` for the room. JWT `roomConfig.agents`
 auto-dispatches on FIRST participant join, but if the room was already created
-by a senior peer (no agents claim), that path is dead — the explicit dispatch
+by a operator peer (no agents claim), that path is dead — the explicit dispatch
 guarantees an agent shows up either way. Idempotent server-side (LK dedups).
 """
 
@@ -16,7 +16,6 @@ import hmac
 import json
 import logging
 import os
-import secrets
 import threading
 import time
 import urllib.error
@@ -26,6 +25,7 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from .health import probe_all
+from .slug import gen_slug
 from .tokens import mint_livekit_token, verify_invite
 
 logger = logging.getLogger("voicehook.server")
@@ -82,7 +82,7 @@ def _lk_admin_jwt(api_key: str, api_secret: str, room: str) -> str:
     return f"{h}.{p}.{sig}"
 
 
-# Per-room locks serialize concurrent ensure-dispatch calls (senior invite=1 +
+# Per-room locks serialize concurrent ensure-dispatch calls (operator invite=1 +
 # user invite-mint can race → two voice-ai workers, #47). The lock makes the
 # list-then-create check atomic within the process.
 _DISPATCH_LOCKS: dict[str, threading.Lock] = {}
@@ -99,7 +99,7 @@ def _ensure_agent_dispatched(room: str, agent_name: str = "voice-ai") -> None:
 
     Presence-idempotent (#47): under a per-room lock, ListDispatch first and skip
     CreateDispatch if a matching dispatch already exists. Plain CreateDispatch is
-    NOT enough — two near-simultaneous callers (senior invite=1 + user invite-mint)
+    NOT enough — two near-simultaneous callers (operator invite=1 + user invite-mint)
     both create before either registers, yielding a double agent."""
     api_key = os.environ.get("LIVEKIT_API_KEY", "")
     api_secret = os.environ.get("LIVEKIT_API_SECRET", "")
@@ -181,13 +181,13 @@ def issue_token_get(
 ) -> TokenResponse:
     """GET-flavor compat for voicehook-agent CLI (v3 protocol).
 
-    The CLI passes `invite=1` for senior peers — a plain join token (no
+    The CLI passes `invite=1` for operator peers — a plain join token (no
     `roomConfig.agents` claim, so the JOIN itself won't dispatch). But the room
     may be agentless (the human entered via a path that never dispatched), and a
-    non-developer senior agent can't be expected to know it must hand-trigger a
+    non-developer operator can't be expected to know it must hand-trigger a
     dispatch (#42). So on every invite=1 join we also fire an explicit, idempotent
     CreateDispatch for voice-ai — LK dedups, so it's a no-op if one is already
-    assigned. Net: any senior join guarantees voice-ai is in the room, automatically.
+    assigned. Net: any operator join guarantees voice-ai is in the room, automatically.
     Otherwise we require a real HMAC invite.
     """
     if invite == "1":
@@ -216,22 +216,9 @@ def issue_token_get(
 # target an existing room → no hijack) and mints directly. Quota-abuse throttling
 # is a stopgap per-IP limit here; the real gate is the free-tier wallet (#17-19).
 
-_HOST_WORDS = [
-    "fresh", "signal", "clear", "drift", "bright", "swift", "calm", "bold",
-    "lucid", "prime", "spark", "vivid", "quiet", "rapid", "solid", "keen",
-    "brisk", "lunar", "solar", "amber", "ivory", "cobalt", "onyx", "ember",
-]
-_HOST_SUFFIX_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 _HOST_HITS: dict[str, list[float]] = {}
 _HOST_LIMIT = 5          # calls
 _HOST_WINDOW = 600       # seconds (per IP)
-
-
-def _gen_slug() -> str:
-    """3 lowercase words + 4-char upper suffix — matches the client SLUG regex."""
-    words = "-".join(secrets.choice(_HOST_WORDS) for _ in range(3))
-    suffix = "".join(secrets.choice(_HOST_SUFFIX_ALPHABET) for _ in range(4))
-    return f"{words}-{suffix}"
 
 
 def _client_ip(request: Request) -> str:
@@ -264,4 +251,4 @@ def host_call(req: HostCallRequest, request: Request) -> TokenResponse:
     ip = _client_ip(request)
     if not _host_rate_ok(ip):
         raise HTTPException(status_code=429, detail="rate limited — try again later")
-    return _issue(_gen_slug(), req.identity, req.ttl_seconds)
+    return _issue(gen_slug(), req.identity, req.ttl_seconds)

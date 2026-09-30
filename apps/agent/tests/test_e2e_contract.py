@@ -4,8 +4,8 @@ The cutover gate (PLAN-v4.md): real audio→transcript→reply requires a live L
 + Deepgram + Google + Gemini, which isn't free per CI run. This test exercises
 the END-TO-END SHAPE deterministically:
 
-    invite mint  →  /api/token (HMAC gate) → LK JWT  →  RelayAgent (StopResponse)
-                 →  senior.say arrives    →  session.say(text, no-interrupt)
+    invite mint  →  /api/token (HMAC gate) → LK JWT  →  RelayAgent (auto+strict modes)
+                  →  operator.say arrives    →  session.say(text, barge-in)
                  →  AutoGreeter fires on first persona, idempotent after
                  →  HeartbeatPublisher → agent.heartbeat (NOT transcript)
                  →  BackchannelWatcher → "mhm" cycling, allow_interruptions=True
@@ -75,12 +75,14 @@ async def test_full_pipeline_join_to_speak():
     r2 = client.post("/api/token", json={"room": room, "identity": "stranger", "invite": "x"})
     assert r2.status_code == 403
 
-    # 3) RelayAgent enforces StopResponse — never auto-generates
+    # 3) RelayAgent: auto mode answers from persona; strict mode stops
     agent = RelayAgent(instructions="placeholder")
+    await agent.on_user_turn_completed()  # auto → no StopResponse
+    strict = RelayAgent(instructions="placeholder", strict=True)
     with pytest.raises(StopResponse):
-        await agent.on_user_turn_completed()
+        await strict.on_user_turn_completed()
 
-    # 4) senior.say → session.say(verbatim, no interruptions)
+    # 4) operator.say → session.say(verbatim, barge-in enabled)
     session = MagicMock()
     session.say = MagicMock()
     session.interrupt = MagicMock()
@@ -89,13 +91,13 @@ async def test_full_pipeline_join_to_speak():
 
     say_packet = MagicMock()
     say_packet.data = b'{"text": "Hallo Olli, Claude hier."}'
-    await routes["senior.say"](say_packet)
-    session.say.assert_called_once_with("Hallo Olli, Claude hier.", allow_interruptions=False)
+    await routes["operator.say"](say_packet)
+    session.say.assert_called_once_with("Hallo Olli, Claude hier.", allow_interruptions=True)
 
-    # 5) senior.persona → live instruction injection
+    # 5) operator.persona → live instruction injection
     persona_packet = MagicMock()
     persona_packet.data = b'{"text": "Du bist die Stimme von Olli."}'
-    await routes["senior.persona"](persona_packet)
+    await routes["operator.persona"](persona_packet)
     assert agent.instructions == "Du bist die Stimme von Olli."
 
     # 6) AutoGreeter fires once on first persona-equivalent, idempotent after
