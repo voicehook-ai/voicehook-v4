@@ -97,11 +97,12 @@ def _room_lock(room: str) -> threading.Lock:
 
 # ----- Gemini-Live-Testmodus ------------------------------------------------
 # Ein eigener Worker (`voice-ai-live`, VOICEHOOK_PIPELINE=live) übernimmt nur
-# Räume, die ein Admin über POST /api/admin/live-room anlegt (Schlüssel im
-# Authorization-Header, NIE in einer URL). Zurück kommt ein normaler, raum-
+# Räume, die über POST /api/admin/live-room (Schlüssel im
+# Authorization-Header, NIE in einer URL) oder öffentlich über POST /api/live-room
+# (Demo, siehe unten) angelegt werden. Zurück kommt ein normaler, raum-
 # gebundener und ablaufender Einladungslink. Die Zuordnung Raum -> Worker gilt
 # für JEDEN späteren Dispatch (Operator-Join, Invites): nie zwei Agents im Raum.
-# Ohne VOICEHOOK_LIVE_KEY auf dem Server ist der Endpunkt aus (404).
+# Ohne VOICEHOOK_LIVE_KEY auf dem Server ist der Admin-Endpunkt aus (404).
 LIVE_AGENT_NAME = os.environ.get("VOICEHOOK_LIVE_AGENT_NAME", "voice-ai-live")
 _ROOM_AGENT: dict[str, str] = {}
 _ROOM_AGENT_MAX = 2000
@@ -370,3 +371,68 @@ def admin_live_room(req: LiveRoomRequest, request: Request) -> LiveRoomResponse:
     base = os.environ.get("VOICEHOOK_PUBLIC_URL", "https://voicehook.ai").rstrip("/")
     logger.info("[admin] live room=%s -> %s (ttl %ss)", room, LIVE_AGENT_NAME, req.ttl_seconds)
     return LiveRoomResponse(room=room, url=f"{base}/r/{room}?invite={invite}", expires_in=req.ttl_seconds)
+
+
+# ----- Live-Modus öffentlich (Demo, Oliver 30.09.) -------------------------
+# "testweise für alle verfügbar ... für Demo erst mal für alle frei": jeder darf
+# ohne Schlüssel einen Live-Raum starten. Schutz bis Login+Guthaben kommen:
+# dasselbe IP-Ratenlimit wie /api/host-call (gemeinsamer Zähler) und die
+# Monatsbudget-Sperre (budget.exhausted() -> 402). Schalter VOICEHOOK_LIVE_PUBLIC
+# (Default an; 0/false/off/no = aus -> 404). Der Admin-Endpunkt bleibt davon unberührt.
+# Nach außen gehen nie Beträge, nur verfügbar ja/nein.
+
+def _live_public_on() -> bool:
+    v = os.environ.get("VOICEHOOK_LIVE_PUBLIC", "1").strip().lower()
+    return v not in {"0", "false", "off", "no", "aus"}
+
+
+def _live_configured() -> bool:
+    """Server hat alles, was ein Live-Raum braucht: Worker-Name, LiveKit-Zugang und
+    einen Google-Zugang für Gemini Live (Worker liest dieselbe /opt/voicehook/.env).
+    Ob der Dienst voice-ai-live gerade läuft, sieht der HTTP-Server nicht."""
+    return bool(
+        LIVE_AGENT_NAME.strip()
+        and os.environ.get("LIVEKIT_API_KEY")
+        and os.environ.get("LIVEKIT_API_SECRET")
+        and (os.environ.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
+    )
+
+
+def _live_available() -> bool:
+    return _live_public_on() and _live_configured() and not budget.exhausted()
+
+
+@app.get("/api/live/status")
+def live_status() -> dict[str, bool]:
+    """Darf die Oberfläche den Live-Schalter anbieten? Immer 200, nie Beträge."""
+    return {"available": _live_available()}
+
+
+class PublicLiveRoomResponse(TokenResponse):
+    invite_url: str
+    expires_in: int
+    agent: str
+
+
+@app.post("/api/live-room", response_model=PublicLiveRoomResponse)
+def public_live_room(req: HostCallRequest, request: Request) -> PublicLiveRoomResponse:
+    """Wie /api/host-call, aber der neue Raum gehört dem Live-Worker. Antwort =
+    host-call-Format (token/url/room/identity) plus Einladungslink für Mitspieler."""
+    if not _live_public_on():
+        raise HTTPException(status_code=404, detail="not found")
+    if not _live_configured():
+        raise HTTPException(status_code=503, detail="live mode not available")
+    if budget.exhausted():
+        raise HTTPException(status_code=402, detail="live mode is used up for this month")
+    if not _host_rate_ok(_client_ip(request)):
+        raise HTTPException(status_code=429, detail="rate limited, try again later")
+    room = gen_slug()
+    _set_room_agent(room, LIVE_AGENT_NAME)
+    tok = _issue(room, req.identity, req.ttl_seconds)  # _agent_for -> Live-Worker
+    invite = mint_invite(room, req.ttl_seconds)
+    base = os.environ.get("VOICEHOOK_PUBLIC_URL", "https://voicehook.ai").rstrip("/")
+    logger.info("[live] public room=%s -> %s (ttl %ss)", room, LIVE_AGENT_NAME, req.ttl_seconds)
+    return PublicLiveRoomResponse(
+        **tok.model_dump(), invite_url=f"{base}/r/{room}?invite={invite}",
+        expires_in=req.ttl_seconds, agent=LIVE_AGENT_NAME,
+    )

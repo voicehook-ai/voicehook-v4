@@ -83,7 +83,29 @@ arbeitet der Worker `voice-ai-live` (Gemini 3.8 Live, 20-Min-Deckel), kein `voic
 
 **Monatsbudget (Sperre):** Der Live-Worker bucht die Kosten jeder Antwort (Token-Zahlen × Preise
 aus `apps/agent/live.py`) in `/opt/voicehook/state/live-budget.json` (ein Zähler je UTC-Monat).
-Ist `VOICEHOOK_LIVE_BUDGET_USD_MONTH` (Default 10) erreicht, antwortet `/api/admin/live-room`
-mit 402, ein laufender Live-Call wird mit Ansage beendet und neue Live-Jobs starten nicht.
+Ist `VOICEHOOK_LIVE_BUDGET_USD_MONTH` (Default 10) erreicht, antworten `/api/admin/live-room`
+und `/api/live-room` mit 402, `/api/live/status` meldet `available: false`, ein laufender Live-Call wird mit Ansage beendet und neue Live-Jobs starten nicht.
 Unlesbares Ledger oder ungültiger Wert = gesperrt (fail-closed). Stand prüfen:
 `ssh root@voicehook.ai cat /opt/voicehook/state/live-budget.json`.
+
+## Live-Modus öffentlich (Demo)
+
+Seit 30.09. darf jeder ohne Schlüssel einen Live-Raum starten (später Login + Guthaben).
+Schalter `VOICEHOOK_LIVE_PUBLIC` in `/opt/voicehook/.env`: Default an, `0`/`false`/`off`/`no`
+schaltet ab (dann 404, Status `available: false`). Der Admin-Endpunkt oben ist davon unberührt.
+
+```bash
+curl -s https://voicehook.ai/api/live/status
+# -> {"available": true}   (false: Budget weg, Schalter aus oder Live nicht konfiguriert; nie Beträge)
+
+curl -s -X POST https://voicehook.ai/api/live-room \
+  -H 'content-type: application/json' -d '{"identity": "host-abc123"}'
+# -> {"token": "<LK-JWT>", "url": "wss://rtc.voicehook.ai", "room": "<slug>", "identity": "host-abc123",
+#     "invite_url": "https://voicehook.ai/r/<slug>?invite=<hmac>", "expires_in": 3600, "agent": "voice-ai-live"}
+```
+
+Antwort = Format von `/api/host-call` plus `invite_url`/`expires_in`/`agent`. Schutz: dasselbe
+IP-Ratenlimit wie `/api/host-call` (gemeinsamer Zähler, 5 Starts je 10 Min und IP, sonst 429) und
+die Monatsbudget-Sperre (402). "Konfiguriert" heißt: LiveKit-Zugang und `GOOGLE_API_KEY` oder
+`GOOGLE_APPLICATION_CREDENTIALS` gesetzt (sonst 503); ob der Dienst `voicehook-agent-live` läuft,
+sieht der HTTP-Server nicht (`systemctl is-active voicehook-agent-live`).
