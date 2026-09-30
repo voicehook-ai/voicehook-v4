@@ -2841,6 +2841,7 @@ async function vhStartCall() {
 
 function vhEndCall(fromEvent) {
   try { vhHideSoundGate(); } catch (_) {}
+  try { vhCostStop(); } catch (_) {}
   try { window.lkRoom = null; } catch (_) {}
   try { if (lkAudioEl) { lkAudioEl.remove(); lkAudioEl = null; } } catch (_) {}
   try { if (lkAudioCtx) { lkAudioCtx.close(); lkAudioCtx = null; } } catch (_) {}
@@ -3186,7 +3187,32 @@ async function vhStartRoomAudio(room) {
 }
 
 // Wire LiveKit room events that feed the transcript (works for both modes).
+// ── Kostenanzeige im laufenden Call ──────────────────────────────────────────
+// Der Worker schickt auf Topic `cost` die aufgelaufenen Kosten ({usd, mode});
+// der Untertitel unter dem Call-Button zeigt im Call "≈ 0.012 $ · 2:31".
+const vhTagline = document.getElementById('tagline');
+const VH_TAGLINE_TEXT = vhTagline ? vhTagline.textContent : '';
+let vhCost = { usd: 0, start: 0, timer: null, mode: '' };
+function vhCostRender() {
+  if (!vhTagline || !vhCost.start) return;
+  const s = Math.max(0, Math.floor((Date.now() - vhCost.start) / 1000));
+  const t = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  vhTagline.textContent = '≈ ' + vhCost.usd.toFixed(3) + ' $ · ' + t + (vhCost.mode === 'live' ? ' · live' : '');
+  vhTagline.title = 'Geschätzte Kosten dieses Calls (Listenpreise, Sprachdienste)';
+}
+function vhCostStart() {
+  if (vhCost.timer) return;
+  vhCost = { usd: 0, start: Date.now(), timer: setInterval(vhCostRender, 1000), mode: '' };
+  vhCostRender();
+}
+function vhCostStop() {
+  if (vhCost.timer) clearInterval(vhCost.timer);
+  vhCost = { usd: 0, start: 0, timer: null, mode: '' };
+  if (vhTagline) { vhTagline.textContent = VH_TAGLINE_TEXT; vhTagline.title = ''; }
+}
+
 function vhWireRoomEvents(room, RoomEvent, Track) {
+  room.on(RoomEvent.Connected, () => { try { vhCostStart(); } catch (_) {} });
   // Expose the room so the playback gate (and tests) can observe canPlaybackAudio.
   try { window.lkRoom = room; } catch (_) {}
   // Surface / hide the "Tap to enable sound" affordance as playback toggles.
@@ -3337,6 +3363,13 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
   room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
     vhBumpActivity();
     const from = participant?.identity || '?';
+    if (topic === 'cost') {
+      try {
+        const c = JSON.parse(new TextDecoder().decode(payload));
+        if (typeof c.usd === 'number') { vhCostStart(); vhCost.usd = c.usd; vhCost.mode = c.mode || ''; vhCostRender(); }
+      } catch (_) {}
+      return;
+    }
     if (topic === 'transcript') {
       try {
         const obj = JSON.parse(new TextDecoder().decode(payload));

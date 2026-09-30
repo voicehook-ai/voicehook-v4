@@ -94,3 +94,18 @@ async def test_live_say_does_not_publish_operator_text_as_agent_transcript():
     # im Live-Modus formuliert Gemini selbst; das echte Gesprochene kommt über
     # conversation_item_added, nicht der Operator-Text
     room.local_participant.publish_data.assert_not_called()
+
+
+def _m(kind, **kw):
+    return type(kind, (), kw)()
+
+
+def test_metric_cost_pipeline_components():
+    assert live.metric_cost_usd(_m("STTMetrics", audio_duration=60.0)) == pytest.approx(0.0077)
+    assert live.metric_cost_usd(_m("TTSMetrics", characters_count=1_000_000)) == pytest.approx(30.0)
+    assert live.metric_cost_usd(_m("LLMMetrics", prompt_tokens=1_000_000, completion_tokens=0)) == pytest.approx(0.30)
+    assert live.metric_cost_usd(_m("LLMMetrics", prompt_tokens=0, completion_tokens=1_000_000)) == pytest.approx(2.50)
+
+
+def test_metric_cost_unknown_type_is_zero():
+    assert live.metric_cost_usd(_m("VADMetrics")) == 0.0

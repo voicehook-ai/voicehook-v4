@@ -278,25 +278,39 @@ async def entrypoint(ctx: JobContext) -> None:
                 logger.warning("[user-transcript publish] %s", e)
         asyncio.create_task(_send())
 
-    if live_mode:
-        from .live import live_cost_usd
+    # Laufende Kosten (beide Modi) -> Log + Topic `cost` für die Anzeige im Browser
+    from .live import metric_cost_usd
 
-        totals = {"usd": 0.0, "turns": 0}
+    totals = {"usd": 0.0, "turns": 0, "sent_at": 0.0}
 
-        # Kosten je Turn messen (Live API rechnet den ganzen Kontext pro Turn ab)
-        @session.on("metrics_collected")
-        def _on_metrics(ev) -> None:  # noqa: ANN001
-            m = getattr(ev, "metrics", None)
-            if type(m).__name__ != "RealtimeModelMetrics":
-                return
-            usd = live_cost_usd(m)
-            totals["usd"] += usd
+    @session.on("metrics_collected")
+    def _on_metrics(ev) -> None:  # noqa: ANN001
+        m = getattr(ev, "metrics", None)
+        usd = metric_cost_usd(m)
+        if usd <= 0:
+            return
+        totals["usd"] += usd
+        if type(m).__name__ == "RealtimeModelMetrics":
             totals["turns"] += 1
             logger.info(
                 "[live-cost] room=%s turn=%d in=%d out=%d usd=%.5f total_usd=%.4f",
                 ctx.room.name, totals["turns"], getattr(m, "input_tokens", 0),
                 getattr(m, "output_tokens", 0), usd, totals["usd"],
             )
+        now = time.monotonic()
+        if now - totals["sent_at"] < 2.0:  # höchstens alle 2 s an den Browser
+            return
+        totals["sent_at"] = now
+        payload = json.dumps({"usd": round(totals["usd"], 5), "mode": "live" if live_mode else "pipeline"}).encode()
+
+        async def _send_cost() -> None:
+            try:
+                await ctx.room.local_participant.publish_data(payload=payload, topic="cost")
+            except Exception as e:  # noqa: BLE001
+                logger.debug("[cost publish] %s", e)
+        asyncio.create_task(_send_cost())
+
+    if live_mode:
 
         # Was Gemini tatsächlich gesagt hat -> Browser-Transkript (+ Operator liest mit)
         @session.on("conversation_item_added")
