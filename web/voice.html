@@ -3390,6 +3390,9 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
       return;
     }
     if (!topic) return;
+    // Nur Steuernachrichten des Operators gehören ins Transkript; alles andere
+    // (cost, agent.heartbeat, künftige Themen) nie als Zeile anzeigen.
+    if (!/^(operator|senior)\./.test(topic)) return;
     // senior.* control plane events — but skip senior.say (voice-ai re-publishes
     // it as a transcript [SAY]-row which renders prettier with senior-role color).
     // Persona / interrupt / inject have no transcript-echo so we log them here.

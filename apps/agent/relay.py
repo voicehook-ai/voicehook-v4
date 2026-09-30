@@ -175,7 +175,8 @@ def build_relay_handlers(
                 user_input=LIVE_SAY_USER.format(text=text), allow_interruptions=True
             )
         else:
-            _publish_transcript_safe(room, "agent", text)
+            # Transkript kommt vom Worker (conversation_item_added) mit dem tatsächlich
+            # Gesprochenen, auch für Eigenantworten; hier nicht doppelt senden.
             # allow_interruptions=True = full-duplex barge-in: the user can comment
             # while the mouthpiece is speaking and the STT keeps hearing them.
             handle = session.say(text, allow_interruptions=True)
@@ -264,8 +265,12 @@ def build_relay_handlers(
             return
         # Default revise
         _drop_hold()
+        if data.get("priority") == "interrupt":
+            _stop_session()          # nur ausdrücklich: laufende Ausgabe abbrechen
         if not any(not _is_done(p[2]) for p in pending):
-            _stop_session()          # auch eine laufende Eigenantwort (auto mode) stoppen
+            # Nichts Eigenes offen: einreihen. Eine laufende Eigenantwort des Agents
+            # (auto mode) spricht zu Ende, der Operator fällt ihm nicht ins Wort
+            # (Olli 30.09.: "Operator say fällt ihm ins Wort").
             _speak(text, seq)
             return
         unspoken = await _cancel_open()
