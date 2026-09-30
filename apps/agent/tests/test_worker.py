@@ -114,3 +114,92 @@ def test_live_worker_books_cost_and_ends_call_at_budget():
     src = _inspect.getsource(w.entrypoint)
     assert "budget.add_usd(usd)" in src
     assert '"live_budget"' in src
+
+
+# ----- Kostenmeldung: nur bei geänderter Summe, mit Basis; Budget unverändert ----
+class _Emitter:
+    def __init__(self):
+        self.handlers = {}
+
+    def on(self, event, fn=None):
+        if fn is None:
+            return lambda f: self.on(event, f)
+        self.handlers.setdefault(event, []).append(fn)
+        return fn
+
+    def emit(self, event, ev):
+        for fn in self.handlers.get(event, []):
+            fn(ev)
+
+
+def _run_entrypoint_with_metrics(monkeypatch, *, live_mode, metrics):
+    """Treibt entrypoint mit Fake-Raum/Session und liefert die gesendeten cost-Payloads."""
+    import asyncio
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    import agent.worker as w
+
+    if live_mode:
+        monkeypatch.setenv("VOICEHOOK_PIPELINE", "live")
+    else:
+        monkeypatch.delenv("VOICEHOOK_PIPELINE", raising=False)
+        monkeypatch.setenv("VOICEHOOK_STT_GATE", "0")
+    session = _Emitter()
+    session.start = AsyncMock()
+    session.aclose = AsyncMock()
+    monkeypatch.setattr(w, "build_session", lambda: session)
+    room = _Emitter()
+    room.name = "r1"
+    room.remote_participants = {}
+    room.local_participant = SimpleNamespace(identity="voice-ai", publish_data=AsyncMock())
+    ctx = SimpleNamespace(connect=AsyncMock(), room=room, job=SimpleNamespace(id="j1"),
+                          shutdown=MagicMock(), delete_room=AsyncMock())
+
+    async def _go():
+        await w.entrypoint(ctx)
+        for m in metrics:
+            session.emit("metrics_collected", SimpleNamespace(metrics=m))
+            await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+    asyncio.run(_go())
+    return [json.loads(c.kwargs["payload"]) for c in room.local_participant.publish_data.call_args_list
+            if c.kwargs.get("topic") == "cost"]
+
+
+def _metric(kind, **kw):
+    return type(kind, (), kw)()
+
+
+def test_cost_topic_sends_basis_and_only_on_change(monkeypatch):
+    sent = _run_entrypoint_with_metrics(monkeypatch, live_mode=False, metrics=[
+        _metric("TTSMetrics", characters_count=100),
+        _metric("VADMetrics"),                              # kein Betrag -> keine Meldung
+        _metric("TTSMetrics", characters_count=0),          # Betrag 0 -> keine Meldung
+        _metric("STTMetrics", audio_duration=60.0),
+    ])
+    assert len(sent) == 2                                   # Positivkontrolle: echte Änderungen kommen an
+    assert sent[0] == {"usd": 0.003, "mode": "pipeline", "basis": {"tts_chars": 100},
+                       "prices_as_of": "2026-09-30"}
+    assert sent[1]["usd"] == 0.0107
+    assert sent[1]["basis"] == {"tts_chars": 100, "stt_audio_s": 60.0}
+
+
+def test_cost_topic_silent_without_metrics(monkeypatch):
+    assert _run_entrypoint_with_metrics(monkeypatch, live_mode=False, metrics=[]) == []
+
+
+def test_live_cost_still_booked_into_month_budget(monkeypatch):
+    from agent import budget
+
+    rt = _metric("RealtimeModelMetrics", input_tokens=1000, output_tokens=500,
+                 input_token_details=None, output_token_details=None)
+    sent = _run_entrypoint_with_metrics(monkeypatch, live_mode=True, metrics=[rt])
+    expected = (1000 * 3.00 + 500 * 12.00) / 1e6
+    assert budget.spent_usd() == __import__("pytest").approx(expected)
+    assert sent == [{"usd": round(expected, 5), "mode": "live",
+                     "basis": {"rt_audio_in_tokens": 1000, "rt_audio_out_tokens": 500,
+                               "rt_text_in_tokens": 0, "rt_text_out_tokens": 0},
+                     "prices_as_of": "2026-09-30"}]

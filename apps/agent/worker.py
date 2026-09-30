@@ -293,19 +293,21 @@ async def entrypoint(ctx: JobContext) -> None:
                 logger.warning("[user-transcript publish] %s", e)
         asyncio.create_task(_send())
 
-    # Laufende Kosten (beide Modi) -> Log + Topic `cost` für die Anzeige im Browser
-    from .live import metric_cost_usd
+    # Laufende Kosten (beide Modi) -> Log + Topic `cost` für die Anzeige im Browser.
+    # Gemessene Menge x geprüfter Preis, Basis offengelegt; gesendet wird nur, wenn
+    # sich die Summe geändert hat (kein Takt, Stille erzeugt keine Meldung).
+    from .live import CostMeter
 
-    totals = {"usd": 0.0, "turns": 0, "sent_at": 0.0}
+    meter = CostMeter("live" if live_mode else "pipeline")
+    turns = [0]
     guard_ref: list[CallGuard] = []  # wird unten gesetzt; Budget-Ende braucht den Guard
 
     @session.on("metrics_collected")
     def _on_metrics(ev) -> None:  # noqa: ANN001
         m = getattr(ev, "metrics", None)
-        usd = metric_cost_usd(m)
+        usd = meter.add(m)
         if usd <= 0:
             return
-        totals["usd"] += usd
         if live_mode:
             month = budget.add_usd(usd)
             if month >= budget.limit_usd() and guard_ref:
@@ -314,17 +316,16 @@ async def entrypoint(ctx: JobContext) -> None:
                     guard_ref[0].end("live_budget", delete_room=False, announce=LIVE_BUDGET_ANNOUNCEMENT)
                 )
         if type(m).__name__ == "RealtimeModelMetrics":
-            totals["turns"] += 1
+            turns[0] += 1
             logger.info(
                 "[live-cost] room=%s turn=%d in=%d out=%d usd=%.5f total_usd=%.4f",
-                ctx.room.name, totals["turns"], getattr(m, "input_tokens", 0),
-                getattr(m, "output_tokens", 0), usd, totals["usd"],
+                ctx.room.name, turns[0], getattr(m, "input_tokens", 0),
+                getattr(m, "output_tokens", 0), usd, meter.usd,
             )
-        now = time.monotonic()
-        if now - totals["sent_at"] < 2.0:  # höchstens alle 2 s an den Browser
+        update = meter.take_update()
+        if update is None:
             return
-        totals["sent_at"] = now
-        payload = json.dumps({"usd": round(totals["usd"], 5), "mode": "live" if live_mode else "pipeline"}).encode()
+        payload = json.dumps(update).encode()
 
         async def _send_cost() -> None:
             try:

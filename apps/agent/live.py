@@ -39,7 +39,12 @@ LIVE_PERSONA_USER = "[Operator] Ab sofort gilt zusätzlich diese Rolle und diese
 # Platzhalter, die Gemini statt echter Sprache als Transkript liefert
 NO_SPEECH_MARKERS = ("<no speech detected>", "&lt;no speech detected&gt;")
 
-# USD je 1M Tokens, ai.google.dev/gemini-api/docs/pricing (Stand 30.09.2026)
+# Stand aller Preise in dieser Datei (live auf den offiziellen Preisseiten geprüft)
+PRICES_AS_OF = "2026-09-30"
+
+# USD je 1M Tokens, Gemini 3.8 Live, Standard Paid Tier:
+# https://ai.google.dev/gemini-api/docs/pricing (geprüft 30.09.2026)
+# Input 0,75 Text / 3,00 Audio; Output 4,50 Text / 12,00 Audio
 PRICE_AUDIO_IN = 3.00
 PRICE_TEXT_IN = 0.75
 PRICE_AUDIO_OUT = 12.00
@@ -97,9 +102,15 @@ def live_cost_usd(m) -> float:
 
 
 # ---- Kostenanzeige im laufenden Call (beide Modi) ---------------------------
-# Listenpreise USD (Stand 30.09.2026): Deepgram nova-3 Streaming regulär 0,0077 $/min
-# (Aktion 0,0048, konservativ der reguläre), Google Chirp3-HD 30 $/1M Zeichen,
-# gemini-2.5-flash 0,30 / 2,50 $ je 1M Tokens. Live: live_cost_usd().
+# Preise USD, alle geprüft am 30.09.2026:
+# - Deepgram nova-3 Streaming Monolingual (Default language "de"), Pay As You Go:
+#   regulär 0,0077 $/min, derzeit Aktion 0,0048 $/min; konservativ der reguläre.
+#   https://deepgram.com/pricing
+# - Google Cloud TTS Chirp 3: HD, 0,00003 $/Zeichen (30 $ je 1M Zeichen):
+#   https://cloud.google.com/text-to-speech/pricing
+# - gemini-2.5-flash Standard Paid Tier, Input Text 0,30 $, Output 2,50 $ je 1M Tokens:
+#   https://ai.google.dev/gemini-api/docs/pricing
+# Live: live_cost_usd().
 PRICE_STT_PER_S = 0.0077 / 60
 PRICE_TTS_PER_CHAR = 30.0 / 1_000_000
 PRICE_LLM_IN = 0.30 / 1_000_000
@@ -119,3 +130,80 @@ def metric_cost_usd(m) -> float:
         return (int(getattr(m, "prompt_tokens", 0) or 0) * PRICE_LLM_IN
                 + int(getattr(m, "completion_tokens", 0) or 0) * PRICE_LLM_OUT)
     return 0.0
+
+
+# ---- Laufende Summe mit offengelegter Basis ---------------------------------
+# Kosten = gemessene Menge aus den Metriken x geprüfter Preis. Die Basis nennt nur
+# Mengen, die tatsächlich aus einer Metrik stammen: ein Feld erscheint erst, wenn
+# eine Metrik dieses Typs eingegangen ist (Pipeline zeigt nie rt_*, Live nie stt_*).
+_BASIS_FIELDS = {
+    "STTMetrics": ("stt_audio_s",),
+    "TTSMetrics": ("tts_chars",),
+    "LLMMetrics": ("llm_in_tokens", "llm_out_tokens"),
+    "RealtimeModelMetrics": (
+        "rt_audio_in_tokens", "rt_audio_out_tokens", "rt_text_in_tokens", "rt_text_out_tokens",
+    ),
+}
+
+
+def metric_basis(m) -> dict[str, float]:
+    """Abgerechnete Mengen eines metrics_collected-Eintrags ({} für unbekannte Typen).
+
+    rt_audio_in_tokens ist wie in live_cost_usd() alles Input außer Text (inkl.
+    gecachter/unaufgeschlüsselter Tokens), damit Basis und Summe dieselbe Rechnung sind.
+    """
+    kind = type(m).__name__
+    if kind == "RealtimeModelMetrics":
+        ind, outd = getattr(m, "input_token_details", None), getattr(m, "output_token_details", None)
+        text_in, text_out = _n(ind, "text_tokens"), _n(outd, "text_tokens")
+        return {
+            "rt_audio_in_tokens": _n(m, "input_tokens") - text_in,
+            "rt_audio_out_tokens": _n(m, "output_tokens") - text_out,
+            "rt_text_in_tokens": text_in,
+            "rt_text_out_tokens": text_out,
+        }
+    if kind == "STTMetrics":
+        return {"stt_audio_s": float(getattr(m, "audio_duration", 0) or 0)}
+    if kind == "TTSMetrics":
+        return {"tts_chars": int(getattr(m, "characters_count", 0) or 0)}
+    if kind == "LLMMetrics":
+        return {
+            "llm_in_tokens": int(getattr(m, "prompt_tokens", 0) or 0),
+            "llm_out_tokens": int(getattr(m, "completion_tokens", 0) or 0),
+        }
+    return {}
+
+
+class CostMeter:
+    """Summiert Kosten und Basis eines Calls; meldet nur bei geänderter Summe.
+
+    Kein Takt: take_update() liefert nur dann eine Meldung, wenn sich der gerundete
+    USD-Betrag seit der letzten Meldung geändert hat. Stille ohne Metriken erzeugt
+    also nie eine Meldung.
+    """
+
+    def __init__(self, mode: str) -> None:
+        self.mode = mode
+        self.usd = 0.0
+        self.basis: dict[str, float] = {}
+        self._sent_usd = 0.0  # 0 USD wird nie gemeldet
+
+    def add(self, m) -> float:
+        """Metrik verbuchen; gibt die Kosten genau dieser Metrik zurück."""
+        usd = metric_cost_usd(m)
+        for key, value in metric_basis(m).items():
+            self.basis[key] = self.basis.get(key, 0) + value
+        self.usd += usd
+        return usd
+
+    def payload(self) -> dict:
+        basis = {k: (round(v, 3) if k == "stt_audio_s" else int(v)) for k, v in self.basis.items()}
+        return {"usd": round(self.usd, 5), "mode": self.mode, "basis": basis, "prices_as_of": PRICES_AS_OF}
+
+    def take_update(self) -> dict | None:
+        """Payload, wenn sich usd seit der letzten Meldung geändert hat, sonst None."""
+        p = self.payload()
+        if p["usd"] == self._sent_usd:
+            return None
+        self._sent_usd = p["usd"]
+        return p
