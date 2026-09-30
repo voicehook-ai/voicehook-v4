@@ -225,40 +225,51 @@ def _no_dispatch(monkeypatch):
     return calls
 
 
-def test_host_call_live_with_valid_key_uses_live_worker(monkeypatch, _no_dispatch):
+def _live_room(c, key=LIVE_KEY):
+    return c.post("/api/admin/live-room", json={}, headers={"authorization": f"Bearer {key}"})
+
+
+def test_admin_live_room_creates_invite_link_bound_to_live_worker(monkeypatch, _no_dispatch):
     monkeypatch.setenv("VOICEHOOK_LIVE_KEY", LIVE_KEY)
     c = TestClient(app)
-    r = c.post("/api/host-call", json={"identity": "h", "live": LIVE_KEY},
-               headers={"x-forwarded-for": "10.9.0.1"})
+    r = _live_room(c)
     assert r.status_code == 200
-    room = r.json()["room"]
-    assert _claim_agents(r.json()["token"]) == ["voice-ai-live"]
+    body = r.json()
+    room = body["room"]
+    assert body["url"].startswith(f"https://voicehook.ai/r/{room}?invite=")
     assert srv._agent_for(room) == "voice-ai-live"
+    # der Link ist eine normale, raumgebundene Einladung -> Token mit Live-Worker
+    invite = body["url"].split("invite=", 1)[1]
+    t = c.get("/api/token", params={"room": room, "identity": "olli", "invite": invite})
+    assert t.status_code == 200
+    assert _claim_agents(t.json()["token"]) == ["voice-ai-live"]
 
 
-def test_host_call_live_with_wrong_key_falls_back_to_normal(monkeypatch, _no_dispatch):
+def test_admin_live_room_rejects_wrong_or_missing_key(monkeypatch, _no_dispatch):
     monkeypatch.setenv("VOICEHOOK_LIVE_KEY", LIVE_KEY)
     c = TestClient(app)
-    r = c.post("/api/host-call", json={"identity": "h", "live": "falsch"},
-               headers={"x-forwarded-for": "10.9.0.2"})
-    assert r.status_code == 200
-    assert _claim_agents(r.json()["token"]) == ["voice-ai"]
+    assert _live_room(c, "falsch").status_code == 401
+    assert c.post("/api/admin/live-room", json={}).status_code == 401
 
 
-def test_host_call_live_disabled_without_server_key(monkeypatch, _no_dispatch):
+def test_admin_live_room_off_without_server_key(monkeypatch, _no_dispatch):
     monkeypatch.delenv("VOICEHOOK_LIVE_KEY", raising=False)
+    assert _live_room(TestClient(app)).status_code == 404
+
+
+def test_key_is_never_accepted_via_query_or_body(monkeypatch, _no_dispatch):
+    monkeypatch.setenv("VOICEHOOK_LIVE_KEY", LIVE_KEY)
     c = TestClient(app)
-    r = c.post("/api/host-call", json={"identity": "h", "live": ""},
-               headers={"x-forwarded-for": "10.9.0.3"})
-    assert _claim_agents(r.json()["token"]) == ["voice-ai"]
+    assert c.post(f"/api/admin/live-room?key={LIVE_KEY}", json={}).status_code == 401
+    r = c.post("/api/host-call", json={"identity": "h", "live": LIVE_KEY},
+               headers={"x-forwarded-for": "10.9.0.9"})
+    assert _claim_agents(r.json()["token"]) == ["voice-ai"]      # host-call kennt kein live mehr
 
 
 def test_operator_join_in_live_room_dispatches_live_worker_not_normal(monkeypatch, _no_dispatch):
     # Operator-CLI (invite=1) würde sonst voice-ai dispatchen -> zwei Agents im Raum
     monkeypatch.setenv("VOICEHOOK_LIVE_KEY", LIVE_KEY)
-    c = TestClient(app)
-    room = c.post("/api/host-call", json={"identity": "h", "live": LIVE_KEY},
-                  headers={"x-forwarded-for": "10.9.0.4"}).json()["room"]
+    room = _live_room(TestClient(app)).json()["room"]
     _no_dispatch.clear()
     srv._ensure_agent_dispatched(room)            # Default-Name wie im GET-Pfad
     assert _no_dispatch == [(room, "voice-ai-live")]

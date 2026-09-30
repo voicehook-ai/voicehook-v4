@@ -66,3 +66,17 @@ internal deadline and 10s per request.
 - Single files (pyproject, README, unit, Caddyfile, compose) are plain copies.
 
 Note: Caddy serves the docroot, so `/.deployed-sha` is publicly readable (commit SHA only).
+
+## Gemini-Live-Testraum (Admin)
+
+Nur für interne Tests. Der Schlüssel `VOICEHOOK_LIVE_KEY` (orb) steht in `/opt/voicehook/.env`
+und reist ausschließlich im Header, nie in einer URL:
+
+```bash
+curl -s -X POST https://voicehook.ai/api/admin/live-room \
+  -H "Authorization: Bearer $VOICEHOOK_LIVE_KEY" -H 'content-type: application/json' -d '{}'
+# -> {"room": "...", "url": "https://voicehook.ai/r/<slug>?invite=<hmac>", "expires_in": 3600}
+```
+
+Der zurückgegebene Link ist eine normale raumgebundene Einladung (läuft ab). In diesem Raum
+arbeitet der Worker `voice-ai-live` (Gemini 3.8 Live, 20-Min-Deckel), kein `voice-ai`.

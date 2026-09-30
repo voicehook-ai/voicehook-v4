@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 
 from .health import probe_all
 from .slug import gen_slug
-from .tokens import mint_livekit_token, verify_invite
+from .tokens import mint_invite, mint_livekit_token, verify_invite
 
 logger = logging.getLogger("voicehook.server")
 
@@ -96,10 +96,11 @@ def _room_lock(room: str) -> threading.Lock:
 
 # ----- Gemini-Live-Testmodus ------------------------------------------------
 # Ein eigener Worker (`voice-ai-live`, VOICEHOOK_PIPELINE=live) übernimmt nur
-# Räume, die mit gültigem VOICEHOOK_LIVE_KEY gestartet wurden. Die Zuordnung
-# Raum -> Worker gilt für JEDEN späteren Dispatch (Operator-Join, Invites), damit
-# nie voice-ai und voice-ai-live im selben Raum landen. Ohne Server-Key ist der
-# Modus aus; ein falscher Key fällt still auf den normalen Worker zurück.
+# Räume, die ein Admin über POST /api/admin/live-room anlegt (Schlüssel im
+# Authorization-Header, NIE in einer URL). Zurück kommt ein normaler, raum-
+# gebundener und ablaufender Einladungslink. Die Zuordnung Raum -> Worker gilt
+# für JEDEN späteren Dispatch (Operator-Join, Invites): nie zwei Agents im Raum.
+# Ohne VOICEHOOK_LIVE_KEY auf dem Server ist der Endpunkt aus (404).
 LIVE_AGENT_NAME = os.environ.get("VOICEHOOK_LIVE_AGENT_NAME", "voice-ai-live")
 _ROOM_AGENT: dict[str, str] = {}
 _ROOM_AGENT_MAX = 2000
@@ -276,7 +277,6 @@ def _host_rate_ok(ip: str) -> bool:
 class HostCallRequest(BaseModel):
     identity: str = Field(..., min_length=1, max_length=200)
     ttl_seconds: int = Field(3600, ge=60, le=86400)
-    live: str = Field("", max_length=200)  # Live-Testmodus-Schlüssel (VOICEHOOK_LIVE_KEY)
 
 
 @app.post("/api/host-call", response_model=TokenResponse)
@@ -286,8 +286,31 @@ def host_call(req: HostCallRequest, request: Request) -> TokenResponse:
     ip = _client_ip(request)
     if not _host_rate_ok(ip):
         raise HTTPException(status_code=429, detail="rate limited — try again later")
+    return _issue(gen_slug(), req.identity, req.ttl_seconds)
+
+
+class LiveRoomRequest(BaseModel):
+    ttl_seconds: int = Field(3600, ge=300, le=86400)
+
+
+class LiveRoomResponse(BaseModel):
+    room: str
+    url: str
+    expires_in: int
+
+
+@app.post("/api/admin/live-room", response_model=LiveRoomResponse)
+def admin_live_room(req: LiveRoomRequest, request: Request) -> LiveRoomResponse:
+    """Gemini-Live-Testraum anlegen (nur Admin). Schlüssel als Bearer-Header."""
+    if not os.environ.get("VOICEHOOK_LIVE_KEY"):
+        raise HTTPException(status_code=404, detail="not found")
+    auth = request.headers.get("authorization", "")
+    given = auth[7:] if auth.lower().startswith("bearer ") else ""
+    if not _live_key_ok(given):
+        raise HTTPException(status_code=401, detail="unauthorized")
     room = gen_slug()
-    if _live_key_ok(req.live):
-        _set_room_agent(room, LIVE_AGENT_NAME)
-        logger.info("[host-call] live room=%s -> %s", room, LIVE_AGENT_NAME)
-    return _issue(room, req.identity, req.ttl_seconds)
+    _set_room_agent(room, LIVE_AGENT_NAME)
+    invite = mint_invite(room, req.ttl_seconds)
+    base = os.environ.get("VOICEHOOK_PUBLIC_URL", "https://voicehook.ai").rstrip("/")
+    logger.info("[admin] live room=%s -> %s (ttl %ss)", room, LIVE_AGENT_NAME, req.ttl_seconds)
+    return LiveRoomResponse(room=room, url=f"{base}/r/{room}?invite={invite}", expires_in=req.ttl_seconds)

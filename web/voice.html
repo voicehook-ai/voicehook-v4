@@ -2659,9 +2659,6 @@ const VH_PREFILL_ROOM = vhDeeplinkSlug();
 // code from /r/<slug>?invite=<code> deeplinks into the token mint. A fresh
 // no-invite "Start Call" host mint is not yet supported on v4 (tracked #20).
 const VH_INVITE = (() => { try { return new URLSearchParams(location.search).get('invite') || ''; } catch (_) { return ''; } })();
-// Gemini-Live-Testmodus: ?live=<Schlüssel> startet den Call mit dem Worker voice-ai-live
-// (Server prüft den Schlüssel; ohne/mit falschem Schlüssel normaler Call).
-const VH_LIVE = (() => { try { return new URLSearchParams(location.search).get('live') || ''; } catch (_) { return ''; } })();
 const ICON_CALL_START = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
 const ICON_CALL_STOP  = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="23" y1="1" x2="1" y2="23"/></svg>`;
 let lkRoom = null, lkConnected = false, lkAudioEl = null, lkAudioCtx = null;
@@ -2803,7 +2800,7 @@ async function vhStartCall() {
       const identity = 'host-' + Math.random().toString(36).slice(2, 8);
       const r = await fetch('/api/host-call', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(VH_LIVE ? { identity, live: VH_LIVE } : { identity }),
+        body: JSON.stringify({ identity }),
       });
       if (!r.ok) throw new Error('Host-call ' + r.status);
       tok = await r.json();
