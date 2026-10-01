@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Impressum · voicehook.ai ∆</title>
+  <title>Setup · voicehook.ai ∆</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22%3E%3Ctext y=%2232%22 font-size=%2232%22 fill=%22%236dc9d9%22%3E∆%3C/text%3E%3C/svg%3E">
   <style>
-/* Rechtsseiten: Tokens aus web/voice.html (CI), keine externen Fonts/Requests. */
+/* Rechts-/Infoseiten: Tokens aus web/voice.html (CI), keine externen Fonts/Requests. */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
   --bg-0: #000000; --line: #252834;
@@ -42,6 +42,8 @@ a { color: var(--teal); }
 .legal-wrap .back { font-family: var(--mono); font-size: 11px; color: var(--fg-3); letter-spacing: 0.08em; text-transform: uppercase; text-decoration: none; }
 .legal-wrap .back:hover { color: var(--fg-0); }
 .legal-wrap .todo { background: rgba(231,111,81,0.08); border-left: 2px solid var(--red); padding: 12px 16px; margin: 16px 0; font-family: var(--mono); font-size: 12px; color: var(--warm); }
+.legal-wrap ol { color: var(--fg-1); margin: 8px 0 12px 20px; }
+.legal-wrap pre { font-family: var(--mono); font-size: 12px; line-height: 1.5; background: var(--code-bg); border: 1px solid var(--line); border-radius: 2px; padding: 12px 14px; margin: 12px 0 16px; overflow-x: auto; white-space: pre; color: var(--fg-1); }
 .legal-wrap code { font-family: var(--mono); font-size: 12px; background: var(--code-bg); padding: 2px 6px; border-radius: 2px; color: var(--teal); }
 @media (max-width: 480px) {
   .legal-wrap { margin: 40px auto 64px; padding: 0 16px; }
@@ -61,61 +63,42 @@ a { color: var(--teal); }
 </script>
 <div class="legal-wrap">
   <a href="/" class="back">← ∆ voicehook.ai</a>
-  <h1>Impressum</h1>
-  <p style="color: var(--fg-2); font-size: 13px;">Angaben gemäß § 5 TMG und § 18 MStV.</p>
+  <h1>Setup</h1>
+  <p style="color: var(--fg-2); font-size: 13px;">So holst du deinen eigenen Agenten in einen Call.</p>
 
-  <h2>Diensteanbieter</h2>
-  <address>
-    Oliver Spitzkat<br>
-    Am Lindenbusch 22<br>
-    50354 Hürth<br>
-    Deutschland
-  </address>
-
-  <h2>Kontakt</h2>
   <p>
-    E-Mail: <a href="mailto:support@voicehook.ai">support@voicehook.ai</a><br>
-    Web: <a href="https://voicehook.ai">voicehook.ai</a>
+    Jeder KI-Agent mit Shell-Zugang kann in einem voicehook-Call sprechen, zum Beispiel
+    Claude Code, Codex oder Cursor. Der Sprach-Bot sagt dann, was dein Agent ihm schickt,
+    und dein Agent liest mit, was im Call gesagt wird.
   </p>
 
-  <h2>Verantwortlich für den Inhalt (§ 18 Abs. 2 MStV)</h2>
+  <h2>In drei Schritten</h2>
+  <ol>
+    <li>Auf <a href="/">voicehook.ai</a> einen Call starten und <strong>Agent einladen</strong> wählen.
+      Der Einladungstext wird automatisch kopiert (sonst auf <code>copy</code> klicken).</li>
+    <li>Den Einladungstext in die Sitzung deines Agenten einfügen. Er enthält den
+      Einladungslink zu deinem Raum und den Verweis auf die Anleitung
+      <code>https://voicehook.ai/agent/SKILL.md</code>.</li>
+    <li><strong>Raum jetzt joinen</strong> klicken. Sobald dein Agent beigetreten ist, spricht er über den Bot mit dir.</li>
+  </ol>
+
+  <h2>Der Einladungstext</h2>
+  <p>Er sieht ungefähr so aus:</p>
+  <pre>voicehook.ai call: join as agent (paste &amp; run):
+
+  uvx --from git+https://github.com/voicehook-ai/voicehook-agent voicehook-agent join https://voicehook.ai/r/&lt;raum&gt; --name &lt;YourName&gt; --model &lt;your-model-id&gt; --json
+
+First-time agent? Read the skill FIRST: https://voicehook.ai/agent/SKILL.md</pre>
   <p>
-    Oliver Spitzkat<br>
-    Am Lindenbusch 22, 50354 Hürth, Deutschland
+    Dein Agent installiert damit das Kommandozeilenwerkzeug <code>voicehook-agent</code> und tritt
+    dem Raum bei. Er gibt dabei seinen Namen und sein Modell an, beides wird im Call angezeigt.
+    Einladungslinks gelten nur für deinen Raum und laufen nach einer Stunde ab.
   </p>
 
-  <h2>EU-Streitschlichtung</h2>
+  <h2>Anleitung für Agenten</h2>
   <p>
-    Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit:
-    <a href="https://ec.europa.eu/consumers/odr/">https://ec.europa.eu/consumers/odr/</a>.
-    Wir sind nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren vor einer
-    Verbraucherschlichtungsstelle teilzunehmen.
-  </p>
-
-  <h2>Haftung für Inhalte</h2>
-  <p>
-    Als Diensteanbieter sind wir für eigene Inhalte auf diesen Seiten nach den allgemeinen
-    Gesetzen verantwortlich (§ 7 Abs. 1 TMG). Nach §§ 8 bis 10 TMG sind wir jedoch nicht
-    verpflichtet, übermittelte oder gespeicherte fremde Informationen zu überwachen oder nach
-    Umständen zu forschen, die auf eine rechtswidrige Tätigkeit hinweisen. Verpflichtungen zur
-    Entfernung oder Sperrung der Nutzung von Informationen nach den allgemeinen Gesetzen
-    bleiben hiervon unberührt.
-  </p>
-
-  <h2>Haftung für Links</h2>
-  <p>
-    Unser Angebot enthält Links zu externen Websites Dritter, auf deren Inhalte wir keinen
-    Einfluss haben. Deshalb können wir für diese fremden Inhalte auch keine Gewähr übernehmen.
-    Für die Inhalte der verlinkten Seiten ist stets der jeweilige Anbieter oder Betreiber
-    der Seiten verantwortlich.
-  </p>
-
-  <h2>Urheberrecht</h2>
-  <p>
-    Die durch die Seitenbetreiber erstellten Inhalte und Werke auf diesen Seiten unterliegen
-    dem deutschen Urheberrecht. Der Open-Source-Client (voicehook-skill) steht unter der
-    MIT-Lizenz:
-    <a href="https://github.com/voicehook-ai/voicehook-skill/blob/main/LICENSE">LICENSE</a>.
+    Alles, was dein Agent zum Beitreten, Zuhören und Sprechen braucht, steht in der
+    <a href="/agent/SKILL.md">SKILL.md</a>. Du kannst sie deinem Agenten auch direkt geben.
   </p>
 </div>
 </body>

@@ -15,7 +15,7 @@ __SITE_MAIN__ {
   handle {
     root * /var/www/voicehook
     rewrite /security /.well-known/security.txt
-    try_files {path} {path}.html /voice.html  # /impressum -> impressum.html, sonst SPA
+    try_files {path} {path}.html /voice.html  # /impressum, /datenschutz, /setup -> *.html, sonst SPA
     header Cache-Control "no-cache"  # nach jedem Deploy sofort neue Seite (ETag-Revalidierung)
     file_server
   }

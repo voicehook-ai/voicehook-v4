@@ -70,3 +70,13 @@ def test_caddyfile_only_routes_to_agent_port():
 def test_skill_is_under_200_loc():
     """Plan target: skill ≤200 LOC (v3 monster was 447)."""
     assert _loc(ROOT / "skills" / "voicehook-join" / "SKILL.md") <= 200
+
+
+def test_footer_pages_exist_and_are_routed():
+    """Footer-Links /impressum, /datenschutz, /setup, /security liefern echte Seiten (PR #83)."""
+    for name in ("impressum", "datenschutz", "setup"):
+        assert (ROOT / "web" / f"{name}.html").is_file(), name
+    assert (ROOT / "web" / ".well-known" / "security.txt").is_file()
+    cf = (ROOT / "infra" / "caddy" / "Caddyfile.tmpl").read_text()
+    assert "try_files {path} {path}.html /voice.html" in cf
+    assert "rewrite /security /.well-known/security.txt" in cf
