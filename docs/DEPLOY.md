@@ -143,6 +143,7 @@ dasselbe Konto zuerst verrechnet. Der Wiederherstellungs-Link gilt genau einmal 
 | `VOICEHOOK_TOPUP_MIN_EUR` / `_MAX_EUR` | `10` / `200` | Spanne des Drehreglers (Minimum nie unter 10) |
 | `VH_FREE_EUR_PER_DAY` | `1.0` | Gratis-Verbrauch in Euro (Kundenpreis inkl. Faktor und MwSt) pro UTC-Tag und Identität, Normal und Live gemeinsam; `0` = aus; kaputter Wert (kein Zahlwert, negativ, inf/nan) = 0 € Gratis bei weiter aktiver Prüfung (ohne Wallet 402), nie unbegrenzt |
 | `VH_FREE_TICK_SECONDS` | `5` | Prüftakt der Restzeit-Warnung im Worker (bucht nichts) |
+| `VH_REQUIRE_OPERATOR_INVITE` | `0` | Operator-Join `GET /api/token?invite=1` und `/api/bridge/join` ohne HMAC-Einladung (`op_invite` bzw. `?invite=` in der URL): `0` = Übergangsfrist, erlaubt, aber laut geloggt (`legacy operator join without invite`); `1` = 403. Ungültige Signatur ist immer 403. Umschalten auf `1`, sobald die neue voicehook-agent CLI 1 bis 2 Tage draußen ist und das Log keine Legacy-Joins mehr zeigt |
 
 Entfallen: `VOICEHOOK_FREE_MIN_PER_DAY_NORMAL` / `_LIVE` (Gratis-Minuten) werden ignoriert und
 können aus der Env-Datei gelöscht werden. Die alte Sekunden-Tabelle `free_usage` in
@@ -185,7 +186,8 @@ fail-closed, solange das Gratis-Kontingent an ist: ein Raum ohne Wallet und ohne
 Gratis-Eintrag wird abgelehnt (`free_room_unknown`). Ausnahmen stehen als exempt drin: Admin-Live-Räume
 und Normal-Räume, die jemand mit einer gültigen HMAC-Einladung betritt, die der Server nicht selbst
 ausgestellt hat (call-starten mintet sie mit `INVITE_SECRET`). `GET /api/token?invite=1`
-(Operator-Join, voicehook-agent CLI) gibt weiter ein Token, dispatcht voice-ai aber nur in Räume
+(Operator-Join, voicehook-agent CLI) verlangt die HMAC-Einladung aus der URL als `op_invite`
+(siehe `VH_REQUIRE_OPERATOR_INVITE`), gibt dann ein Token, dispatcht voice-ai aber nur in Räume
 mit bekanntem Zahler; ein selbst ausgedachter neuer Slug bekommt keinen Gratis-Agent mehr.
 Das Live-Monatsbudget zählt alles, was nicht das Guthaben zahlt: Gratis/Demo-Räume ganz, Wallet-Räume
 ihren Gratis-Teil. Beendet wird am Budget nur ein Raum ohne Wallet; ist das Budget schon erschöpft,

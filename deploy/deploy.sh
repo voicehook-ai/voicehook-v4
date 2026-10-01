@@ -144,8 +144,9 @@ def call(m, body, video):
     r = urllib.request.Request(BASE + m, data=json.dumps(body).encode(), headers={
         "Content-Type": "application/json", "Authorization": "Bearer " + jwt(video)})
     with urllib.request.urlopen(r, timeout=10) as f: return json.loads(f.read() or b"{}")
-def agentish(p):
-    return p.get("kind") in (4, "AGENT") or str(p.get("identity", "")).startswith("voice-ai")
+def agentish(p):  # voice-ai worker (kind AGENT) or CLI/bridge operator agent (vh.role=agent)
+    return (p.get("kind") in (4, "AGENT") or (p.get("attributes") or {}).get("vh.role") == "agent"
+            or str(p.get("identity", "")).startswith("voice-ai"))
 rooms = call("ListRooms", {}, {"roomList": True}).get("rooms") or []
 humans = 0
 for r in rooms:

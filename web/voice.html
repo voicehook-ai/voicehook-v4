@@ -305,7 +305,17 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
     'dp.use.wait': 'Verbrauch: wird gemessen …',
     'dp.akku.custom': ' · Eigene',
     'dp.lvl.low': 'niedrig', 'dp.lvl.mid': 'mittel', 'dp.lvl.high': 'hoch', 'dp.lvl.crit': 'kritisch',
-    'dp.reset': 'Zurücksetzen auf Standard'
+    'dp.reset': 'Zurücksetzen auf Standard',
+    'dp.cluster': 'Cluster', 'dp.cluster.lo': 'diffus', 'dp.cluster.hi': 'gruppiert',
+    'dp.zoom.sub': 'Wie groß der Ring im Bild erscheint',
+    'dp.size.sub': 'Größe der einzelnen Punkte',
+    'dp.particles.sub': 'Wie viele Punkte den Ring bilden',
+    'dp.bright.sub': 'Heller oder dunkler als der Standard des Styles',
+    'dp.fx.sub': 'Wie stark sich die Punkte bei Ton bewegen',
+    'dp.ring.sub': 'Wie stark der Ring bei Stimme pulsiert und aufleuchtet',
+    'dp.cluster.sub': 'Fein verteilt oder zu größeren Flecken und Inseln gruppiert',
+    'dp.res.sub': 'HD ist schärfer, SD spart Akku',
+    'dp.akku.sub': 'Wie viel Rechenleistung der Ring nutzen darf'
   });
   Object.assign(D.en, {
     'dp.btn': 'Design', 'dp.title': 'Design', 'dp.close': 'Close', 'dp.styles': 'Styles', 'dp.ringsec': 'Dome',
@@ -317,7 +327,17 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
     'dp.use.wait': 'Usage: measuring …',
     'dp.akku.custom': ' · Custom',
     'dp.lvl.low': 'low', 'dp.lvl.mid': 'medium', 'dp.lvl.high': 'high', 'dp.lvl.crit': 'critical',
-    'dp.reset': 'Reset to default'
+    'dp.reset': 'Reset to default',
+    'dp.cluster': 'Cluster', 'dp.cluster.lo': 'diffuse', 'dp.cluster.hi': 'grouped',
+    'dp.zoom.sub': 'How large the ring appears',
+    'dp.size.sub': 'Size of the individual dots',
+    'dp.particles.sub': 'How many dots form the ring',
+    'dp.bright.sub': 'Brighter or darker than the style default',
+    'dp.fx.sub': 'How much the dots move with sound',
+    'dp.ring.sub': 'How strongly the ring pulses and lights up with voice',
+    'dp.cluster.sub': 'Finely scattered or grouped into larger spots and islands',
+    'dp.res.sub': 'HD is sharper, SD saves battery',
+    'dp.akku.sub': 'How much computing power the ring may use'
   });
   window.VH_LANG = lang;
   window.VH_I18N = D;
@@ -919,6 +939,23 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
   color: rgba(255,255,255,0.22);
   pointer-events: none; z-index: 5; white-space: nowrap;
 }
+/* Paket 7 (Punkt 6): Glasfläche unter Texten, die über dem Ring liegen können
+   (Logo, Info-Zeile). Negativer Rand hält die Textposition unverändert. Farben
+   von "by"/".ai" und Tagline so angehoben, dass sie auf der Fläche >= 4,5:1 haben. */
+#label, #tagline {
+  background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.08); border-radius: 999px;
+  backdrop-filter: blur(10px) saturate(1.1); -webkit-backdrop-filter: blur(10px) saturate(1.1);
+}
+#label { padding: 4px 10px; margin: -5px 0 0 -11px; }
+#tagline { padding: 3px 10px; margin-bottom: -4px; color: rgba(255,255,255,0.66); }
+#label .by, #label .tld { color: #9a9aa4; }
+body.theme-light #label, body.theme-light #tagline { background: rgba(255,255,255,0.62); border-color: rgba(0,0,0,0.08); }
+body.theme-light #tagline { color: rgba(0,0,0,0.62); }
+body.theme-light #label .by, body.theme-light #label .tld { color: #5c5c66; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  #label, #tagline { background: rgba(0,0,0,0.78); }
+  body.theme-light #label, body.theme-light #tagline { background: rgba(255,255,255,0.88); }
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
 <style>#fx-ctl .section-head{font-size:0.65rem;opacity:0.5;letter-spacing:0.06em;text-transform:uppercase;padding:6px 2px 2px;font-weight:500;}#fx-ctl .section-sep{height:1px;background:rgba(255,255,255,0.06);margin:6px 0;}#fx-ctl select{background:rgba(255,255,255,0.04);color:var(--vh-fg-0,#f4f4f7);border:1px solid rgba(255,255,255,0.12);border-radius:6px;font:inherit;font-size:0.72rem;padding:4px 6px;outline:none;cursor:pointer;width:100%;}#fx-ctl select:hover{border-color:rgba(255,255,255,0.22);}#fx-ctl select:focus{border-color:var(--vh-teal,#6dc9d9);}#fx-ctl optgroup{font-style:normal;color:var(--vh-teal,#6dc9d9);}#fx-ctl option{color:var(--vh-fg-0,#f4f4f7);background:#101218;}</style>
@@ -1214,6 +1251,10 @@ body.theme-light .vh-dp-row input[type="range"] { accent-color: #1f7f90; }
   background: transparent; color: inherit; border: 1px solid var(--vh-btn-border); min-width: 0; letter-spacing: 0.08em; }
 #vh-design-panel #btn-hd.on { border-color: var(--vh-teal, #6dc9d9); color: var(--vh-teal, #6dc9d9); }
 .vh-dp-row[hidden] { display: none !important; }
+/* Paket 7: Erklär-Untertitel (klein, gedimmt) und Skala des Cluster-Reglers */
+.vh-dp-sub { grid-column: 1 / -1; margin: -3px 0 5px; font-size: 9.5px; line-height: 1.35; opacity: 0.5; white-space: normal; }
+.vh-dp-sub-sec { margin: -2px 0 6px; }
+.vh-dp-scale { grid-column: 2; display: flex; justify-content: space-between; margin-top: -4px; font-size: 9px; opacity: 0.5; }
 .vh-dp-sec .vh-dp-custom { opacity: 0.7; font-weight: normal; }
 .vh-dp-akku { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .vh-dp-akku button { appearance: none; font: inherit; font-size: 10px; padding: 5px 2px; border-radius: 8px; cursor: pointer; min-width: 0;
@@ -1286,17 +1327,19 @@ body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
       <button type="button" class="vh-dp-sw" data-pal="tiger" style="--c:linear-gradient(120deg,#ff8c1a,#a04010,#0a0a0a)" data-i18n-title="style.tiger" data-i18n-aria="style.tiger" title="tiger" aria-label="tiger"></button>
   </div>
   <div class="vh-dp-sec" data-i18n="dp.ringsec">Kringel</div>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.zoom">Zoom</span><input id="zoom-ctl" type="range" min="0.5" max="4" step="0.01" value="1"><output class="vh-dp-val"></output></label>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.size">Punktgröße</span><input id="size" type="range" min="0.02" max="0.20" step="0.005" value="0.155"><output class="vh-dp-val"></output></label>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.particles">Partikel</span><input id="particle-count" type="range" min="0.1" max="1" step="0.05" value="0.2"><output class="vh-dp-val"></output></label>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.bright">Helligkeit</span><input id="brightness" type="range" min="0.4" max="2.5" step="0.05" value="1.85"><output class="vh-dp-val"></output></label>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.fx">Bewegung</span><input id="fx-intensity" type="range" min="0" max="1.732" step="0.02" value="1"><output class="vh-dp-val"></output></label>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.ring">Ring-Puls</span><input id="ring-fx" type="range" min="0" max="2.5" step="0.05" value="1"><output class="vh-dp-val"></output></label>
+    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.zoom">Zoom</span><input id="zoom-ctl" type="range" min="0.5" max="4" step="0.01" value="1"><output class="vh-dp-val"></output><span class="vh-dp-sub" data-i18n="dp.zoom.sub"></span></label>
+    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.size">Punktgröße</span><input id="size" type="range" min="0.02" max="0.20" step="0.005" value="0.155"><output class="vh-dp-val"></output><span class="vh-dp-sub" data-i18n="dp.size.sub"></span></label>
+    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.particles">Partikel</span><input id="particle-count" type="range" min="0.1" max="1" step="0.05" value="0.2"><output class="vh-dp-val"></output><span class="vh-dp-sub" data-i18n="dp.particles.sub"></span></label>
+    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.bright">Helligkeit</span><input id="brightness" type="range" min="0.5" max="1.5" step="0.02" value="1"><output class="vh-dp-val"></output><span class="vh-dp-sub" data-i18n="dp.bright.sub"></span></label>
+    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.fx">Bewegung</span><input id="fx-intensity" type="range" min="0" max="1.732" step="0.02" value="1"><output class="vh-dp-val"></output><span class="vh-dp-sub" data-i18n="dp.fx.sub"></span></label>
+    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.ring">Ring-Puls</span><input id="ring-fx" type="range" min="0" max="2.5" step="0.05" value="1"><output class="vh-dp-val"></output><span class="vh-dp-sub" data-i18n="dp.ring.sub"></span></label>
     <label class="vh-dp-row" hidden><span class="vh-dp-lbl" data-i18n="dp.sat">Satelliten</span><input id="sat-amount" type="range" min="0" max="1" step="0.05" value="0.05"><output class="vh-dp-val"></output></label>
     <label class="vh-dp-row" hidden><span class="vh-dp-lbl" data-i18n="dp.island">Inseln</span><input id="island" type="range" min="0" max="1" step="0.05" value="0.6"><output class="vh-dp-val"></output></label>
-    <label class="vh-dp-row" id="vh-dp-pattern-row"><span class="vh-dp-lbl" data-i18n="dp.pattern">Fellmuster</span><input id="pattern-density" type="range" min="0" max="1" step="0.02" value="0.5"><output class="vh-dp-val"></output></label>
-  <div class="vh-dp-row vh-dp-row-btn"><span class="vh-dp-lbl" data-i18n="dp.res">Auflösung</span><button id="btn-hd" type="button" class="on" title="HD" data-i18n-title="hd.title">HD</button></div>
+    <label class="vh-dp-row" hidden><span class="vh-dp-lbl" data-i18n="dp.pattern">Fellmuster</span><input id="pattern-density" type="range" min="-0.5" max="1.5" step="0.02" value="0.5"><output class="vh-dp-val"></output></label>
+    <label class="vh-dp-row" id="vh-dp-cluster-row"><span class="vh-dp-lbl" data-i18n="dp.cluster">Cluster</span><input id="cluster" type="range" min="0" max="1" step="0.02" value="0.5"><output class="vh-dp-val"></output><span class="vh-dp-scale" aria-hidden="true"><span data-i18n="dp.cluster.lo">diffus</span><span data-i18n="dp.cluster.hi">gruppiert</span></span><span class="vh-dp-sub" data-i18n="dp.cluster.sub"></span></label>
+  <div class="vh-dp-row vh-dp-row-btn"><span class="vh-dp-lbl" data-i18n="dp.res">Auflösung</span><button id="btn-hd" type="button" class="on" title="HD" data-i18n-title="hd.title">HD</button><span class="vh-dp-sub" data-i18n="dp.res.sub"></span></div>
   <div class="vh-dp-sec"><span data-i18n="dp.akku">Qualität</span><span class="vh-dp-custom" id="vh-dp-akku-custom" hidden></span></div>
+  <div class="vh-dp-sub vh-dp-sub-sec" data-i18n="dp.akku.sub"></div>
   <div class="vh-dp-akku" role="radiogroup" aria-labelledby="vh-dp-title">
     <button type="button" data-akku="eco" role="radio" data-i18n="dp.akku.eco">Eco</button>
     <button type="button" data-akku="normal" role="radio" data-i18n="dp.akku.normal">Normal</button>
@@ -1827,6 +1870,7 @@ let activeN     = N * 0.2; // Partikel-Slider: aktive Partikel-Anzahl
 let zoom        = 1.0;     // Zoom-Slider: höher = näher (Donut größer)
 let vhZoomTarget = 1.0;    // Ziel des Mausrad-Zooms; zoom folgt weich (vhSimStep)
 let islandStrength = 0.6;  // Insel-Slider: spatial-Noise vs random im freqBin
+let vhCluster = 0.5;       // Paket 7: Cluster-Regler 0 diffus .. 1 gruppiert
 let ringFx      = 1.0;     // Ring-FX-Slider: skaliert Tube-Inflate + xy-Atmen
 let lastIslandT = -1;      // letzter Insel-Rebuild-Zeitpunkt (für Drift-Animation)
 let satColorH   = 0.0;     // Satellite-Hue (per Theme gesetzt)
@@ -2071,17 +2115,24 @@ function vhSimStep() {
   // Gemischt wird helligkeitserhaltend (dunkle Fellflecken bleiben dunkel),
   // max. 60 %, damit Style und Muster beim Sprechen erkennbar bleiben.
   vhGlowK += (vhGlowTarget - vhGlowK) * 0.12;
-  const glowMix = vhGlowK > 0.003 ? vhGlowK * Math.min(0.6, 0.3 + amp * 0.9) : 0;
+  // Paket 7: Ring-Puls (ringFx) skaliert auch das Aufleuchten bei Stimme.
+  // litA/litB = Amplitude bzw. Bass-Flanke, wie sie in Helligkeit/Glow eingehen;
+  // 0 = weder Pulsen noch Aufleuchten.
+  const litK = Math.max(0, ringFx);
+  const litA = amp * litK;
+  const litB = bassAttack * litK;
+  const litU = ultraDeep * litK;
+  const glowMix = vhGlowK > 0.003 ? vhGlowK * Math.min(0.6, (0.3 + amp * 0.9) * Math.min(1, litK)) : 0;
   // Tönung mit gleicher Helligkeit wie das Partikel (Kontrast des Musters
   // bleibt), plus Aufhellen proportional zur Lautstärke (= Leuchten).
-  const glowGain = (1.1 + amp * 0.6) / Math.max(0.08, (vhGlowR + vhGlowG + vhGlowB) * 0.3333);
+  const glowGain = (1.1 + litA * 0.6) / Math.max(0.08, (vhGlowR + vhGlowG + vhGlowB) * 0.3333);
   // Fell (Giraffe/Leopard): Leuchten nur als gleicher Faktor je Farbkanal für
   // ALLE Partikel (Helligkeit + leichte Tönung in Sprecherfarbe). Verhältnis
   // Fleck/Linie bzw. Rosette/Grund bleibt dadurch exakt erhalten.
   let furGlowR = 1, furGlowG = 1, furGlowB = 1;
   if (furSpots && glowMix > 0) {
     const gAvg = Math.max(0.08, (vhGlowR + vhGlowG + vhGlowB) * 0.3333);
-    const furLift = 1 + glowMix * (0.35 + amp * 0.5);
+    const furLift = 1 + glowMix * (0.35 + litA * 0.5);
     const tint = glowMix * 0.45;
     furGlowR = furLift * (1 + (vhGlowR / gAvg - 1) * tint);
     furGlowG = furLift * (1 + (vhGlowG / gAvg - 1) * tint);
@@ -2131,7 +2182,9 @@ function vhSimStep() {
   }
 
   // ── Loop-Invarianten 1×/Frame statt 20000×/Frame ─────────────────────────
-  const cap         = 0.40 * Math.max(1, intensity);
+  // Paket 7: fester Deckel. Früher 0.40 * max(1, intensity): "Bewegung" ließ
+  // die Punkte weiter auseinanderfliegen und hob damit nebenbei das Leuchten.
+  const cap         = 0.40;
   const satIntScale = Math.min(1.0, intensity * 0.5);
   const beatStrong0 = Math.max(0, beatEnv - 0.10) * 1.5 * satIntScale;
   // Trig-Cache: sin(clock*0.7 + turb[i]) per sum-of-angles ohne sin im Hot-Loop
@@ -2320,11 +2373,13 @@ function vhSimStep() {
     p[i3+2] += vel[i3+2];
 
     // ── Farbe ────────────────────────────────────────────────────────────────
-    if (micActive) {
+    // Paket 7: Paletten-Styles zeigen auch ohne Mikrofon ihre Farben (vorher fiel
+    // der Ruhezustand für alle Nicht-Fell-Styles auf dasselbe Weiß-Türkis zurück).
+    if (micActive || !spatialBucketLUT) {
       const cluster  = freqBin[i];
-      const band     = bands[cluster];                    // 1:1 cluster ↔ audio-bin
+      const band     = micActive ? bands[cluster] : 0;    // 1:1 cluster ↔ audio-bin
       const fNorm    = cluster / VISUAL_CLUSTERS;
-      const localAmp = band * 0.7 + amp * 0.3;
+      const localAmp = (band * 0.7 + amp * 0.3) * litK;
       // Satelliten: eigene Theme-Farbe (satColorH/S/L), Donut: Frequenz-Spektrum
       let hue, sat, lit;
       if (isSat) {
@@ -2358,12 +2413,12 @@ function vhSimStep() {
         // Sub-Bass-Flash: ultraDeep poppt Helligkeit + Sättigung beim Eject
         // Bei weißen Satelliten (satColorS===0) NICHT tinten — sonst würde der
         // Hue=0 Default sie rot färben. Wolken bleiben Wolken.
-        if (satColorS > 0) sat = Math.min(1, sat + ultraDeep * 0.15);
+        if (satColorS > 0) sat = Math.min(1, sat + litU * 0.15);
         lit = Math.min(0.92,
               (satColorL + 0.05 + litBoost) * twinkle
               + localAmp * 0.20
-              + bassAttack * (0.30 + litBoost)
-              + ultraDeep * 0.35);
+              + litB * (0.30 + litBoost)
+              + litU * 0.35);
       } else if (discreteHues) {
         // Discrete-Mode (z.B. Earth): exakt 3 feste Töne — kein Gradient,
         // kein Hue-Jitter, damit Sand/Grün/Blau wirklich rein bleiben.
@@ -2379,17 +2434,17 @@ function vhSimStep() {
           // gleich (Gesamtlautstärke statt Band je Cluster) modulieren ->
           // Hell/Dunkel-Verhältnis und Lage der Flecken bleiben beim Sprechen.
           sat = discreteSats[bucket];
-          lit = Math.min(0.85, discreteLits[bucket] * (1 + amp * 0.30 + bassAttack * 0.15)) * litMul * furJ;
+          lit = Math.min(0.85, discreteLits[bucket] * (1 + litA * 0.30 + litB * 0.15)) * litMul * furJ;
         } else {
-          lit = Math.min(0.62, discreteLits[bucket] + localAmp * 0.20 + bassAttack * 0.10) * litMul * furJ;
+          lit = Math.min(0.62, discreteLits[bucket] + localAmp * 0.20 + litB * 0.10) * litMul * furJ;
         }
       } else {
         const baseHue = hueStart + fNorm * hueRange;
         hue = (baseHue + hueShift + (hueOff[i] - 0.5) * 0.04 + 100) % 1;
         sat = satFloor + localAmp * (1.0 - satFloor);
         const bassFar     = Math.max(0, 1 - fNorm * 1.6);
-        const sustainBass = bassRaw    * (0.6 + bassRaw    * 0.5) * bassFar * 0.10;
-        const burstGlow   = bassAttack * (1   + bassAttack)       * bassFar * 0.18;
+        const sustainBass = bassRaw    * (0.6 + bassRaw    * 0.5) * bassFar * 0.10 * litK;
+        const burstGlow   = litB * (1   + bassAttack)       * bassFar * 0.18;
         lit = Math.min(0.56, 0.36 + localAmp * 0.30 + sustainBass + burstGlow) * litMul;
       }
       // Inline HSL → RGB: spart 80k Closures + 80k Arrays pro Frame
@@ -2422,7 +2477,7 @@ function vhSimStep() {
       // freqBinNorm liefert spatiale Variation für Resting-State — der
       // Insel-Slider wirkt dadurch auch ohne aktives Mikrofon sichtbar.
       const fbn = freqBin[i] / VISUAL_CLUSTERS;
-      setRestingColor(i3, speed, amp, fbn);
+      setRestingColor(i3, speed, litA, fbn);
     }
 
     // ── Sprecher-Leuchten (Farbe des sprechenden Slots) ─────────────────────
@@ -2622,6 +2677,7 @@ btnTheme.addEventListener('click', () => {
   try { localStorage.setItem('vh-theme-v1', isLight ? 'light' : 'dark'); } catch {}
   syncThemeIcon();
   applyThemeBg();   // Renderer-ClearColor sync mit body bg
+  try { vhApplyBright(); } catch (_) {}   // Paket 7: Basis-Helligkeit je Theme
 });
 
 // Settings-Toggle: kollabiert/expandiert das rechte Menü-Panel
@@ -3101,7 +3157,7 @@ function rebuildFreqBins(t) {
     const cosA = x / (Math.sqrt(x*x + y*y) + 0.001);
     const sinA = y / (Math.sqrt(x*x + y*y) + 0.001);
     // Tiefere Frequenzen im Discrete-Mode → 2-3 große Kontinente statt 20 Spots
-    const fS = isDisc ? 0.45 : 1.0;
+    const fS = (isDisc ? 0.45 : 1.0) * (1.25 - 0.5 * vhCluster);   // Cluster: größere Inseln
     const n = Math.sin(x * 0.6 * fS + y * 0.4 * fS + t) +
               Math.sin(x * 0.3 * fS - y * 0.55 * fS + t * 0.7) +
               Math.sin(z * 1.2 * fS + cosA * 1.6 + sinA * 1.6 - t * 1.1);
@@ -3121,13 +3177,32 @@ islandInput.addEventListener('input', e => {
 });
 rebuildFreqBins();
 
+
+
 // Brightness-Slider — multipliziert finale Pixel-RGB (kompensiert SD/wenige
 // Pixel die durch geringeren Pixel-Total zu schwach wirken).
 // colorBoost ist oben mit 1.0 init'd; hier nur aus Slider-DOM-Wert syncen.
+// Paket 7: Regler = relativer Faktor um 1,0 (0,5 bis 1,5) auf einen kalibrierten
+// Basiswert pro Style und Theme (gemessen: bei 1,0 Weißanteil <= ~10 %, Farben
+// gesättigt, Fellmuster mit Kontrast). Felle behalten ihren bisherigen Look.
+const VH_STYLE_BRIGHT = {
+  ice:     { d: 1.20, l: 1.50 }, earth:  { d: 1.30, l: 1.85 }, fire:    { d: 0.95, l: 1.50 },
+  water:   { d: 2.20, l: 1.85 }, air:    { d: 0.80, l: 1.40 }, forest:  { d: 1.35, l: 1.85 },
+  zebra:   { d: 1.85, l: 1.85 }, giraffe:{ d: 1.85, l: 1.85 }, leopard: { d: 1.85, l: 1.85 },
+  tiger:   { d: 1.85, l: 1.85 },
+};
 const brightnessInput = document.getElementById('brightness');
-colorBoost = parseFloat(brightnessInput.value);
+let vhBrightRel = parseFloat(brightnessInput.value);
+function vhApplyBright() {
+  let pal = null; try { pal = lastPaletteForSpatial; } catch (_) { /* vor applyPalette */ }
+  const b = VH_STYLE_BRIGHT[pal] || { d: 1.85, l: 1.85 };
+  const base = document.body.classList.contains('theme-light') ? b.l : b.d;
+  colorBoost = base * vhBrightRel;
+}
+window.vhApplyBright = vhApplyBright;
 brightnessInput.addEventListener('input', e => {
-  colorBoost = parseFloat(e.target.value);
+  vhBrightRel = parseFloat(e.target.value);
+  vhApplyBright();
 });
 
 // Size-Slider — direkter Set auf mat.size (Three.js PointsMaterial).
@@ -3156,6 +3231,27 @@ patternDensityInput.addEventListener('input', e => {
     // nötig, da die Render-Loop bereits col[]/needsUpdate=true setzt.
   }
 });
+
+// Paket 7: ein Regler "Cluster" (0 diffus .. 1 gruppiert) statt Fellmuster + Inseln.
+// Fell-Styles: Mustermaßstab (patternDensity, groß = viele kleine Flecken, daher
+// invertiert). Paletten-Styles: Inselbildung (islandStrength + Inselgröße).
+// 0,5 entspricht den bisherigen Standards (Fellmuster 0,5, Inseln 0,6).
+const clusterInput = document.getElementById('cluster');
+vhCluster = parseFloat(clusterInput.value);
+const vhClusterToPd = c => Math.max(-0.5, Math.min(1.5, 1.5 - 2 * c));
+function vhApplyCluster(c, rebuild) {
+  vhCluster = c;
+  islandStrength = Math.min(1, c * 1.2);
+  islandInput.value = String(islandStrength);
+  patternDensity = vhClusterToPd(c);
+  patternDensityInput.value = String(patternDensity);
+  if (rebuild) {
+    rebuildFreqBins();
+    if (spatialMode && typeof vhBuildSpatialLUT === 'function') vhBuildSpatialLUT();
+  }
+}
+vhApplyCluster(vhCluster, false);
+clusterInput.addEventListener('input', e => vhApplyCluster(parseFloat(e.target.value), true));
 
 // Zoom: Mausrad, Zwei-Finger-Pinch und Zoom-Regler im Design-Panel.
 // Mausrad multiplikativ (gleich schnell bei 0.5 und bei 4), weich über
@@ -3494,6 +3590,7 @@ function applyPalette(pal) {
   // Farbregel: Style-Wechsel zieht Chip, Transkript und Kringel-Leuchten mit.
   vhApplySpeakerColorsToTranscript();
   applyThemeBg();   // Blending folgt dem Style (Fell: NormalBlending)
+  if (typeof vhApplyBright === 'function') vhApplyBright();   // Basis-Helligkeit des Styles
 }
 // Issue #1: when user explicitly picks a palette via swatch click, pin it so
 // auto-paths (vhActivateCallPalette / vhRestorePalette / vhSetSpeaker / applyProfile)
@@ -3580,7 +3677,7 @@ function saveState() {
       hue:    hueInput.value,
       bright: brightnessInput.value,
       size:   sizeInput.value,
-      pd:     patternDensityInput.value,
+      cl:     clusterInput.value,
       zoom:   vhZoomUser ? String(Math.round(vhZoomTarget * 100) / 100) : '',
       palette: lastPalette,
     }));
@@ -3596,15 +3693,17 @@ function loadState() {
   // gespeicherte Werte werden ignoriert (interne Standards).
   if (s.pc)     { particleInput.value = s.pc;   activeN = Math.floor(N * parseFloat(s.pc)); geo.setDrawRange(0, activeN); }
   if (s.hue !== undefined) { hueInput.value = s.hue; hueShift = parseFloat(s.hue); }
-  if (s.bright) { brightnessInput.value = s.bright; colorBoost = parseFloat(s.bright); }
+  if (s.bright) { brightnessInput.value = s.bright; vhBrightRel = parseFloat(s.bright); vhApplyBright(); }
   if (s.size)   { sizeInput.value = s.size;         mat.size = parseFloat(s.size); }
-  if (s.pd)     { patternDensityInput.value = s.pd; patternDensity = parseFloat(s.pd); }
+  // Paket 7: Cluster ersetzt Fellmuster; alte Fellmuster-Werte (pd 0..1) migrieren.
+  let cl = s.cl !== undefined ? parseFloat(s.cl) : (s.pd !== undefined ? (1.5 - parseFloat(s.pd)) / 2 : NaN);
+  if (Number.isFinite(cl)) { cl = Math.max(0, Math.min(1, cl)); clusterInput.value = String(cl); vhApplyCluster(cl, true); }
   if (s.zoom)   { const z = parseFloat(s.zoom); if (z > 0) { vhZoomUser = true; vhZoomTarget = Math.max(VH_ZOOM_MIN, Math.min(vhZoomMax, z)); zoom = vhZoomTarget; } }
   if (s.palette && PALETTES[s.palette]) { applyPalette(s.palette); lastPalette = s.palette;
     if (s.hue !== undefined) { hueInput.value = s.hue; hueShift = parseFloat(s.hue); } }
 }
 
-[fxInput, ringFxInput, satInput, particleInput, islandInput, hueInput, brightnessInput, sizeInput, patternDensityInput].forEach(el => {
+[fxInput, ringFxInput, satInput, particleInput, islandInput, hueInput, brightnessInput, sizeInput, patternDensityInput, clusterInput].forEach(el => {
   el.addEventListener('input', saveState);
 });
 
@@ -3617,7 +3716,7 @@ loadState();   // überschreibt Defaults mit gespeichertem State falls vorhanden
 // das neue Call-Design steht. User-Slider-Werte vom 2026-05-18.
 const STANDARD_PROFILE = {
   palette: 'ice', fx: 1.0, ring: 1.0, sat: 0.05, pc: 0.2, island: 0.6,
-  zoom: 1.0, hue: 0, bright: 1.85, size: 0.155,
+  zoom: 1.0, hue: 0, bright: 1.0, size: 0.155,
 };
 const PROFILES = {
   music:  STANDARD_PROFILE,
@@ -3645,10 +3744,10 @@ function applyProfile(mode) {
   // Draw-Range mitziehen: sonst werden die inaktiven Partikel weiter gezeichnet
   // (in Hintergrundfarbe) und decken im Light-Theme das Fellmuster mit hellen Punkten zu.
   geo.setDrawRange(0, activeN);
-  islandInput.value = p.island;     islandStrength = p.island; rebuildFreqBins();
+  vhApplyCluster(parseFloat(clusterInput.value), true);   // Inseln folgen dem Cluster-Regler
   if (!vhZoomUser) vhZoomTarget = vhZoomDefault;   // Start-Zoom statt p.zoom; eigener Zoom bleibt
   hueInput.value = p.hue;           hueShift = p.hue;
-  if (p.bright !== undefined) { brightnessInput.value = p.bright; colorBoost = p.bright; }
+  if (p.bright !== undefined) { brightnessInput.value = p.bright; vhBrightRel = p.bright; vhApplyBright(); }
   if (p.size   !== undefined) { sizeInput.value = p.size;         mat.size  = p.size; }
   // Issue #1: don't stomp on a user-pinned palette via mode-switch
   if (!vhUserPalettePinned) { applyPalette(p.palette); lastPalette = p.palette; }
@@ -5569,11 +5668,8 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
   };
   // Styles: dieselbe Quelle wie das Foot-Menü (Klick dort ausführen), danach speichern.
   const sws = [...panel.querySelectorAll('.vh-dp-sw')];
-  const patRow = document.getElementById('vh-dp-pattern-row');
   const markSw = () => {
     sws.forEach(b => b.classList.toggle('on', b.dataset.pal === lastPalette));
-    // Punkt 11: Fellmuster nur bei Fell-Styles
-    if (patRow) patRow.hidden = !(typeof spatialMode !== 'undefined' && spatialMode);
   };
   sws.forEach(b => b.addEventListener('click', () => {
     const foot = document.querySelector(`.vh-foot-style[data-pal="${b.dataset.pal}"]`);

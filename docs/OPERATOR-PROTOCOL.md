@@ -46,9 +46,11 @@ For agents that only get HTTPS out, usually through an HTTP CONNECT proxy (`HTTP
 cloud sandboxes like claude.ai/code). libwebrtc ignores that proxy and the box has no TURN,
 so a WebRTC join times out (`wait_pc_connection timed out`). Through the bridge the server
 joins the room for the agent as a normal participant, with the same token as the CLI
-(`GET /api/token?invite=1&name=&model=`: `vh.role=agent`, `vh.name`, `vh.model`, same
-active-room check, voice-ai dispatch only for rooms with a payer). An HMAC `?invite=` in the
-invite URL is verified as well (403 if invalid). Code: `apps/agent/bridge.py`,
+(`GET /api/token?invite=1&op_invite=<hmac>&name=&model=`: `vh.role=agent`, `vh.name`,
+`vh.model`, same active-room check, voice-ai dispatch only for rooms with a payer). The HMAC
+`?invite=` from the invite URL is verified (403 if invalid). Without it the join only works
+during the transition period (`VH_REQUIRE_OPERATOR_INVITE=0`, logged as legacy join); with
+`VH_REQUIRE_OPERATOR_INVITE=1` it is 403. The CLI sends the URL's invite as `op_invite`. Code: `apps/agent/bridge.py`,
 `apps/agent/bridge_routes.py`.
 
 The session key from `join` is a bearer secret (stored hashed on the server). It goes ONLY
