@@ -3,7 +3,8 @@
 }
 
 __SITE_MAIN__ {
-  encode zstd gzip
+  @enc not path /api/bridge/events  # SSE der Agent-Brücke nie komprimieren (Puffer); reverse_proxy flusht text/event-stream sofort
+  encode @enc zstd gzip
   log {
     output file /var/log/caddy/access.log
     format console

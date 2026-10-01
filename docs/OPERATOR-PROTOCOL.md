@@ -2,7 +2,7 @@
 
 Reference for agents that join a call as operator. Source of truth is the code on
 `main`: `apps/agent/relay.py`, `server.py`, `worker.py`, `live.py`, `gate.py`,
-`speaker.py`, `budget.py`. Stand 2026-10-01 (up to PR #81). How-to for agents:
+`speaker.py`, `budget.py`, `bridge.py`. Stand 2026-10-01 (up to PR #81, plus HTTPS bridge). How-to for agents:
 `skills/voicehook-join/SKILL.md` and `web/agent/SKILL.md` (live at
 https://voicehook.ai/agent/SKILL.md). CLI: https://github.com/voicehook-ai/voicehook-agent
 
@@ -36,8 +36,58 @@ without `say`/`next` for that long the join announces it and leaves. The CLI pri
 One `say` per user turn, in the user's language. Do not push `operator.persona` while
 another operator is in the room: it replaces the agent's instructions for everyone
 (CLI 0.5.0 skips that push unless `--force-persona`).
-`skills/voicehook-join/SKILL.md` has a wrapper (`$D/vh`) that gives both CLI versions the
-same `next`/`say`/`leave` interface.
+`skills/voicehook-join/SKILL.md` has a wrapper (`$D/vh`) that gives the curl bridge
+(Quickstart A) and the CLI (Quickstart B) the same `next`/`say`/`leave` interface. CLI 0.4.0:
+upgrade with `uv tool install --force git+https://github.com/voicehook-ai/voicehook-agent`.
+
+## HTTPS bridge (no WebRTC, no install)
+
+For agents that only get HTTPS out, usually through an HTTP CONNECT proxy (`HTTPS_PROXY`,
+cloud sandboxes like claude.ai/code). libwebrtc ignores that proxy and the box has no TURN,
+so a WebRTC join times out (`wait_pc_connection timed out`). Through the bridge the server
+joins the room for the agent as a normal participant, with the same token as the CLI
+(`GET /api/token?invite=1&name=&model=`: `vh.role=agent`, `vh.name`, `vh.model`, same
+active-room check, voice-ai dispatch only for rooms with a payer). An HMAC `?invite=` in the
+invite URL is verified as well (403 if invalid). Code: `apps/agent/bridge.py`,
+`apps/agent/bridge_routes.py`.
+
+The session key from `join` is a bearer secret (stored hashed on the server). It goes ONLY
+in the header `Authorization: Bearer <session>`, never in a URL.
+
+| endpoint | body / query | answer |
+|---|---|---|
+| `POST /api/bridge/join` | `{invite_url` or `room`+`invite?, name, model, identity?, greet?, persona?, force_persona?, idle_timeout?}` (`idle_timeout` in minutes, default 10, 0 = off) | `{session, expires_in, room, identity, idle_timeout_s, peers, notes}` |
+| `GET /api/bridge/next?timeout=50` | max 120 s | one object like CLI `next`: `{type: user\|revise\|timeout\|ended, text, ...}` |
+| `POST /api/bridge/say` | `{text, mode?}` | `{ok, seq}`; payload on the wire `{text, _seq, _ts, mode?}` like the CLI |
+| `POST /api/bridge/leave` | `{say?}` (optional) | `{ok, type: "leaving"}`; `say` is spoken with `mode:"append"` first |
+| `GET /api/bridge/status` | | `{connected, pending, idle_s, peers[], sse_clients, ...}` |
+| `GET /api/bridge/events` | | Server-Sent Events, see below |
+| `POST /api/bridge/send` | `{topic, payload, force?}` | raw publish; topics: `operator.say`, `operator.persona`, `operator.mode`, `operator.interrupt`, `operator.inject`, `operator.backchannel` (else 400) |
+
+SSE events (`event: <type>` + `data: <json>`; comment `: ping` every 15 s): `hello`
+`{room, identity, expires_in, peers}`, `room-state` `{peers}`, `data` `{topic, payload,
+sender}` for EVERY data packet (transcript, operator.revise, operator.notice,
+agent.heartbeat, ...), `peer-joined` / `peer-left` / `peer-updated`, `speakers`, `track`
+`{identity, state: on|off|mute|unmute}`, `reconnecting` / `reconnected`, and `ended`
+`{reason}` as the last event. A peer: `{identity, kind (LK int, 4 = agent), kind_label,
+name, attributes, audio, speaking, operator}`.
+
+Queue: user turns and `operator.revise` are queued from `join` on (bounded, 200), so turns
+spoken while the agent works wait for the next `next`. Guards on the server: idle guard
+(no `next`/`say`/`send` for `idle_timeout`; a running `next` counts as alive) announces and
+leaves like the CLI; persona guard: `persona` at join and `send` of `operator.persona`/
+`operator.mode` are refused (409) while another operator is in the room unless `force`;
+SSE guard: once an SSE client was connected, the server leaves 60 s after the last one went
+away; hard cap `VH_MAX_CALL_SECONDS` (CallGuard, default 3600); room ended -> `ended`.
+Limits: 4 sessions per room, 4 per IP, 100 total, 10 joins per IP per minute, 20 sends per
+10 s per session (429). Errors at join: 400 no room, 403 invite invalid, 410 call ended,
+429 limits, 502 LiveKit connect failed, 503 server without LiveKit credentials. Nothing of
+what is said and no key is logged. `VOICEHOOK_BRIDGE_LIVEKIT_URL` overrides the LiveKit URL
+the server itself uses (default `LIVEKIT_URL`).
+
+CLI 0.6.0 (`--transport auto|webrtc|bridge`, default auto) uses the bridge on its own when
+`HTTPS_PROXY`/`ALL_PROXY` is set or the WebRTC connect fails (one retry via the bridge,
+logged as a `_meta` line). Its output, `say`/`next`/`leave` and FIFO input stay identical.
 
 ## Data-channel topics
 
