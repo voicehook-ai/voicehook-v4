@@ -3132,11 +3132,13 @@ btnRand.addEventListener('click', () => {
 // Donut: hueStart/hueRange/satFloor.   Satellites: satH/satS/satL.
 const PALETTES = {
   // Gletscher: Schollen-Muster (vhBuildSpatialLUT 'glacier'), Farben aus Eishoehlen-Foto.
-  glacier: { hueStart: 0.55, hueRange: 0.05, satFloor: 0.6, litMul: 0.9,
-            satH: 0.53, satS: 0.6, satL: 0.85, mR: 0.7, mG: 0.9, mB: 1.0,
-            spatial: 'glacier', furSoftness: 0.15,
-            discrete: { hues: [0.529, 0.529, 0.54, 0.568, 0.612, 0.593], sats: [1.0, 0.77, 0.712, 0.778, 0.802, 0.789],
-                        lits: [0.955, 0.778, 0.524, 0.459, 0.435, 0.112], weights: [0.1667, 0.1667, 0.1667, 0.1667, 0.1667, 0.1667] } },
+  glacier: { hueStart: 0.58, hueRange: 0.05, satFloor: 0.6, litMul: 1.0,
+            satH: 0.53, satS: 0.7, satL: 0.85, mR: 0.6, mG: 0.95, mB: 1.0,
+            spatial: 'glacier', furSoftness: 0.08,
+            discrete: { hues: [0.613, 0.603, 0.603, 0.599, 0.599, 0.588, 0.573, 0.556, 0.542, 0.536, 0.529, 0.526],
+                        sats: [0.824, 0.812, 0.808, 0.811, 0.793, 0.77, 0.747, 0.746, 0.78, 0.803, 0.829, 1.0],
+                        lits: [0.067, 0.125, 0.204, 0.29, 0.378, 0.443, 0.48, 0.522, 0.59, 0.702, 0.839, 0.975],
+                        weights: [0.0833, 0.0833, 0.0833, 0.0833, 0.0833, 0.0833, 0.0833, 0.0833, 0.0833, 0.0833, 0.0833, 0.0833] } },
   // Eis: cyan-blau, dunkler · sandgelbe Satelliten als Wärme-Akzent · Maus = warm orange (Sonne auf Eis)
   ice:    { hueStart: 0.55, hueRange:  0.13, satFloor: 0.65, litMul: 0.78,
             satH: 0.13, satS: 0.85, satL: 0.55 },
@@ -3252,7 +3254,7 @@ const PALETTES = {
 // wechseln alle drei beim Style-Wechsel gemeinsam. Werte = Dark-Theme; Light
 // dunkelt per CSS (--vh-*-ink) ab.
 const VH_SPEAKER_COLORS = {
-  glacier: { user: '#9be3f2', delta: '#2fb2dc', agent: '#e8fbff' },  // Hellcyan · Cyan · Eisweiß
+  glacier: { user: '#76d6f0', delta: '#2aa3e0', agent: '#f2fdff' },  // Hellcyan · Cyan · Eisweiß
   ice:     { user: '#5fd6e8', delta: '#7aa7ff', agent: '#e4d79a' },  // Cyan · Eisblau · Sand-Akzent
   earth:   { user: '#58b86e', delta: '#4a8fe0', agent: '#d9b26a' },  // Grün · Ozean · Sand
   fire:    { user: '#ff6a3d', delta: '#ffc93c', agent: '#c86bff' },  // Glut · Flamme · Violett
@@ -3375,7 +3377,7 @@ const VH_STYLE_BRIGHT = {
   water:   { d: 2.20, l: 1.85 }, lagoon: { d: 1.30, l: 1.60 }, air:    { d: 0.80, l: 1.40 }, forest:  { d: 1.35, l: 1.85 },
   zebra:   { d: 1.85, l: 1.85 }, giraffe:{ d: 1.85, l: 1.85 }, leopard: { d: 1.85, l: 1.85 },
   tiger:   { d: 1.85, l: 1.85 },
-  glacier: { d: 1.60, l: 1.60 },
+  glacier: { d: 1.50, l: 1.50 },
 };
 const brightnessInput = document.getElementById('brightness');
 let vhBrightRel = parseFloat(brightnessInput.value);
@@ -3555,15 +3557,15 @@ function vhRingCells(gt, gr, jit) {
       let th = Math.atan2(py, px); if (th < 0) th += TWO_PI;
       const ca = Math.floor(th / TWO_PI * gt);
       const cb = Math.max(0, Math.min(gr - 1, Math.floor((r - (R_MAJOR - RH)) / (2 * RH) * gr)));
-      let b1 = Infinity, b2 = Infinity, bi = 0;
+      let b1 = Infinity, b2 = Infinity, bi = 0, bj = 0;
       for (let da = -2; da <= 2; da++) for (let db = -1; db <= 1; db++) {
         const bb = cb + db; if (bb < 0 || bb >= gr) continue;
         const id = (((ca + da) % gt + gt) % gt) * gr + bb;
         const dx = px - sx[id], dy = py - sy[id];
         const dd = dx * dx + dy * dy;
-        if (dd < b1) { b2 = b1; b1 = dd; bi = id; } else if (dd < b2) { b2 = dd; }
+        if (dd < b1) { b2 = b1; b1 = dd; bj = bi; bi = id; } else if (dd < b2) { b2 = dd; bj = id; }
       }
-      out.d1 = Math.sqrt(b1); out.d2 = Math.sqrt(b2); out.cell = bi;
+      out.d1 = Math.sqrt(b1); out.d2 = Math.sqrt(b2); out.cell = bi; out.cell2 = bj;
       out.ang = Math.atan2(py - sy[bi], px - sx[bi]);
       return out;
     },
@@ -3618,27 +3620,34 @@ function vhBuildSpatialLUT() {
       spatialBucketLUT[i] = v > thr ? 1 : 0;                     // 1 schwarz, 0 weiß
     }
   } else if (spatialMode === 'glacier') {
-    // Gletscher (Olli 01.10., nach Eishoehlen-Foto): grosse, etwa fuenfeckige
-    // Schollen mit leuchtenden Bruchkanten und dunklen Rissen; je Scholle ein
-    // eigener Blauton, Verlauf Kante hell -> Mitte tief. Buckets: 0 Lichtkante,
-    // 1 Hellcyan, 2 Cyan, 3 Gletscherblau, 4 Tiefblau, 5 Navy-Riss.
-    const f = vhRingCells(6, 2, 0.22);
+    // Gletscher (Olli 01.10., Variante F2): 10 Schollen als geneigte Facetten
+    // (Licht von oben links, je Scholle leicht gekippt), 12-stufiger Eisverlauf.
+    // Grenzen je Paar entweder eingefaltet (Tal: weicher Schatten zum Faltgrund)
+    // oder aufgefaltet (Grat wie Glaskante: Glanzlinie, heller Saum, feiner
+    // dunkler Refraktionsrand). Dazu vereinzeltes Funkeln.
+    const f = vhRingCells(10, 2, 0.22);
+    const R = f.cellSize * 0.55;
+    const LG = -2.35, NB = buckets;
     for (let i = 0; i < N; i++) {
       const nn = f.nearest2(i);
       const e = nn.d2 - nn.d1;
       const hc = vhHash01(nn.cell * 11 + 5);
-      const gap = 0.03 + 0.03 * vhHash01(nn.cell * 3 + 1);
-      let b;
-      if (e < gap) b = 5;
-      else if (e < gap + 0.05) b = 0;
-      else if (e < gap + 0.13) b = 1;
-      else {
-        const base = hc < 0.33 ? 2 : (hc < 0.66 ? 3 : 4);
-        const tt = (e - gap - 0.13) / 0.35;
-        b = tt < 0.35 ? Math.max(2, base - 1) : (tt < 0.8 ? base : Math.min(4, base + 1));
+      const tilt = Math.cos(nn.ang - (LG + (hc - 0.5) * 1.6));
+      const rad = Math.min(1, nn.d1 / R);
+      let s = 0.30 + hc * 0.28 + 0.30 * tilt * rad;
+      const a = Math.min(nn.cell, nn.cell2), c = Math.max(nn.cell, nn.cell2);
+      if (vhHash01(a * 97 + c * 13 + 3) < 0.5) {          // Grat
+        if (e < 0.022) s = 1.0;
+        else if (e < 0.05) s = 0.86;
+        else if (e < 0.075) s -= 0.22;
+        else if (e < 0.11) s += 0.08 * tilt;
+      } else {                                             // Tal
+        if (e < 0.018) s = 0.0;
+        else if (e < 0.11) s = s * (0.25 + 0.75 * (e - 0.018) / 0.092);
       }
-      if (b >= buckets) b = buckets - 1;
-      spatialBucketLUT[i] = b;
+      if (vhHash01(i * 31 + 7) > 0.985) s = 1.0;
+      s = Math.max(0, Math.min(1, s));
+      spatialBucketLUT[i] = Math.round(s * (NB - 1));
     }
   } else if (spatialMode === 'voronoi') {
     // Giraffe (Olli 01.10.): große polygonale Flecken mit hellen Trennlinien
