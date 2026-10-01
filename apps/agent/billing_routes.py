@@ -28,6 +28,7 @@ Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, VOICEHOOK_PUBLIC_URL,
 from __future__ import annotations
 
 import logging
+import math
 import os
 
 from fastapi import APIRouter, HTTPException, Request
@@ -98,6 +99,26 @@ def free_keys_for_call(request: Request, mode: str, ip: str, wallet: str | None)
 
 
 # ----- Konfiguration für die Seite -------------------------------------------
+# Ungefährer Kundenpreis pro Gesprächsstunde (inkl. Marge und MwSt), nur zur
+# Anzeige am Normal/Live-Schalter ("ca."). Abgebucht wird immer der echte
+# Verbrauch (billing/pricing.py). Defaults aus Messung (Oliver 01.10.2026).
+DEFAULT_APPROX_EUR_PER_HOUR = {"normal": 1.70, "live": 8.80}
+
+
+def approx_eur_per_hour(mode: str) -> float:
+    """Env VOICEHOOK_APPROX_EUR_PER_HOUR_NORMAL / _LIVE; kaputt oder < 0 -> Default."""
+    default = DEFAULT_APPROX_EUR_PER_HOUR["live" if mode == "live" else "normal"]
+    name = "VOICEHOOK_APPROX_EUR_PER_HOUR_LIVE" if mode == "live" else "VOICEHOOK_APPROX_EUR_PER_HOUR_NORMAL"
+    raw = os.environ.get(name, "").strip().replace(",", ".")
+    if not raw:
+        return default
+    try:
+        v = float(raw)
+    except ValueError:
+        return default
+    return round(v, 2) if math.isfinite(v) and v >= 0 else default
+
+
 @router.get("/api/billing/config")
 def billing_config() -> dict:
     return {
@@ -106,6 +127,7 @@ def billing_config() -> dict:
         "min_eur": pricing.min_topup_eur(),
         "max_eur": pricing.max_topup_eur(),
         "checkout_available": stripe_api.configured(),
+        "approx_eur_per_hour": {m: approx_eur_per_hour(m) for m in ("normal", "live")},
     }
 
 

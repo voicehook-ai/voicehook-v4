@@ -138,6 +138,7 @@ dasselbe Konto zuerst verrechnet. Der Wiederherstellungs-Link gilt genau einmal 
 | `VOICEHOOK_FREE_MIN_PER_DAY_LIVE` | `20` | Gratis-Gesprächsminuten pro UTC-Tag für Live-Räume ohne Wallet; `0` = aus |
 | `VOICEHOOK_FREE_MIN_PER_DAY_NORMAL` | `0` | dasselbe für Normal-Räume; `0` = aus (offen, ob Normal mitzählt) |
 | `VH_FREE_TICK_SECONDS` | `5` | Takt, in dem der Worker Gratis-Minuten bucht (nur Worker) |
+| `VOICEHOOK_APPROX_EUR_PER_HOUR_NORMAL` / `_LIVE` | `1.70` / `8.80` | nur Anzeige: ungefährer Kundenpreis pro Stunde (inkl. Marge und MwSt) am Normal/Live-Schalter, via `/api/billing/config` `approx_eur_per_hour` |
 
 Stripe-Dashboard: Webhook-Endpunkt `https://voicehook.ai/api/stripe/webhook` mit den Events
 `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `charge.refunded` und

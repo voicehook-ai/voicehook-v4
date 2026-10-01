@@ -345,6 +345,20 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+@app.get("/api/free/remaining")
+def free_remaining(request: Request) -> dict:
+    """Übrige Gratis-Sekunden heute je Modus für diesen Browser (X-Anon-Id) und
+    diese IP, gezählt wie bei host-call / live-room (das knappere Merkmal gilt).
+    Nur lesen, nie buchen. Modus aus (Limit 0) -> enabled false, Sekunden 0."""
+    keys = freetier.identity_keys(request.headers.get(freetier.ANON_HEADER), _client_ip(request))
+    out: dict = {"enabled": {}}
+    for mode in ("live", "normal"):
+        on = freetier.enabled(mode)
+        out["enabled"][mode] = on
+        out[f"{mode}_s"] = max(0, int(freetier.remaining_seconds(keys, mode))) if on else 0
+    return out
+
+
 def _host_rate_ok(ip: str) -> bool:
     now = time.time()
     hits = [t for t in _HOST_HITS.get(ip, []) if now - t < _HOST_WINDOW]
