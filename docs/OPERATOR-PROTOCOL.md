@@ -21,12 +21,23 @@ the operator must stay connected until the user says goodbye.
 
 | CLI | listen | speak | end |
 |---|---|---|---|
-| with `next`/`say`/`leave` | `voicehook-agent next` blocks until the next user turn | `voicehook-agent say "<text>"` | `voicehook-agent leave` |
-| 0.4.0 | stream the join output with `tail -f \| grep '"role": "user"'` (never sleep-poll) | stdin line `{"topic":"operator.say","text":"…"}` | stdin line `{"topic":"quit"}` |
+| 0.5.0 (`next`/`say`/`leave`) | `voicehook-agent next` blocks, prints one JSON line `{"type": "user"\|"revise"\|"timeout"\|"ended", "text"?}`; exit 3 when the call is over | `voicehook-agent say [--mode overwrite\|append] "<text>"` | `voicehook-agent leave [--say "<goodbye>"]` |
+| 0.4.0 | follow the join output with `tail -f \| grep -E '"topic": "(_wake\|operator\.revise)"\|session ended'` (never sleep-poll; 0.4.0 logs each user turn twice, as `transcript` and `_wake`, so match only `_wake`) | stdin line `{"topic":"operator.say","text":"…"}` | stdin line `{"topic":"quit"}` |
+
+0.5.0 control socket: `join` listens on `$VOICEHOOK_AGENT_HOME/sessions/<slug>/<identity>/`
+(default home `~/.voicehook-agent`). `say`/`next`/`leave` pick the join automatically when
+only one runs, otherwise `--session <slug>/<identity>`. An agent sets its own
+`VOICEHOOK_AGENT_HOME` to stay isolated from other agents on the same machine. `next`
+starts queueing turns with the first `next`/`say`. `--idle-timeout MIN` (default 10, 0 = off):
+without `say`/`next` for that long the join announces it and leaves. The CLI prints no
+`agent.heartbeat`; check for a peer of kind `agent` in the `room-state` lines or in
+`voicehook-agent status`.
 
 One `say` per user turn, in the user's language. Do not push `operator.persona` while
-another operator is in the room: it replaces the agent's instructions for everyone.
-Ready-made helpers for 0.4.0 are in `skills/voicehook-join/SKILL.md`.
+another operator is in the room: it replaces the agent's instructions for everyone
+(CLI 0.5.0 skips that push unless `--force-persona`).
+`skills/voicehook-join/SKILL.md` has a wrapper (`$D/vh`) that gives both CLI versions the
+same `next`/`say`/`leave` interface.
 
 ## Data-channel topics
 
