@@ -133,3 +133,31 @@ def test_charger_fails_closed_on_db_error(monkeypatch):
     monkeypatch.setattr(db, "charge", boom)
     assert c.charge(0.01) is True
     assert c.charge(0.01) is False          # nur einmal melden
+
+
+# ----- Review 01.10. LOW: Raum ohne Wallet öffnet die DB nicht je Kostenereignis --
+def test_unbound_room_reads_wallet_binding_once_per_job(monkeypatch):
+    calls = []
+    real = db.room_wallet
+    monkeypatch.setattr(db, "room_wallet", lambda room: calls.append(room) or real(room))
+    opened = []
+    real_connect = db.connect
+    stt = _metric("STTMetrics", audio_duration=1.0)
+    _run(monkeypatch, live_mode=False, metrics=[stt] * 20)
+    assert calls == ["r1"]                                         # 20 Metriken, 1 Lookup beim Start
+    calls.clear()
+    monkeypatch.setattr(db, "connect", lambda: opened.append(1) or real_connect())
+    c = w.WalletCharger("r2", "normal")
+    c.lookup()
+    for _ in range(50):
+        assert c.charge(0.01) is False
+    assert calls == ["r2"] and len(opened) == 1                   # 50 Metriken, 1 DB-Öffnung
+
+
+def test_bound_room_still_charges_after_cached_lookup(monkeypatch):
+    acc = _account(1000, "cs_cache")
+    db.bind_room("r3", acc, "normal")
+    c = w.WalletCharger("r3", "normal")
+    assert c.lookup() == acc and c.lookup() == acc
+    c.charge(0.01)
+    assert db.balance_ueur(acc) < 10_000_000                       # Positivkontrolle

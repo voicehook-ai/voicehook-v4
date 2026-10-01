@@ -11,6 +11,7 @@ Run locally:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -22,7 +23,7 @@ from typing import Any
 from livekit import rtc
 from livekit.agents import AgentSession, AutoSubscribe, JobContext, WorkerOptions, cli, room_io
 
-from . import budget
+from . import budget, freetier
 from .billing import db as billing_db
 from .billing import pricing as billing_pricing
 from .llm import build_llm
@@ -43,6 +44,8 @@ DEFAULT_IDLE_NO_HUMAN_SECONDS = 60.0
 MAX_CALL_ANNOUNCEMENT = "Maximale Gesprächsdauer erreicht. Ich beende den Call."
 LIVE_BUDGET_ANNOUNCEMENT = "Das Live-Budget für diesen Monat ist aufgebraucht. Ich beende den Call."
 WALLET_EMPTY_ANNOUNCEMENT = "Dein Guthaben ist aufgebraucht. Ich beende den Call."
+FREE_LIMIT_ANNOUNCEMENT = "Deine Gratisminuten für heute sind um. Lade Guthaben auf."
+DEFAULT_FREE_TICK_SECONDS = 5.0
 # Every teardown step is bounded so the teardown itself can never hang.
 TEARDOWN_STEP_TIMEOUT = 10.0
 
@@ -128,6 +131,10 @@ class CallGuard:
 
     def human_count(self) -> int:
         return sum(1 for p in self._ctx.room.remote_participants.values() if is_human(p))
+
+    @property
+    def ended(self) -> bool:
+        return self._ended
 
     # -- events -------------------------------------------------------------
     def _on_participant_connected(self, participant: Any) -> None:
@@ -229,10 +236,12 @@ class CallGuard:
 class WalletCharger:
     """Bucht echten Verbrauch x Faktor (+ MwSt) vom Wallet, das am Raum hängt.
 
-    Die Zuordnung Raum -> Konto legt der HTTP-Server an (host-call / live-room /
-    token mit X-Wallet-Token) in derselben SQLite-Datei; ohne Zuordnung bucht der
-    Charger nichts (Call wie bisher). charge() liefert genau EINMAL True, sobald der
-    Saldo <= 0 ist; ein Buchungsfehler bei gebundenem Konto zählt als leer (fail-closed).
+    Die Zuordnung Raum -> Konto legt der HTTP-Server an (nur host-call / live-room,
+    VOR dem Dispatch) in derselben SQLite-Datei; ohne Zuordnung bucht der Charger
+    nichts (Call wie bisher). Die Zuordnung wird genau EINMAL je Job gelesen: ein Raum
+    ohne Wallet öffnet danach bei keinem Kostenereignis mehr die Datenbank.
+    charge() liefert genau EINMAL True, sobald der Saldo <= 0 ist; ein Buchungsfehler
+    bei gebundenem Konto zählt als leer (fail-closed).
     """
 
     def __init__(self, room: str, mode: str) -> None:
@@ -240,9 +249,11 @@ class WalletCharger:
         self.mode = mode  # "normal" | "live" -> Faktor 3 | 1,5
         self.account: str | None = None
         self.exhausted = False
+        self._looked_up = False
 
     def lookup(self) -> str | None:
-        if self.account is None:
+        if not self._looked_up:
+            self._looked_up = True
             try:
                 bound = billing_db.room_wallet(self.room)
             except Exception as e:  # noqa: BLE001
@@ -277,6 +288,78 @@ class WalletCharger:
             self.exhausted = True
             return True
         return False
+
+
+def free_tick_seconds() -> float:
+    return _positive_env_seconds("VH_FREE_TICK_SECONDS", DEFAULT_FREE_TICK_SECONDS)
+
+
+class FreeMinutes:
+    """Gratis-Kontingent (freetier.py) für einen Raum ohne Wallet.
+
+    Liest die Merkmale des Raum-Erstellers EINMAL beim Start. Danach im Takt
+    (VH_FREE_TICK_SECONDS, Default 5 s): verstrichene Zeit, in der ein Mensch im Raum
+    war, auf jedes Merkmal buchen; ist der Tagesverbrauch eines Merkmals am Limit,
+    kurze Ansage + Call-Ende (Grund free_limit). Der Schlaf bis zum nächsten Takt ist
+    höchstens die Restzeit, damit das Ende pünktlich kommt. DB-Zugriffe laufen in
+    einem Thread, nie auf der Event-Loop.
+    """
+
+    def __init__(self, room: str, mode: str, *, clock: Callable[[], float] = time.monotonic) -> None:
+        self.room = room
+        self.mode = mode
+        self.keys: list[str] = []
+        self._clock = clock
+        self._task: asyncio.Task | None = None
+
+    def load(self) -> bool:
+        """True = Gratis-Raum mit aktivem Limit, wird gezählt."""
+        if not freetier.enabled(self.mode):
+            return False
+        try:
+            found = freetier.room_keys(self.room)
+        except Exception as e:  # noqa: BLE001
+            logger.error("[free] lookup room=%s failed: %s", self.room, e)
+            return False
+        if not found or not found[1]:
+            return False
+        self.keys = found[1]
+        return True
+
+    def start(self, guard: CallGuard) -> None:
+        self._task = asyncio.create_task(self._run(guard))
+
+    async def _book(self, seconds: float) -> None:
+        try:
+            await asyncio.to_thread(freetier.add_seconds, self.keys, self.mode, seconds)
+        except Exception as e:  # noqa: BLE001
+            logger.error("[free] book room=%s failed: %s", self.room, e)
+
+    async def _run(self, guard: CallGuard) -> None:
+        last = self._clock()
+        humans = guard.human_count() > 0
+        try:
+            while not guard.ended:
+                try:
+                    left = await asyncio.to_thread(freetier.remaining_seconds, self.keys, self.mode)
+                except Exception as e:  # noqa: BLE001
+                    logger.error("[free] read room=%s failed: %s", self.room, e)
+                    left = 0.0  # fail-closed: Gratis-Raum ohne lesbaren Zähler endet
+                if left <= 0:
+                    logger.warning("[free] daily limit reached in room=%s, ending call", self.room)
+                    await guard.end("free_limit", delete_room=True, announce=FREE_LIMIT_ANNOUNCEMENT)
+                    return
+                await asyncio.sleep(min(free_tick_seconds(), left))
+                now = self._clock()
+                if humans or guard.human_count() > 0:
+                    await self._book(now - last)
+                last = now
+                humans = guard.human_count() > 0
+        except asyncio.CancelledError:
+            if humans or guard.human_count() > 0:  # angefangenen Takt nicht verschenken
+                with contextlib.suppress(Exception):
+                    freetier.add_seconds(self.keys, self.mode, self._clock() - last)
+            raise
 
 
 def is_live() -> bool:
@@ -433,6 +516,11 @@ async def entrypoint(ctx: JobContext) -> None:
     )
     guard_ref.append(guard)
     guard.start()
+    # Gratis-Kontingent: nur Räume ohne Wallet, die der HTTP-Server als Gratis-Raum
+    # angelegt hat (host-call / live-room). Bezahlte Räume sind ausgenommen.
+    free = FreeMinutes(ctx.room.name, "live" if live_mode else "normal")
+    if wallet.lookup() is None and free.load():
+        free.start(guard)
     # Explicit room options (don't rely on lib defaults): close the session when
     # the linked participant leaves. Room deletion is owned by CallGuard so it
     # only happens when no human is left (or on the hard cap).

@@ -148,7 +148,7 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
   <button class="cta" id="cta" type="button"></button>
   <div class="msg" id="msg" hidden></div>
 
-  <div class="fineprint" id="t-fine">Zahlung über Stripe. Kein Abo.<br>Dein Konto ist die E-Mail-Adresse aus dem Bezahlvorgang.</div>
+  <div class="fineprint" id="t-fine">Zahlung über Stripe. Kein Abo.<br>Dein Guthaben hängt an diesem Gerät und deinem Wiederherstellungs-Link.</div>
 </main>
 
 <main class="wrap" id="view-done" hidden>
@@ -156,7 +156,6 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
   <div class="panel">
     <div class="lbl" id="t-done-bal">Aktuelles Guthaben</div>
     <div class="big" id="done-bal"></div>
-    <div class="msg" id="done-email"></div>
   </div>
   <div class="panel" id="recovery-box" hidden>
     <div class="lbl" id="t-rec-h">Wiederherstellungs-Link</div>
@@ -181,7 +180,7 @@ const T = {
   de: { brand:'Aufladen', h1:'Guthaben aufladen', sub:'Guthaben inkl. MwSt', rate:'Abgerechnet wird der echte Verbrauch',
         cta:a=>'Aufladen · '+a, busy:'Verbinde mit Stripe …', soon:'Aufladen bald verfügbar',
         soonMsg:'Die Zahlung ist noch nicht freigeschaltet.', err:'Das hat nicht geklappt. Bitte versuch es noch einmal.',
-        fine:'Zahlung über Stripe. Kein Abo.<br>Dein Konto ist die E-Mail-Adresse aus dem Bezahlvorgang.',
+        fine:'Zahlung über Stripe. Kein Abo.<br>Dein Guthaben hängt an diesem Gerät und deinem Wiederherstellungs-Link.',
         bal:b=>'Guthaben: <b>'+b+'</b>', cancel:'Zahlung abgebrochen. Es wurde nichts abgebucht.',
         confirming:'Zahlung wird bestätigt …', slow:'Die Bestätigung dauert länger als üblich. Lade die Seite gleich neu.',
         claimed:'Diese Zahlung wurde schon auf einem Gerät eingelöst. Nutze dort deinen Wiederherstellungs-Link.',
@@ -192,7 +191,7 @@ const T = {
   en: { brand:'Top up', h1:'Top up credit', sub:'credit incl. VAT', rate:'You pay for actual usage',
         cta:a=>'Top up · '+a, busy:'Connecting to Stripe …', soon:'Top-up coming soon',
         soonMsg:'Payments are not enabled yet.', err:'That did not work. Please try again.',
-        fine:'Payment via Stripe. No subscription.<br>Your account is the email address from checkout.',
+        fine:'Payment via Stripe. No subscription.<br>Your credit is tied to this device and your recovery link.',
         bal:b=>'Credit: <b>'+b+'</b>', cancel:'Payment cancelled. Nothing was charged.',
         confirming:'Confirming payment …', slow:'Confirmation is taking longer than usual. Reload the page in a moment.',
         claimed:'This payment was already redeemed on a device. Use your recovery link there.',
@@ -334,7 +333,6 @@ function showDone(w, recoveryUrl, title){
   $('view-topup').hidden = true; $('view-done').hidden = false;
   if (title) $('t-done-h1').textContent = title;
   $('done-bal').textContent = eurFmt.format(w.balance_eur || 0);
-  $('done-email').textContent = w.email || '';
   if (recoveryUrl) { $('recovery-box').hidden = false; $('rec-link').textContent = recoveryUrl; }
 }
 $('rec-copy').addEventListener('click', async () => {

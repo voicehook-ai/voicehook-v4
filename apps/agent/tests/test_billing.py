@@ -31,7 +31,8 @@ def _env(monkeypatch):
     for k in ("VOICEHOOK_REQUIRE_CREDITS_NORMAL", "VOICEHOOK_REQUIRE_CREDITS_LIVE",
               "VOICEHOOK_PRICE_FACTOR_NORMAL", "VOICEHOOK_PRICE_FACTOR_LIVE",
               "VOICEHOOK_VAT_RATE", "VOICEHOOK_USD_EUR", "VOICEHOOK_TOPUP_AMOUNTS_EUR",
-              "VOICEHOOK_TOPUP_MIN_EUR", "VOICEHOOK_TOPUP_MAX_EUR"):
+              "VOICEHOOK_TOPUP_MIN_EUR", "VOICEHOOK_TOPUP_MAX_EUR",
+              "VOICEHOOK_FREE_MIN_PER_DAY_LIVE", "VOICEHOOK_FREE_MIN_PER_DAY_NORMAL"):
         monkeypatch.delenv(k, raising=False)
     # Kein Test darf LiveKit erreichen
     import agent.server as srv
@@ -45,13 +46,15 @@ def client():
 
 
 def _event(session_id="cs_test_1", email="Kunde@Example.com", amount_cents=2000, *,
-           etype="checkout.session.completed", paid=True, currency="eur", metadata=None):
+           etype="checkout.session.completed", paid=True, currency="eur", metadata=None,
+           payment_intent=None):
     return {
         "id": "evt_" + session_id, "type": etype,
         "data": {"object": {
             "id": session_id, "object": "checkout.session", "amount_total": amount_cents,
             "currency": currency, "payment_status": "paid" if paid else "unpaid",
             "customer_details": {"email": email}, "metadata": metadata or {},
+            "payment_intent": payment_intent or "pi_" + session_id,
         }},
     }
 
@@ -63,8 +66,8 @@ def _post_webhook(client, event, *, secret=WH_SECRET, ts=None, sig=None):
                        headers={"stripe-signature": header, "content-type": "application/json"})
 
 
-def _paid_wallet(client, session_id="cs_test_w", amount_cents=1000):
-    assert _post_webhook(client, _event(session_id, amount_cents=amount_cents)).status_code == 200
+def _paid_wallet(client, session_id="cs_test_w", amount_cents=1000, email="Kunde@Example.com"):
+    assert _post_webhook(client, _event(session_id, email=email, amount_cents=amount_cents)).status_code == 200
     r = client.post("/api/wallet/claim", json={"session_id": session_id})
     assert r.status_code == 200, r.text
     return r.json()
@@ -78,7 +81,7 @@ def test_webhook_valid_signature_credits_once(client):
     assert r2.status_code == 200 and r2.json() == {"received": True, "credited": False, "duplicate": True}
     w = client.post("/api/wallet/claim", json={"session_id": "cs_test_1"}).json()
     assert w["balance_eur"] == 20.0                                   # nur EINMAL 20 EUR
-    assert w["email"] == "kunde@example.com"
+    assert "email" not in w                                           # API gibt nie eine E-Mail aus
 
 
 def test_webhook_wrong_signature_is_400_and_credits_nothing(client):
@@ -114,7 +117,7 @@ def test_webhook_without_secret_is_503(client, monkeypatch):
 def test_webhook_ignores_unpaid_other_currency_and_other_types(client):
     assert _post_webhook(client, _event("cs_a", paid=False)).json()["ignored"] == "not_paid"
     assert _post_webhook(client, _event("cs_b", currency="usd")).json()["ignored"] == "currency"
-    assert _post_webhook(client, _event("cs_c", etype="charge.refunded")).json()["ignored"] == "charge.refunded"
+    assert _post_webhook(client, _event("cs_c", etype="invoice.paid")).json()["ignored"] == "invoice.paid"
     for sid in ("cs_a", "cs_b", "cs_c"):
         assert client.post("/api/wallet/claim", json={"session_id": sid}).status_code == 202
 
@@ -296,16 +299,29 @@ def test_gating_off_wallet_still_binds_and_empty_wallet_runs_free(client):
     assert r2.status_code == 200 and db.room_wallet(r2.json()["room"]) is None
 
 
-def test_invite_join_binds_only_unbound_room(client):
+def test_invite_join_never_binds_room_to_guest_wallet(client):
+    """Review 01.10. (MEDIUM): nur der Ersteller zahlt. Ein Gast mit Wallet, der per
+    Einladung in einen (Gratis-)Raum kommt, zahlt nie für den fremden Call."""
     from agent.tokens import mint_invite
 
-    w1 = _paid_wallet(client, "cs_1")
-    w2 = _paid_wallet(client, "cs_2")
-    inv = mint_invite("room-a", secret="test-secret-do-not-use")
-    body = {"room": "room-a", "identity": "g", "invite": inv}
-    client.post("/api/token", json=body, headers={"x-wallet-token": w1["wallet_token"]})
-    client.post("/api/token", json=body, headers={"x-wallet-token": w2["wallet_token"]})
-    assert db.room_wallet("room-a")[0] == db.account_for_token(w1["wallet_token"])
+    host = client.post("/api/host-call", json={"identity": "host"})       # Raum ohne Wallet
+    room = host.json()["room"]
+    guest = _paid_wallet(client, "cs_guest")
+    inv = mint_invite(room, secret="test-secret-do-not-use")
+    r = client.post("/api/token", json={"room": room, "identity": "g", "invite": inv},
+                    headers={"x-wallet-token": guest["wallet_token"]})
+    assert r.status_code == 200                                            # Beitritt klappt
+    assert db.room_wallet(room) is None                                    # aber keine Bindung
+    acc = db.account_for_token(guest["wallet_token"])
+    assert db.balance_ueur(acc) == 10_000_000
+    # Positivkontrolle: legt derselbe Gast selbst einen Raum an, zahlt er dafür.
+    own = client.post("/api/host-call", json={"identity": "g"},
+                      headers={"x-wallet-token": guest["wallet_token"]})
+    assert db.room_wallet(own.json()["room"]) == (acc, "normal")
+
+
+def test_token_endpoint_has_no_wallet_binding_path():
+    assert not hasattr(billing_routes, "bind_room_if_paid")
 
 
 def test_credits_required_flag_parsing(monkeypatch):
@@ -314,3 +330,121 @@ def test_credits_required_flag_parsing(monkeypatch):
     monkeypatch.setenv("VOICEHOOK_REQUIRE_CREDITS_NORMAL", "1")
     assert billing_routes.credits_required("normal") is True
     assert billing_routes.credits_required("live") is False
+
+
+# ----- Review 01.10. CRITICAL: Konto-Übernahme per E-Mail ------------------------
+def test_foreign_email_at_checkout_never_reaches_victim_account(client):
+    """Opfer lädt 200 auf; Angreifer zahlt 10 und tippt die Opfer-E-Mail ein.
+    Angreifer sieht nur seine 10 und keine fremde E-Mail; Opfer behält 200."""
+    victim = _paid_wallet(client, "cs_victim", amount_cents=20_000, email="victim@x.de")
+    assert _post_webhook(client, _event("cs_attacker", email="Victim@X.de", amount_cents=1000)).status_code == 200
+    stolen = client.post("/api/wallet/claim", json={"session_id": "cs_attacker"})
+    assert stolen.status_code == 200
+    body = stolen.json()
+    assert body["balance_eur"] == 10.0                                  # nur das eigene Geld
+    assert "victim" not in json.dumps(body).lower()                     # keine fremde E-Mail
+    att = client.get("/api/wallet", headers={"x-wallet-token": body["wallet_token"]}).json()
+    assert att["balance_eur"] == 10.0 and "email" not in att
+    vic = client.get("/api/wallet", headers={"x-wallet-token": victim["wallet_token"]}).json()
+    assert vic["balance_eur"] == 200.0                                  # Positivkontrolle Opfer
+    assert db.account_for_token(body["wallet_token"]) != db.account_for_token(victim["wallet_token"])
+    # Recovery-Link des Angreifers führt ebenfalls nur zu seinem Konto
+    code = body["recovery_url"].split("#r=", 1)[1]
+    rec = client.post("/api/wallet/recover", json={"code": code}).json()
+    assert rec["balance_eur"] == 10.0
+
+
+def test_same_email_twice_without_wallet_creates_two_accounts():
+    assert db.record_stripe_session("cs_e1", "same@x.de", 1000) is True
+    assert db.record_stripe_session("cs_e2", "same@x.de", 2000) is True
+    a1, a2 = db.claim_session("cs_e1")[1], db.claim_session("cs_e2")[1]
+    assert a1 != a2
+    assert (db.balance_ueur(a1), db.balance_ueur(a2)) == (10_000_000, 20_000_000)
+
+
+def test_forged_unknown_vh_account_creates_new_account():
+    db.record_stripe_session("cs_v", "v@x.de", 5000)
+    victim = db.claim_session("cs_v")[1]
+    db.record_stripe_session("cs_f", "v@x.de", 1000, account_id="acc_does_not_exist")
+    other = db.claim_session("cs_f")[1]
+    assert other != victim and db.balance_ueur(victim) == 50_000_000
+
+
+def test_old_schema_with_unique_email_is_migrated(tmp_path, monkeypatch):
+    import sqlite3
+
+    monkeypatch.setenv("VOICEHOOK_STATE_DIR", str(tmp_path / "old"))
+    path = db.db_path()
+    path.parent.mkdir(parents=True)
+    c = sqlite3.connect(path)
+    c.executescript(
+        "CREATE TABLE accounts (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE,"
+        " balance_ueur INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);"
+        "CREATE TABLE stripe_sessions (session_id TEXT PRIMARY KEY, account_id TEXT NOT NULL,"
+        " amount_cents INTEGER NOT NULL, processed_at TEXT NOT NULL, claimed_at TEXT);"
+        "INSERT INTO accounts VALUES ('acc_old', 'a@b.c', 5, 't', 't');"
+    )
+    c.close()
+    assert db.record_stripe_session("cs_m1", "a@b.c", 1000, payment_intent="pi_m1") is True
+    assert db.claim_session("cs_m1")[1] != "acc_old"
+    assert db.balance_ueur("acc_old") == 5
+
+
+# ----- Review 01.10. LOW: Erstattung / Rückbuchung --------------------------------
+def _charge_event(etype, *, pi, oid, amount_refunded=0, amount=0):
+    obj = {"id": oid, "payment_intent": pi}
+    if etype == "charge.refunded":
+        obj.update(object="charge", amount_refunded=amount_refunded)
+    else:
+        obj.update(object="dispute", amount=amount)
+    return {"id": "evt_" + oid + str(amount_refunded), "type": etype, "data": {"object": obj}}
+
+
+def test_refund_debits_idempotent_and_partial_cumulative(client):
+    w = _paid_wallet(client, "cs_r", amount_cents=2000)          # 20 EUR, pi_cs_r
+    hdr = {"x-wallet-token": w["wallet_token"]}
+    r = _post_webhook(client, _charge_event("charge.refunded", pi="pi_cs_r", oid="ch_1", amount_refunded=500))
+    assert r.json() == {"received": True, "reversal": "reversed"}
+    assert client.get("/api/wallet", headers=hdr).json()["balance_eur"] == 15.0
+    again = _post_webhook(client, _charge_event("charge.refunded", pi="pi_cs_r", oid="ch_1", amount_refunded=500))
+    assert again.json()["reversal"] == "duplicate"                # Wiederzustellung
+    assert client.get("/api/wallet", headers=hdr).json()["balance_eur"] == 15.0
+    # zweite Teilerstattung: Stripe meldet kumuliert 1200 -> nur 7 EUR Zuwachs
+    _post_webhook(client, _charge_event("charge.refunded", pi="pi_cs_r", oid="ch_1", amount_refunded=1200))
+    assert client.get("/api/wallet", headers=hdr).json()["balance_eur"] == 8.0
+
+
+def test_dispute_debits_never_below_zero_and_notes_shortfall(client):
+    w = _paid_wallet(client, "cs_d", amount_cents=1000)
+    acc = db.account_for_token(w["wallet_token"])
+    db.charge(acc, 7_000_000, room="r", mode="normal", usd=1)     # 3 EUR übrig, 7 verbraucht
+    r = _post_webhook(client, _charge_event("charge.dispute.created", pi="pi_cs_d", oid="dp_1", amount=1000))
+    assert r.json()["reversal"] == "reversed"
+    assert db.balance_ueur(acc) == 0                              # nie unter 0
+    conn = db.connect()
+    row = conn.execute("SELECT debited_ueur, shortfall_ueur FROM reversals WHERE key='dispute:dp_1'").fetchone()
+    conn.close()
+    assert tuple(row) == (3_000_000, 7_000_000)                   # Fehlbetrag vermerkt
+    assert _post_webhook(client, _charge_event("charge.dispute.created", pi="pi_cs_d", oid="dp_1",
+                                               amount=1000)).json()["reversal"] == "duplicate"
+
+
+def test_refund_plus_dispute_capped_at_paid_amount(client):
+    w = _paid_wallet(client, "cs_cap", amount_cents=1000)
+    acc = db.account_for_token(w["wallet_token"])
+    db.record_stripe_session("cs_other", "", 5000, account_id=acc)   # weiteres Guthaben, anderes pi
+    _post_webhook(client, _charge_event("charge.refunded", pi="pi_cs_cap", oid="ch_c", amount_refunded=1000))
+    _post_webhook(client, _charge_event("charge.dispute.created", pi="pi_cs_cap", oid="dp_c", amount=1000))
+    assert db.balance_ueur(acc) == 50_000_000                     # 10 EUR nur einmal zurück
+
+
+def test_refund_unknown_payment_and_bad_signature_change_nothing(client):
+    w = _paid_wallet(client, "cs_u", amount_cents=1000)
+    hdr = {"x-wallet-token": w["wallet_token"]}
+    ev = _charge_event("charge.refunded", pi="pi_fremd", oid="ch_x", amount_refunded=1000)
+    assert _post_webhook(client, ev).json()["reversal"] == "unknown_payment"
+    ev2 = _charge_event("charge.refunded", pi="pi_cs_u", oid="ch_y", amount_refunded=1000)
+    assert _post_webhook(client, ev2, secret="whsec_wrong").status_code == 400
+    assert client.get("/api/wallet", headers=hdr).json()["balance_eur"] == 10.0   # Positivkontrolle davor
+    assert _post_webhook(client, ev2).json()["reversal"] == "reversed"
+    assert client.get("/api/wallet", headers=hdr).json()["balance_eur"] == 0.0

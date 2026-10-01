@@ -5,14 +5,22 @@ laufen auf derselben Box und teilen sich das State-Verzeichnis). WAL + Busy-Time
 jede Schreiboperation in einer eigenen BEGIN-IMMEDIATE-Transaktion.
 
 Schema:
-    accounts(id, email UNIQUE, balance_ueur, created_at, updated_at)
-        Konto = E-Mail aus Stripe Checkout (kein Login). Saldo in µEUR, brutto.
+    accounts(id, email, balance_ueur, created_at, updated_at)
+        Konto = Wallet (geheimes Token + Wiederherstellungs-Link), NICHT die E-Mail.
+        Die Checkout-E-Mail wird nur vermerkt; Stripe prüft sie nicht, deshalb wird
+        NIE über die E-Mail zusammengeführt (Review 01.10.: Konto-Übernahme).
+        Saldo in µEUR, brutto.
     tokens(token_hash PK, account_id, kind 'wallet'|'recovery', created_at, last_used_at)
         Nur SHA-256 der Tokens wird gespeichert; der Klartext geht genau einmal
         an den Browser (Wallet-Token -> localStorage, Recovery -> Link).
-    stripe_sessions(session_id PK, account_id, amount_cents, processed_at, claimed_at)
+    stripe_sessions(session_id PK, account_id, amount_cents, processed_at, claimed_at,
+                    payment_intent)
         Idempotenz: eine Checkout-Session wird genau einmal gutgeschrieben und
         genau einmal gegen ein Wallet-Token eingelöst.
+    reversals(key PK, session_id, kind 'refund'|'dispute', cents, debited_ueur,
+              shortfall_ueur, ts)
+        Erstattungen/Rückbuchungen: je Schlüssel genau einmal abgezogen. Reicht der
+        Saldo nicht, bleibt er bei 0 und der Fehlbetrag steht in shortfall_ueur.
     room_wallets(room PK, account_id, mode, created_at)
         Welches Konto zahlt für welchen Raum (erste Zuordnung gewinnt).
     usage(id, account_id, room, mode, usd, charge_ueur, balance_after_ueur, ts)
@@ -36,7 +44,7 @@ _INITIALIZED_PATHS: set[str] = set()
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
-    email TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL,
     balance_ueur INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -53,7 +61,17 @@ CREATE TABLE IF NOT EXISTS stripe_sessions (
     account_id TEXT NOT NULL REFERENCES accounts(id),
     amount_cents INTEGER NOT NULL,
     processed_at TEXT NOT NULL,
-    claimed_at TEXT
+    claimed_at TEXT,
+    payment_intent TEXT
+);
+CREATE TABLE IF NOT EXISTS reversals (
+    key TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES stripe_sessions(session_id),
+    kind TEXT NOT NULL,
+    cents INTEGER NOT NULL,
+    debited_ueur INTEGER NOT NULL,
+    shortfall_ueur INTEGER NOT NULL,
+    ts TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS room_wallets (
     room TEXT PRIMARY KEY,
@@ -74,6 +92,32 @@ CREATE TABLE IF NOT EXISTS usage (
 CREATE INDEX IF NOT EXISTS idx_usage_account ON usage(account_id);
 """
 
+_INDEXES = """
+CREATE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email);
+CREATE INDEX IF NOT EXISTS idx_sessions_pi ON stripe_sessions(payment_intent);
+"""
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Ältere Datei (erster PR-Stand) auf das aktuelle Schema heben. Idempotent."""
+    row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'").fetchone()
+    if row and "UNIQUE" in (row[0] or "").upper():  # E-Mail darf nicht mehr eindeutig sein
+        conn.executescript(
+            "PRAGMA foreign_keys=OFF;"
+            "BEGIN IMMEDIATE;"
+            "CREATE TABLE accounts_new (id TEXT PRIMARY KEY, email TEXT NOT NULL,"
+            " balance_ueur INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);"
+            "INSERT INTO accounts_new SELECT id, email, balance_ueur, created_at, updated_at FROM accounts;"
+            "DROP TABLE accounts;"
+            "ALTER TABLE accounts_new RENAME TO accounts;"
+            "COMMIT;"
+            "PRAGMA foreign_keys=ON;"
+        )
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(stripe_sessions)").fetchall()}
+    if "payment_intent" not in cols:
+        conn.execute("ALTER TABLE stripe_sessions ADD COLUMN payment_intent TEXT")
+    conn.executescript(_INDEXES)
+
 
 def db_path() -> Path:
     base = os.environ.get("VOICEHOOK_STATE_DIR", "/opt/voicehook/state")
@@ -93,6 +137,7 @@ def connect() -> sqlite3.Connection:
         with _INIT_LOCK:
             if key not in _INITIALIZED_PATHS:
                 conn.executescript(_SCHEMA)
+                _migrate(conn)
                 _INITIALIZED_PATHS.add(key)
     return conn
 
@@ -125,11 +170,10 @@ def normalize_email(email: str) -> str:
 
 
 # ----- Konten ---------------------------------------------------------------
-def _account_id_for_email(conn: sqlite3.Connection, email: str) -> str:
+def _new_account(conn: sqlite3.Connection, email: str) -> str:
+    """Immer ein NEUES Konto. Nie über die E-Mail suchen: Stripe Checkout prüft die
+    Adresse nicht, wer eine fremde E-Mail eintippt, darf deren Konto nie erreichen."""
     email = normalize_email(email)
-    row = conn.execute("SELECT id FROM accounts WHERE email = ?", (email,)).fetchone()
-    if row:
-        return row["id"]
     acc = "acc_" + secrets.token_hex(12)
     now = _now()
     conn.execute(
@@ -157,12 +201,14 @@ def balance_ueur(account_id: str) -> int:
 
 # ----- Stripe-Sessions (idempotent) ------------------------------------------
 def record_stripe_session(
-    session_id: str, email: str, amount_cents: int, *, account_id: str | None = None
+    session_id: str, email: str, amount_cents: int, *, account_id: str | None = None,
+    payment_intent: str | None = None,
 ) -> bool:
     """Bezahlte Checkout-Session gutschreiben. True = neu gutgeschrieben, False = Duplikat.
 
-    Ziel-Konto: `account_id` aus den Session-Metadaten (Aufladen aus einem bestehenden
-    Wallet), sonst das Konto zur Checkout-E-Mail (wird bei Bedarf angelegt). Prüfung
+    Ziel-Konto: `account_id` aus den Session-Metadaten (vom Server gesetzt, nur wenn
+    der Checkout mit einem gültigen Wallet-Token gestartet wurde), sonst IMMER ein
+    neues Konto. Die E-Mail führt nie zu einem bestehenden Konto. Prüfung
     auf Duplikat und Gutschrift laufen in EINER Transaktion: kein doppeltes Guthaben,
     auch nicht bei gleichzeitiger Wiederzustellung desselben Events.
     """
@@ -179,14 +225,12 @@ def record_stripe_session(
         ).fetchone():
             acc = account_id
         if acc is None:
-            if not normalize_email(email):
-                raise ValueError("record_stripe_session: no account and no email")
-            acc = _account_id_for_email(conn, email)
+            acc = _new_account(conn, email)
         now = _now()
         conn.execute(
-            "INSERT INTO stripe_sessions (session_id, account_id, amount_cents, processed_at)"
-            " VALUES (?, ?, ?, ?)",
-            (session_id, acc, amount_cents, now),
+            "INSERT INTO stripe_sessions (session_id, account_id, amount_cents, processed_at,"
+            " payment_intent) VALUES (?, ?, ?, ?, ?)",
+            (session_id, acc, amount_cents, now, payment_intent or None),
         )
         conn.execute(
             "UPDATE accounts SET balance_ueur = balance_ueur + ?, updated_at = ? WHERE id = ?",
@@ -284,3 +328,59 @@ def charge(account_id: str, ueur: int, *, room: str, mode: str, usd: float) -> i
             (account_id, room, mode, float(usd), ueur, new, now),
         )
         return new
+
+
+# ----- Erstattung / Rückbuchung -------------------------------------------------
+def reverse_payment(
+    payment_intent: str, key: str, kind: str, cents: int, *, cumulative: bool = False
+) -> dict:
+    """Erstattung (`kind`='refund') oder Rückbuchung ('dispute') vom Konto abziehen.
+
+    `key` macht die Buchung idempotent (Wiederzustellung = keine zweite Abbuchung).
+    `cents` ist der Betrag, den DIESE Buchung zurücknimmt; mit `cumulative=True` die
+    Gesamtsumme dieser Art (Stripe meldet bei charge.refunded `amount_refunded`
+    kumuliert), abgezogen wird dann nur der Zuwachs. Immer gedeckelt auf das, was
+    von der Session noch nicht zurückgenommen wurde. Der Saldo fällt nie unter 0;
+    der nicht gedeckte Teil wird in reversals.shortfall_ueur vermerkt.
+    Ergebnis: {'status': 'reversed'|'duplicate'|'unknown_payment'|'nothing', ...}.
+    """
+    with _Tx() as conn:
+        if conn.execute("SELECT 1 FROM reversals WHERE key = ?", (key,)).fetchone():
+            return {"status": "duplicate"}
+        s = conn.execute(
+            "SELECT session_id, account_id, amount_cents FROM stripe_sessions WHERE payment_intent = ?",
+            (payment_intent,),
+        ).fetchone()
+        if s is None:
+            return {"status": "unknown_payment"}
+        done = conn.execute(
+            "SELECT COALESCE(SUM(cents), 0) FROM reversals WHERE session_id = ?", (s["session_id"],)
+        ).fetchone()[0]
+        if cumulative:
+            same = conn.execute(
+                "SELECT COALESCE(SUM(cents), 0) FROM reversals WHERE session_id = ? AND kind = ?",
+                (s["session_id"], kind),
+            ).fetchone()[0]
+            cents = int(cents) - int(same)
+        cents = max(0, min(int(cents), int(s["amount_cents"]) - int(done)))
+        want = cents * 10_000
+        bal = conn.execute(
+            "SELECT balance_ueur FROM accounts WHERE id = ?", (s["account_id"],)
+        ).fetchone()
+        have = int(bal["balance_ueur"]) if bal else 0
+        debited = min(have, want)
+        shortfall = want - debited
+        now = _now()
+        conn.execute(
+            "INSERT INTO reversals (key, session_id, kind, cents, debited_ueur, shortfall_ueur, ts)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (key, s["session_id"], kind, cents, debited, shortfall, now),
+        )
+        if debited:
+            conn.execute(
+                "UPDATE accounts SET balance_ueur = balance_ueur - ?, updated_at = ? WHERE id = ?",
+                (debited, now, s["account_id"]),
+            )
+        return {"status": "reversed" if cents else "nothing", "account_id": s["account_id"],
+                "cents": cents, "debited_ueur": debited, "shortfall_ueur": shortfall}
+

@@ -2,14 +2,19 @@
 
 Ablauf (Oliver 01.10.2026):
   1. /aufladen: Betrag wählen -> POST /api/checkout -> Stripe Checkout (E-Mail dort).
-  2. Stripe -> POST /api/stripe/webhook (Signatur geprüft) -> Guthaben aufs Konto
-     der Checkout-E-Mail, idempotent je Session.
+  2. Stripe -> POST /api/stripe/webhook (Signatur geprüft) -> Guthaben auf ein NEUES
+     Konto (oder auf das Konto des Wallet-Tokens, mit dem der Checkout gestartet
+     wurde), idempotent je Session. Nie über die E-Mail zusammenführen: Stripe
+     prüft die Adresse nicht (Review 01.10.: sonst Konto-Übernahme).
   3. Stripe leitet zurück auf /aufladen?session_id=... -> POST /api/wallet/claim
      -> Browser bekommt EINMAL ein geheimes Wallet-Token (localStorage) und einen
      Wiederherstellungs-Link (/aufladen#r=<code>).
-  4. Calls: host-call / live-room / token nehmen das Token im Header X-Wallet-Token
-     an und binden den Raum an das Konto; der Worker bucht dann echten Verbrauch x
-     Faktor ab (billing/pricing.py).
+  4. Calls: NUR host-call / live-room (wer den Raum anlegt) nehmen das Token im
+     Header X-Wallet-Token an und binden den neuen Raum an das Konto; der Worker
+     bucht dann echten Verbrauch x Faktor ab (billing/pricing.py). /api/token
+     (Beitritt per Einladung) bindet nie: ein Gast zahlt nie für fremde Räume.
+  5. Erstattung/Rückbuchung (charge.refunded, charge.dispute.created) ziehen den
+     Betrag wieder ab (Saldo nie unter 0, Fehlbetrag vermerkt), idempotent.
 
 Gating per Env, Default AUS bis Stripe live ist:
   VOICEHOOK_REQUIRE_CREDITS_NORMAL=0, VOICEHOOK_REQUIRE_CREDITS_LIVE=0
@@ -29,6 +34,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from . import freetier
 from .billing import db, pricing, stripe_api
 
 logger = logging.getLogger("voicehook.billing")
@@ -72,11 +78,23 @@ def wallet_for_call(request: Request, mode: str) -> str | None:
     return None
 
 
-def bind_room_if_paid(request: Request, room: str, mode: str) -> None:
-    """Join über Einladung: ein mitgeschicktes Wallet bindet nur einen noch freien Raum."""
-    acc = db.account_for_token(wallet_token(request))
-    if acc is not None and db.balance_ueur(acc) > 0:
-        db.bind_room(room, acc, mode)
+def free_keys_for_call(request: Request, mode: str, ip: str, wallet: str | None) -> list[str] | None:
+    """Gratis-Kontingent (freetier.py) für einen neuen Raum ohne Wallet.
+
+    None = nicht zu zählen (bezahlter Raum oder Limit für den Modus aus).
+    Sonst die Merkmale des Erstellers; ist eines davon heute schon am Limit -> 402
+    mit Grund free_limit und Link zum Aufladen.
+    """
+    if wallet or not freetier.enabled(mode):
+        return None
+    keys = freetier.identity_keys(request.headers.get(freetier.ANON_HEADER), ip)
+    if freetier.remaining_seconds(keys, mode) <= 0:
+        raise HTTPException(
+            status_code=402,
+            detail={"error": "free_limit", "topup_url": TOPUP_PATH,
+                    "free_min_per_day": freetier.limit_minutes(mode)},
+        )
+    return keys
 
 
 # ----- Konfiguration für die Seite -------------------------------------------
@@ -138,6 +156,31 @@ def api_checkout(req: CheckoutRequest, request: Request) -> dict:
 
 # ----- Webhook -----------------------------------------------------------------
 _PAID_EVENTS = {"checkout.session.completed", "checkout.session.async_payment_succeeded"}
+_REVERSAL_EVENTS = {"charge.refunded", "charge.dispute.created"}
+
+
+def _id_of(v) -> str:  # noqa: ANN001  Stripe liefert IDs oder (expandiert) Objekte
+    if isinstance(v, dict):
+        v = v.get("id")
+    return v if isinstance(v, str) else ""
+
+
+def _handle_reversal(etype: str, obj: dict) -> dict:
+    pi = _id_of(obj.get("payment_intent"))
+    oid = obj.get("id") or ""
+    if not pi or not oid:
+        logger.error("[billing] %s without payment_intent/id, ignored", etype)
+        return {"received": True, "ignored": "incomplete"}
+    if etype == "charge.refunded":
+        res = db.reverse_payment(pi, f"refund:{oid}:{int(obj.get('amount_refunded') or 0)}",
+                                 "refund", int(obj.get("amount_refunded") or 0), cumulative=True)
+    else:
+        res = db.reverse_payment(pi, f"dispute:{oid}", "dispute", int(obj.get("amount") or 0))
+    if res["status"] == "reversed" and res["shortfall_ueur"]:
+        logger.warning("[billing] %s %s: balance short by %s µEUR (account %s), kept at 0",
+                       etype, oid, res["shortfall_ueur"], res["account_id"])
+    logger.info("[billing] %s %s -> %s", etype, oid, res["status"])
+    return {"received": True, "reversal": res["status"]}
 
 
 @router.post("/api/stripe/webhook")
@@ -154,9 +197,11 @@ async def api_stripe_webhook(request: Request) -> dict:
         raise HTTPException(status_code=400, detail="invalid signature") from e
 
     etype = event.get("type", "")
+    s = (event.get("data") or {}).get("object") or {}
+    if etype in _REVERSAL_EVENTS:
+        return _handle_reversal(etype, s)
     if etype not in _PAID_EVENTS:
         return {"received": True, "ignored": etype}
-    s = (event.get("data") or {}).get("object") or {}
     sid = s.get("id")
     if s.get("payment_status") != "paid":  # z. B. SEPA: erst async_payment_succeeded
         return {"received": True, "ignored": "not_paid"}
@@ -169,19 +214,20 @@ async def api_stripe_webhook(request: Request) -> dict:
     if not sid or amount <= 0 or not (email or acc_hint):
         logger.error("[billing] session %r incomplete (amount=%s email=%s)", sid, amount, bool(email))
         return {"received": True, "ignored": "incomplete"}
-    granted = db.record_stripe_session(sid, email, amount, account_id=acc_hint)
+    granted = db.record_stripe_session(sid, email, amount, account_id=acc_hint,
+                                       payment_intent=_id_of(s.get("payment_intent")) or None)
     logger.info("[billing] session %s %s (%s cents)", sid, "credited" if granted else "duplicate", amount)
     return {"received": True, "credited": granted, "duplicate": not granted}
 
 
 # ----- Wallet ------------------------------------------------------------------
 def _wallet_view(acc: str) -> dict:
+    """Saldo-Ansicht. Bewusst OHNE E-Mail: das Konto ist das Wallet, nicht die Adresse."""
     row = db.account(acc)
     bal = int(row["balance_ueur"]) if row else 0
     return {
         "balance_eur": pricing.ueur_to_eur(bal),
         "currency": "EUR",
-        "email": row["email"] if row else "",
         "can_call": bal > 0,
     }
 
