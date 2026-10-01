@@ -1,200 +1,183 @@
 ---
 name: voicehook-join
-description: Join an existing voicehook.ai voice-call as the senior brain behind a STRICT-RELAY voicebot. Use when the user shares a voicehook invite URL (https://voicehook.ai/r/<slug>) or says "join voicehook", "übernimm den voice-call", "/voicehook-join". The voicebot is NOT a clone of you and NEVER improvises — it speaks only (a) text you push via operator.say, (b) a curated knowledge persona you inject (NEVER secrets), and (c) server-side primitives (auto-greet, backchannel). Install: voicehook-agent CLI. Protocol: stdin/stdout JSON, no SDK. Works local + production (https://voicehook.ai).
+description: Join an existing voicehook.ai voice call as the brain behind its voicebot. Use when the user shares a voicehook invite URL (https://voicehook.ai/r/<slug>) or says "join voicehook", "tritt meinem Call bei", "übernimm den voice-call", "/voicehook-join". The voicebot speaks what you push with `say`; you listen with `next`. Install: voicehook-agent CLI from GitHub. Works on https://voicehook.ai and self-hosted v4 boxes.
 ---
 
-# voicehook-join — drive a voicehook v4 call as senior brain
+# voicehook-join: be the brain in a voicehook call
 
-> **Stand 2026-10-01** (voicehook-v4 bis PR #81: `operator.revise`, Transkript-Rollen, Live-Modus, Sprach- und Sprecherfilter). Kanonisch: `voicehook-ai/voicehook-v4:skills/voicehook-join/SKILL.md`.
+Canonical: `voicehook-ai/voicehook-v4:skills/voicehook-join/SKILL.md`, served at
+https://voicehook.ai/agent/SKILL.md. Protocol details: `docs/OPERATOR-PROTOCOL.md`.
 
-## ⚠️ ZUERST: CLI **und** Skill aktualisieren (Olivers Regel)
-
-**Die CLI ist wichtiger als der Skill-Text.** Belegter Ausfall 2026-09-25: der Skill wurde brav gegen v4 diffed,
-die CLI aber nicht angefasst. Sie war 0.2.0 vom 15.09., und Commit `f59a9c1c` vom **17.09.** hatte die Topics von
-`senior.*` auf `operator.*` umbenannt. Die CLI publizierte weiter `senior.say`, der Worker hörte auf `operator.say`;
-Oliver hörte 20 Minuten lang nur die Ausweichfloskel "ich gebe das an den Operator weiter", also wörtlich den neuen
-Topic-Namen. Nichts warf einen Fehler: kein `[warn]`, kein Stale-Drop, FIFO sauber geleert.
-**Ein stiller Topic-Mismatch sieht exakt aus wie ein toter Worker.**
-
-Deshalb IMMER zuerst die Version vergleichen, erst danach den Skill-Text:
+## Quickstart (target: in the call in under 30 s)
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
-voicehook-agent --version                       # installiert
-gh api repos/voicehook-ai/voicehook-agent/commits?per_page=5 \
-  --jq '.[] | "\(.commit.author.date[0:16])  \(.sha[0:8])  \(.commit.message|split("\n")[0])"'
-# Liegt ein Commit NACH dem Installationsdatum? Dann erst hochziehen:
-pip3 install --user --break-system-packages --upgrade \
-  git+https://github.com/voicehook-ai/voicehook-agent
-# Gegenprobe, welches Topic die CLI wirklich sendet:
-grep -n 'publish_data(payload' -A1 \
-  ~/.local/lib/python3.*/site-packages/voicehook_agent/cli.py
+R=git+https://github.com/voicehook-ai/voicehook-agent; export PATH="$HOME/.local/bin:$PATH"
+command -v voicehook-agent || uv tool install -q $R || pip install -q --user $R
+D=$(mktemp -d /tmp/vh-XXXXXX); mkfifo $D/in; (setsid sleep 86400 >$D/in & echo $! >$D/holder)
+printf '#!/bin/sh\nexport VOICEHOOK_AGENT_HOME=%s\n[ "$1" = leave ] || exec "%s" "$@"\n"%s" "$@"; rc=$?; kill $(cat %s/holder) 2>/dev/null; exit $rc\n' \
+  $D "$(command -v voicehook-agent)" "$(command -v voicehook-agent)" $D >$D/vh; chmod +x $D/vh
+(setsid nohup $D/vh join "<INVITE_URL>" --name Claude --model <your-model-id> --json --greet "Hallo, hier ist Claude. Worum geht's?" <$D/in >$D/out 2>&1 &)
+$D/vh next --help >/dev/null 2>&1 && echo "D=$D ready" || echo "D=$D CLI 0.4.0: run the Fallback block"
 ```
 
-Dann erst der Skill-Text:
+Write down the printed `D=` path. Shell variables and `PATH` do NOT survive between your
+tool calls, so every later call uses the absolute wrapper, e.g. `/tmp/vh-ab12cd/vh next`.
+`$D/vh` knows the binary's full path and gives your join its own control socket
+(`VOICEHOOK_AGENT_HOME=$D`), so other agents on the same machine never collide with you.
+
+- `--name` / `--model` are mandatory (exit 2 without them): your real name and the exact
+  model id you run on. Never claim a vendor you are not. Unknown model: `--model unbekannt`.
+- `--greet` is spoken right after connect. Write it in the language of the invite
+  message (German invite → German greeting). One short sentence.
+- No `uv`: `curl -LsSf https://astral.sh/uv/install.sh | sh` takes a few seconds and beats pip.
+  pip refused by PEP 668: add `--break-system-packages`. Old CLI installed and you want
+  `next`/`say`/`leave` natively: `uv tool install --force $R`.
+- `setsid` matters: without it the join dies with the shell of your tool call.
+
+## The work cycle: say → next → say
 
 ```bash
-gh api repos/voicehook-ai/voicehook-v4/contents/skills/voicehook-join/SKILL.md \
-  --jq '.content' | base64 -d > /tmp/SKILL-v4.md
-diff <(grep -E '^#{1,3} ' ~/.claude/skills/voicehook-join/SKILL.md) \
-     <(grep -E '^#{1,3} ' /tmp/SKILL-v4.md)
+/tmp/vh-ab12cd/vh next                     # blocks until the user finished a turn
+/tmp/vh-ab12cd/vh say "Antwort in ein, zwei kurzen Sätzen."
+/tmp/vh-ab12cd/vh next                     # immediately again, never sleep-poll
 ```
 
-Kanonisch: Skill-Text in **voicehook-v4** `skills/voicehook-join/`, CLI-Code in **voicehook-agent** (Agent-Skill live: voicehook.ai/agent/SKILL.md).
+`next` prints ONE JSON line (CLI 0.5.0, exit 3 once the call is over):
 
-## Design: strict mouthpiece
-
-Die voice-ai generiert **nie** selbst. `RelayAgent.on_user_turn_completed` wirft serverseitig `StopResponse`. Sie sagt ausschliesslich:
-
-1. Text, den du per `operator.say` schickst (wortwörtliches TTS)
-2. Inhalt der zuletzt injizierten `operator.persona` (begrenztes Wissen)
-3. serverseitige Primitive: einmaliger Auto-Greet beim ersten Persona-Push,
-   periodischer Backchannel bei langen User-Turns
-
-Alles andere ist Halluzination und gehört als v4-Issue gemeldet.
-
-## operator.* Topics
-
-| topic | payload | Wirkung |
+| `type` | meaning | do |
 |---|---|---|
-| `operator.say` | `{text, mode?}` | TTS. Default `revise`: nichts offen → sofort; sonst Stopp + `operator.revise` zurück, neue Aussage wartet (max 8s) auf dein `overwrite`. `mode:"overwrite"` = deine Zusammenfassung, ersetzt alles. `append` = anhängen (ab voicehook-v4 PR #70) |
-| `operator.persona` | `{text}` | ersetzt agent.instructions live; erster Push löst Auto-Greet aus |
-| `operator.interrupt` | `{}` | alles stoppen; Ungesprochenes kommt als `operator.revise` zurück |
-| `operator.revise` | ← `{unspoken[], new, text}` | vom Agent an dich: was NICHT gesprochen wurde + Anweisung |
-| `operator.inject` | `{text, role?}` | synthetischer chat-ctx-Eintrag, wird NICHT gesprochen |
-| `transcript` | ← `{role, text}` | `user`; `operator` = deine Aussage, erst NACH dem Aussprechen (bei Abbruch nur der gesprochene Teil); `agent` = Eigenantwort der voice-ai. Browser: operator rot, agent blau |
+| `user` | `text` = what the user just said | answer with one `say` |
+| `revise` | your `say` overlapped unspoken text | merge, `say --mode overwrite "…"` within 8 s |
+| `timeout` | 60 s silence (`--timeout SEC`) | call `next` again |
+| `ended` | the call is over | stop, the join already left |
 
-## Serverseitig, kein Roundtrip nötig (v4, fixt v3#61)
+- Call `next` right after the quickstart: the first `next` (or `say`) starts the queue,
+  from then on turns spoken while you were busy wait for you. Never `sleep 20; tail`.
+- Answer every user turn with exactly ONE `say` that states what is true now.
+- Work longer than ~8 s: first `say "Moment, ich schaue nach."`, then work, then the result.
+  Over ~15 s: hand the work to a background agent and keep looping.
+- Idle guard (0.5.0): no `say`/`next` for 10 min (`--idle-timeout MIN`, 0 = off) and the
+  join announces it and leaves. A running `next` counts as alive.
 
-- **Auto-Greet**: erster `operator.persona` löst einen einmaligen TTS-Gruss aus.
-- **Heartbeat**: Topic `agent.heartbeat`, alle 30s,
-  `{ts, room, probe:{stt,tts,llm}, healthy}`. NICHT auf `transcript` (v3#62).
-  Bleiben die Ticks >60s aus, ist der Worker tot, auch wenn operator.say nicht wirft.
-- **Backchannel**: spricht der User ≥6s ohne Antwort, feuert der Server
-  "mhm"/"ja"/"ok" mit niedriger Priorität. Nicht selbst pushen.
+## Stay in the call (mandatory)
 
-## CLI-Stand auf DIESER Box (wichtig, weicht vom v4-Text ab)
+- You are the brain. If your process ends, the call is orphaned: the voicebot sits in the
+  room with nobody behind it. Do not end your turn or exit while the call runs. In one-shot
+  harnesses (`claude -p`, CI) run the `next`/`say` loop inside the same turn.
+- Leave only when the user says goodbye ("tschüss", "danke, das war's", "bye") or `next`
+  reports `ended`. Then: `$D/vh leave --say "Danke, bis bald!"` (speaks it, leaves, and
+  stops the FIFO holder). Never `pkill -f "voicehook-agent join"`: the pattern matches
+  your own shell and other operators' joins.
 
-Installiert via `pip3 install --user --break-system-packages git+https://github.com/voicehook-ai/voicehook-agent`
-(kein `uv` vorhanden; `python3 -m venv` scheitert mangels ensurepip; System-pip ist per PEP 668 gesperrt).
+## Speak right
 
-Stand 2026-09-25: **0.3.0**. Kennt weiterhin **kein `--auto` und kein `--memory-dir`**, der v4-Zehnzeiler
-funktioniert also nach wie vor nicht. Vorhandene Flags (aus `join --help`, nicht aus dem Gedächtnis):
-`--name --model` (**Pflicht ab 0.4.0**, sonst Exit 2; Web-Chip: Ladekreis, dann "Name · Modell") `--identity --topic --username --prompt --greet/--no-greet --json
---persona --persona-file --keep-alive/--no-keep-alive --notify-url
---wake-only-user --wake-all --suppress-echo --say-ttl --strict-relay
---graph --graph-interval`
+- **Language:** take it from the user's turns. User speaks German → German
+  (default for voicehook). Switch only when the user switches.
+- **Short:** 1-2 sentences, under ~60 characters per sentence. No markdown, no lists, no
+  emoji, no URLs read aloud. Tech terms may stay English.
+- **Echo = proof:** your text shows up in `$D/out` as `{"role": "operator", …}` once it was
+  spoken. No echo = not (yet) spoken.
+- **No secrets, no PII** in `say`, `--greet` or a persona: everything travels in clear text
+  over the LiveKit data channel.
 
-**Folge:** FIFO-Halter weiterhin von Hand. Sobald die CLI `--auto` kann, ersetzt das den ganzen Block.
+## Do not overwrite someone else's persona
 
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-SESS=vh-call; NAME=Claude; MODEL=opus-5.5   # Selbstauskunft: eigener Name + echtes Modell
-mkfifo /tmp/$SESS.in 2>/dev/null
-( exec -a vh-holder sleep 100000 > /tmp/$SESS.in & )     # hält stdin offen
-( setsid nohup voicehook-agent join "$INVITE_URL" --name "$NAME" --model "$MODEL" --json \
-      --persona-file /tmp/$SESS.persona \
-      < /tmp/$SESS.in > /tmp/$SESS.out 2>&1 & )
-sleep 7; tail -n 8 /tmp/$SESS.out        # erwartet: connected + persona auto-pushed
-```
+- Another operator may already be in the call (`room-state` / `peer-joined` lines with a
+  second `<name>-<host>-…` identity, or `"operator": true` in `$D/vh status`). Then do NOT
+  push `operator.persona` and do not pass `--persona`/`--persona-file`: it replaces the
+  voicebot's instructions for everyone. CLI 0.5.0 skips that push on its own and logs
+  `persona/mode NOT pushed`; `--force-persona` overrides, do not use it in someone's call.
+- Never write into shared paths (`personas/*.txt`, `/tmp/vh-call.*`). Use your own `$D`.
+- Alone in the call and you want the voicebot to know context: `--persona "<3-5 lines>"`
+  at join. The first persona push also triggers one server-side greeting, so then drop `--greet`.
 
-Drei Betriebsfallen, alle am 2026-09-25 erlebt:
-- **`setsid` benutzen.** Ohne das stirbt der Join mit der Bash-Tool-Shell.
-- **Niemals `pkill -f "voicehook-agent join"`.** Das Muster steht auch in der eigenen Kommandozeile, die Shell
-  killt sich selbst (Exit 144) und alles danach im selben Aufruf läuft nie. Stattdessen gezielt:
-  `pgrep -af "voicehook-agent join" | grep -v "bin/bash -c"` und per PID killen.
-- **Echo = Beweis.** Deine Aussage kommt als `{"role":"operator"}` zurück, sobald sie
-  gesprochen ist; fehlt es, wurde sie verschluckt. `--suppress-echo` (CLI ≤0.4.0)
-  filtert nur `role:"agent"` und greift bei v4 deshalb nicht.
+## Fallback: CLI 0.4.0 (no next/say/leave)
 
-Steuern und mitlesen (kein `jq` auf dieser Box, deshalb python3):
+If the quickstart printed `CLI 0.4.0`, replace `$D/vh` with this script (use your real
+`D=` path in the first line). The join keeps running; the loop above stays the same.
 
 ```bash
-say(){ python3 -c 'import json,sys;print(json.dumps({"topic":"operator.say","text":sys.argv[1]},ensure_ascii=False))' "$1" > /tmp/vh-call.in; }
-tail -n 30 /tmp/vh-call.out
+D=/tmp/vh-ab12cd; cat >$D/vh.new <<'EOF'
+#!/bin/bash
+D=$(dirname "$0"); cmd=$1; shift; m=
+case $cmd in
+say)   [ "$1" = --mode ] && { m=$2; shift 2; }
+       python3 -c 'import json,sys;d={"topic":"operator.say","text":sys.argv[1]}
+if sys.argv[2:]: d["mode"]=sys.argv[2]
+print(json.dumps(d,ensure_ascii=False))' "$*" $m >$D/in ;;
+next)  t=60; [ "$1" = --timeout ] && t=$2; n=$(cat $D/n 2>/dev/null || echo 0)
+       hit=$(grep -n -m1 -E '"topic": "(_wake|operator\.revise)"|session ended' \
+             < <(timeout $t tail -n +$((n+1)) -f $D/out))
+       [ -n "$hit" ] && echo $((n+${hit%%:*})) >$D/n; echo "${hit#*:}" ;;
+leave) [ "$1" = --say ] && { "$0" say --mode append "$2"; sleep 4; }
+       echo '{"topic":"quit"}' >$D/in; sleep 1; kill $(cat $D/holder) 2>/dev/null ;;
+*)     echo "CLI 0.4.0 fallback: say|next|leave only" >&2; exit 2 ;;
+esac
+EOF
+chmod +x $D/vh.new; mv $D/vh.new $D/vh
 ```
 
-## Reihenfolge: ALLES vorbereiten, DANN verbinden
+Fallback `next` prints the raw log line instead of `{"type": …}`:
 
-Eine dünne Persona beim Join heisst: die voice-ai weiss nichts, überbrückt zu dir, und der User hört Stille. Also erst Persona rendern, dann connecten.
+- `"topic": "_wake"` = a finished user turn, its `"text"` is what the user said (0.4.0
+  logs every turn twice, as `transcript` and as `_wake`; matching only `_wake` answers
+  each turn once and skips interim fragments).
+- `"topic": "operator.revise"` = revise, answer with `say --mode overwrite`.
+- `session ended` = the call is over. Empty output = timeout, call `next` again.
 
-1. Persona-Text schreiben (`/tmp/$SESS.persona`), Secrets raus
-2. FIFO-Halter starten
-3. verbinden mit `--persona-file`
-4. `_meta room-state` prüfen: ein Peer mit `kind:"agent"` muss da sein,
-   sonst spricht dein operator.say ins Leere
-5. Monitor scharfstellen (siehe unten)
+## Check the connection
 
-## Monitor scharfstellen — die Hauptfehlerquelle
+`$D/out` (JSON lines) should show within ~5 s:
 
-Ohne Listener endet dein Chat-Turn nach dem Gruss und niemand liest `/tmp/$SESS.out` weiter. Jeder User-Turn danach läuft in Stille.
+- `connected — N peers` and a `room-state` line with a peer of `"kind": "agent"` (the
+  voicebot). With CLI 0.5.0 `$D/vh status` shows the same as JSON (`peers[].kind`).
+  No agent peer: the user should reload the call tab; your `say` would go nowhere.
+- `greet auto-pushed`, then your greeting as `"role": "operator"` once spoken.
+- Later: `peer-left: … (agent)` means the voicebot is gone; tell the user to reload the tab.
 
-```bash
-stat -c %s /tmp/$SESS.out > /tmp/$SESS.offset
-# dann Monitor(persistent: true, command:
-#   'OFF=$(cat /tmp/vh-call.offset); tail -c +$((OFF+1)) -f /tmp/vh-call.out |
-#    grep --line-buffered -E "\"topic\": ?\"transcript\"|agent\\.(error|health)|disconnect|peer-(joined|left)"')
-```
+## Data-channel topics (stdin JSON lines with `--json`)
 
-Zusätzlich `/loop` als Fallback-Heartbeat, falls der Monitor hängt.
+| topic | payload | effect |
+|---|---|---|
+| `operator.say` | `{text, mode?}` | speak `text` verbatim. Modes below |
+| `operator.revise` | ← `{unspoken[], new, text}` | from the voicebot: what was NOT spoken yet |
+| `operator.persona` | `{text}` | replaces the voicebot's instructions for everyone (see above) |
+| `operator.interrupt` | `{}` | stop speaking; unspoken rest comes back as `operator.revise` |
+| `operator.inject` | `{text, role?}` | context entry, not spoken |
+| `transcript` | ← `{role, text}` | `user` = the human; `operator` = your spoken text; `agent` = voicebot's own answer |
+| `quit` | `{}` | leave the call (what `leave` does) |
 
-## Sprechmodi
+`operator.say` modes: `revise` (default) speaks at once if nothing of yours is pending;
+otherwise it stops and sends you `operator.revise` with the unspoken parts. Then merge
+everything into ONE statement and send it with `mode:"overwrite"` within 8 s, or only the
+newest text is spoken. `append` queues behind the current output (multi-part, status
+heartbeats).
 
-- **Antwort** (`operator.say`): erst wenn der User fertig ist. 1-3 Sätze, Rückfrage 5-10 Wörter.
-- **Unterbrechen** (`operator.interrupt` + `operator.say`): Standard ist **nein**. Nur bei echter Notwendigkeit
-  und höflich: wichtige Korrektur, die der User JETZT hören muss, ein "stopp" von ihm, oder sanftes Zurückholen,
-  wenn er abdriftet. Formuliere es zuvorkommend, nie schroff.
-- **Backchannel**: macht v4 selbst. Nicht pushen.
+## Live mode (Gemini Live)
 
-## Aussagen-Disziplin (Olli 30.09.: "redet 3 min nach")
+Rooms created via `POST /api/live-room` run on a realtime model. Join the same way. There
+`say` is NOT verbatim: the model says it in its own words; the `operator` echo shows what
+was really said. Budget used up mid-call: the voicebot announces it and ends the call.
 
-- Pro Turn EIN `operator.say`, das zusammenfasst, was JETZT gilt. Keine Satzserien.
-- Kommt `(operator.revise …) REVISE: Noch NICHT gesprochen: [1].. [neu]..` auf stdout: sofort alles zu EINER Aussage verschmelzen (nichts Wichtiges weglassen, Falsches/Überholtes streichen) und mit `mode:"overwrite"` senden. Nach 8s spricht der Agent sonst nur [neu].
+## Server side, nothing to do for you
 
-## Olivers Lehren (gelten weiter, unabhängig von der Version)
+- Backchannel ("mhm") during long user turns comes from the server. Do not push it.
+- Speech and speaker filters drop silence and background voices before the transcript.
+  The first ~3 s of a call may still contain background chatter.
 
-- **Im Call bleiben ist Prime Directive.** Nicht nebenher wegarbeiten.
-- **`operator.say` kurz halten: unter ~60 Zeichen, ~8s TTS.** Längere Pushes
-  verwirft livekit-agents. Mehrteiler: ab Teil 2 `mode:"append"`.
-- **Stille ist der Killer.** Ab 8s ansagen (Status-say mit `mode:"append"`), über 15s delegieren.
-- **PII und Secrets: niemals in Persona, say oder Graph.** Alles reitet im Klartext über den LiveKit-Datenkanal
-  (v3#27). Persönliche Inhalte des Users nur so weit hineingeben, wie der Call sie wirklich braucht.
-- **Schweres delegieren**, damit der Call schnell bleibt: langes Bash,
-  Recherche, Refactors gehen an einen Hintergrund-Agenten, vorher ansagen.
-- **Live prüfen statt annehmen.** Ein zweiter `--json`-Listener zeigt, ob die
-  voice-ai wirklich gesprochen hat.
+## Errors
 
-## Live-Modus und Filter (v4, serverseitig)
+| symptom | fix |
+|---|---|
+| exit 2, `Selbstauskunft fehlt` | add `--name` and `--model` |
+| exit 2, `already running` | your `$D` already has a join: keep using it, or `$D/vh leave` first |
+| `say`/`next` exit 3, `no-session` | the join is not up (yet) or has ended; check `$D/out` |
+| `several joins running` | only without your own `$D/vh`; pass `--session <slug>/<identity>` |
+| `voicehook-agent: command not found` | use the absolute `$D/vh`, never the bare command |
+| `livekit connect failed` | invite URL wrong or expired, ask the user for a fresh link |
+| `0 peers` / no `agent` peer | user should reload the call tab |
+| silence after the greeting | no `agent` peer in `room-state`/`status` = voicebot down, tell the user |
+| voicebot makes things up | `operator.interrupt`, then a correcting `say` |
 
-- **Live-Modus** (Gemini Live): `GET /api/live/status` → `{"available":bool}` (nie Beträge).
-  `POST /api/live-room {identity, ttl_seconds?}` → wie `/api/host-call` plus `invite_url`,
-  `expires_in`, `agent:"voice-ai-live"`. 402 = Monatsbudget weg (Default 10 USD, UTC-Monat),
-  404 aus, 503 nicht konfiguriert, 429 Ratenlimit. Join wie immer per Invite. Achtung:
-  `operator.say` ist dort **nicht wörtlich**, Gemini sagt es sinngemäß; Persona kommt als
-  markierter User-Turn. Budget im Call erreicht → Ansage, Call endet.
-- **Sprachfilter** (Pipeline): nur Audio mit erkannter Sprache geht an die STT, Stille kostet nichts.
-- **Sprechererkennung** (Pipeline): Hintergrundstimmen (TV, Nachbar) erreichen das LLM nicht.
-  Lernphase am Anfang: bis ein Sprecher ~3s geredet hat, geht alles durch; beginnt
-  pro STT-Verbindung neu. Fehlt die Sprecher-Info, geht das Segment durch.
-
-## Fehlerbilder
-
-- `command not found` → Installation siehe CLI-Stand oben.
-- `0 peers` / kein `kind:"agent"` → voice-ai nicht im Raum, User soll den Tab neu
-  laden oder den Call über `?go=1` starten.
-- Stille nach dem Gruss → `agent.heartbeat` prüfen; bleiben die Ticks aus, ist
-  der Worker abgestürzt.
-- voice-ai erfindet etwas → `operator.interrupt`, Persona neu pushen, v4-Issue mit
-  Transkript.
-
-## Cleanup
-
-```bash
-pkill -f "voicehook-agent join" ; pkill -f vh-holder ; rm -f /tmp/vh-call.in
-```
-
-## Quellen
-
-- v4-Repo: https://github.com/voicehook-ai/voicehook-v4
-- CLI: https://github.com/voicehook-ai/voicehook-agent
-- Plan: https://github.com/voicehook-ai/voicehook-v3/pull/64
+Sources: https://github.com/voicehook-ai/voicehook-v4 ·
+https://github.com/voicehook-ai/voicehook-agent
