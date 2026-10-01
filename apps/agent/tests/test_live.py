@@ -198,3 +198,89 @@ def test_meter_sends_only_on_change():
     meter.add(_m("TTSMetrics", characters_count=100))
     second = meter.take_update()
     assert second is not None and second["usd"] == pytest.approx(0.006)
+
+
+# ── operator.say im Live-Modus: Inhaltstreue, bei Markierung/Transkript wörtlich ──
+# Bug 01.10.: "sinngemäß"-Prompt -> Gemini kürzte, deutete um und erfand Behauptungen.
+
+BUG_TEXT = "Laut Transkript: Meine Pflanze steht hinter meinem Grillkraftgel und das ist Spülmittel."
+
+
+def _quoted(user_input: str) -> str:
+    return user_input[user_input.index("«") + 1:user_input.rindex("»")]
+
+
+def test_live_say_prompt_no_longer_allows_paraphrase():
+    # Positivkontrolle gegen den alten Prompt: der erlaubte genau das Fehlverhalten
+    assert "sinngemäß" not in live.LIVE_SAY_USER and "kurz" not in live.LIVE_SAY_USER
+    for tpl in (live.LIVE_SAY_USER, live.LIVE_SAY_VERBATIM_USER):
+        assert tpl.startswith("[Operator]")
+        for rule in ("Einleitung", "Nachsatz"):
+            assert rule in tpl
+    for rule in ("nichts hinzufügen", "keine eigenen Behauptungen", "nichts weglassen", "abschwächen", "umdeuten"):
+        assert rule in live.LIVE_SAY_USER
+    assert "Wort für Wort" in live.LIVE_SAY_VERBATIM_USER
+
+
+def test_live_base_instructions_require_content_fidelity():
+    t = live.LIVE_BASE_INSTRUCTIONS
+    for rule in ("vollständig und unverfälscht", "nichts hinzufügen", "keine eigenen Behauptungen",
+                 "nichts weglassen", "nichts abschwächen", "nichts umdeuten", "Wort für Wort"):
+        assert rule in t, rule
+    # Persona-Vorgaben bleiben stumm, Aussagen werden gesprochen
+    assert "lies sie nie vor" in t
+
+
+def test_live_say_plain_text_uses_fidelity_prompt_with_exact_text():
+    u = live.live_say_user_input("Der Termin ist am Dienstag um zehn.")
+    assert u == live.LIVE_SAY_USER.format(text="Der Termin ist am Dienstag um zehn.")
+    assert _quoted(u) == "Der Termin ist am Dienstag um zehn."
+
+
+def test_live_say_transcript_text_is_verbatim():
+    # der Fall aus dem Live-Test 01.10.
+    u = live.live_say_user_input(BUG_TEXT)
+    assert u.startswith("[Operator] Wörtlich.") and _quoted(u) == BUG_TEXT
+
+
+@pytest.mark.parametrize("prefix", ["wörtlich: ", "Wörtlich:", "eins zu eins: ", "Eins zu Eins : ", "1:1: ", "1 zu 1: "])
+def test_live_say_explicit_verbatim_prefix_is_stripped(prefix):
+    u = live.live_say_user_input(prefix + "Ich bin gleich zurück.")
+    assert u.startswith("[Operator] Wörtlich.") and _quoted(u) == "Ich bin gleich zurück."
+
+
+@pytest.mark.parametrize("text", ['Er sagte "morgen".', "Sie schrieb „passt“.", "Zitat von Max: geht klar"])
+def test_live_say_quotes_are_verbatim(text):
+    assert _quoted(live.live_say_user_input(text)) == text
+    assert live.live_say_user_input(text).startswith("[Operator] Wörtlich.")
+
+
+@pytest.mark.parametrize("text", ["1:1-Kopie liegt bereit.", "wörtlich:", "Das ist wörtlich gemeint."])
+def test_live_say_no_false_verbatim_trigger(text):
+    # Markierung nur als führendes "X:" mit Rest; sonst Normalprompt, Text unverändert
+    u = live.live_say_user_input(text)
+    assert u == live.LIVE_SAY_USER.format(text=text)
+
+
+@pytest.mark.asyncio
+async def test_live_say_relay_sends_verbatim_prompt_for_transcript():
+    session = MagicMock()
+    session.generate_reply = MagicMock(return_value=None)
+    h = build_relay_handlers(session, RelayAgent(instructions="x"), live=True)
+    await h.on_say(_Pkt(TOPIC_SAY, json.dumps({"text": BUG_TEXT}).encode()))
+    session.say.assert_not_called()
+    kwargs = session.generate_reply.call_args.kwargs
+    assert kwargs["user_input"] == live.live_say_user_input(BUG_TEXT)
+    assert kwargs["allow_interruptions"] is True and "instructions" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_live_say_handle_still_marks_operator_role():
+    # Transkript-Rolle "operator" hängt im Live-Modus am Handle, nicht am Text
+    session, handle = MagicMock(), MagicMock()
+    handle.done.return_value = False
+    session.generate_reply = MagicMock(return_value=handle)
+    h = build_relay_handlers(session, RelayAgent(instructions="x"), live=True)
+    await h.on_say(_Pkt(TOPIC_SAY, json.dumps({"text": "Termin Dienstag"}).encode()))
+    assert h.is_operator_speech(handle, "Der Termin ist Dienstag.") is True
+    assert h.is_operator_speech(MagicMock(), "Der Termin ist Dienstag.") is False
