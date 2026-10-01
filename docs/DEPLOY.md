@@ -109,3 +109,52 @@ IP-Ratenlimit wie `/api/host-call` (gemeinsamer Zähler, 5 Starts je 10 Min und 
 die Monatsbudget-Sperre (402). "Konfiguriert" heißt: LiveKit-Zugang und `GOOGLE_API_KEY` oder
 `GOOGLE_APPLICATION_CREDENTIALS` gesetzt (sonst 503); ob der Dienst `voicehook-agent-live` läuft,
 sieht der HTTP-Server nicht (`systemctl is-active voicehook-agent-live`).
+
+## Guthaben aufladen (Stripe, Default aus)
+
+Seite `/aufladen` (Caddy schreibt auf `web/aufladen.html` um). Ledger:
+`/opt/voicehook/state/billing.sqlite` (HTTP-Server und Worker teilen die Datei). Ohne Stripe-Keys
+meldet `/api/billing/config` `checkout_available: false`, die Seite zeigt "bald verfügbar".
+
+Konto = Wallet (Token im Browser + Wiederherstellungs-Link), nie die E-Mail: ein Checkout ohne
+gültiges Wallet-Token legt immer ein neues Konto an. Zahlen tut nur, wer den Raum über
+`/api/host-call` oder `/api/live-room` mit `X-Wallet-Token` anlegt; `/api/token` (Beitritt per
+Einladung) bindet nie ein Wallet. Die Bindung Raum -> Wallet gilt nur bis zum Call-Ende (der Worker
+schließt sie) und höchstens die Token-TTL; danach antworten Joins in diesen Raum mit 410 und der
+Worker lehnt ihn ab. Ein Fehlbetrag aus Erstattung/Rückbuchung wird bei der nächsten Gutschrift auf
+dasselbe Konto zuerst verrechnet. Der Wiederherstellungs-Link gilt genau einmal und wird dabei erneuert.
+
+| Env in `/opt/voicehook/.env` | Default | Bedeutung |
+|---|---|---|
+| `STRIPE_SECRET_KEY` | leer | Stripe-Secret-Key (Checkout-Session anlegen) |
+| `STRIPE_WEBHOOK_SECRET` | leer | Signing-Secret des Webhook-Endpunkts |
+| `VOICEHOOK_REQUIRE_CREDITS_NORMAL` | `0` | `1` = `/api/host-call` ohne Wallet mit Saldo > 0 -> 402 |
+| `VOICEHOOK_REQUIRE_CREDITS_LIVE` | `0` | `1` = `/api/live-room` ohne Wallet mit Saldo > 0 -> 402 |
+| `VOICEHOOK_PRICE_FACTOR_NORMAL` / `_LIVE` | `3` / `1.5` | Abbuchung = Anbieterkosten x Faktor |
+| `VOICEHOOK_VAT_RATE` | `0.19` | MwSt obendrauf |
+| `VOICEHOOK_USD_EUR` | `0.8807` | Kurs USD -> EUR (EZB 30.09.2026) |
+| `VOICEHOOK_TOPUP_AMOUNTS_EUR` | `10,20,50` | Vorschlagsbeträge |
+| `VOICEHOOK_TOPUP_MIN_EUR` / `_MAX_EUR` | `10` / `200` | Spanne des Drehreglers (Minimum nie unter 10) |
+| `VOICEHOOK_FREE_MIN_PER_DAY_LIVE` | `20` | Gratis-Gesprächsminuten pro UTC-Tag für Live-Räume ohne Wallet; `0` = aus |
+| `VOICEHOOK_FREE_MIN_PER_DAY_NORMAL` | `0` | dasselbe für Normal-Räume; `0` = aus (offen, ob Normal mitzählt) |
+| `VH_FREE_TICK_SECONDS` | `5` | Takt, in dem der Worker Gratis-Minuten bucht (nur Worker) |
+
+Stripe-Dashboard: Webhook-Endpunkt `https://voicehook.ai/api/stripe/webhook` mit den Events
+`checkout.session.completed`, `checkout.session.async_payment_succeeded`, `charge.refunded` und
+`charge.dispute.created` anlegen (die beiden letzten ziehen erstattete bzw. zurückgebuchte Beträge
+wieder ab, Saldo nie unter 0, Fehlbetrag in `reversals.shortfall_ueur`), dessen
+Signing-Secret als `STRIPE_WEBHOOK_SECRET` setzen, danach Agent neu starten (Env wird beim Start gelesen).
+
+### Gratis-Kontingent (ohne Login)
+
+Räume ohne Wallet bekommen höchstens `VOICEHOOK_FREE_MIN_PER_DAY_*` Gesprächsminuten pro UTC-Tag
+(Zeit mit mindestens einem Menschen im Raum). Gezählt wird je Merkmal des Raum-Erstellers: anonyme
+ID aus dem Header `X-Anon-Id` (8 bis 128 Zeichen `A-Za-z0-9_-`, sonst ignoriert) und Client-IP
+(letztes Element von `X-Forwarded-For`, das Caddy selbst setzt; IPv6 je /64-Netz). Erreicht EINES der Merkmale das Limit, antworten
+`/api/host-call` bzw. `/api/live-room` mit 402 `{error: free_limit, topup_url: /aufladen}`; ein
+laufender Gratis-Call endet mit der Ansage "Deine Gratisminuten für heute sind um. Lade Guthaben
+auf." Gespeichert werden nur SHA-256-Hashes der Merkmale in `/opt/voicehook/state/freetier.sqlite`
+(älter als 7 Tage wird gelöscht). Räume mit Wallet sind ausgenommen. Die Obergrenze pro Live-Call
+(`VH_MAX_CALL_SECONDS=1200` im Live-Dienst) gilt zusätzlich. Der Live-Worker ist fail-closed: ein
+Live-Raum ohne Wallet und ohne Gratis-Eintrag wird abgelehnt (Admin-Räume stehen als Ausnahme drin).
+Das Live-Monatsbudget gilt nur für Gratis/Demo-Räume, Wallet-Räume sind davon ausgenommen.
