@@ -781,6 +781,11 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
   #label .by { margin: 0 5px; }
   #tagline { bottom: 4px; }
 }
+/* Schmale Phones (320/390): mittig kollidiert das Logo mit dem Musik-Knopf
+   (rechts 106 px + 38 px). Logo links oben, auf Höhe der Knopfreihe. */
+@media (max-width: 440px) {
+  #label { left: 16px; transform: none; top: 24px; max-width: calc(100vw - 168px); }
+}
 
 #tagline {
   position: fixed; bottom: 6px; left: 50%; transform: translateX(-50%);
@@ -1136,9 +1141,13 @@ function applyThemeBg() {
   const light = document.body.classList.contains('theme-light');
   renderer.setClearColor(light ? 0xf4f4f7 : 0x000000, 1);
   // mat ist evtl. noch nicht init'd beim ersten Call — try/catch schluckt TDZ.
+  // Giraffe/Leopard auch im Dark-Theme mit NormalBlending: additiv summieren
+  // sich die vielen Partikel im Röhrenvolumen zu Weiß, Flecken und Rosetten
+  // gehen unter. Normal deckt jedes Partikel seine Farbe, das Fell bleibt lesbar.
   try {
-    mat.blending = light ? THREE.NormalBlending : THREE.AdditiveBlending;
-    mat.needsUpdate = true;
+    const fur = spatialMode === 'voronoi' || spatialMode === 'spots';
+    const want = (light || fur) ? THREE.NormalBlending : THREE.AdditiveBlending;
+    if (mat.blending !== want) { mat.blending = want; mat.needsUpdate = true; }
   } catch {}
 }
 applyThemeBg();
@@ -1290,7 +1299,9 @@ mat.onBeforeCompile = (shader) => {
   shader.uniforms.uMajorR = { value: R_MAJOR };
   shader.uniforms.uClock  = { value: 0.0 };
   shader.uniforms.uBeat   = { value: 0.0 };
+  shader.uniforms.uSizeMul = { value: 1.0 };
   shader.vertexShader = `
+    uniform float uSizeMul;
     uniform float uTube;
     uniform float uMajorR;
     uniform float uClock;
@@ -1325,6 +1336,8 @@ mat.onBeforeCompile = (shader) => {
       }
     `
   );
+  // Punktgröße skalierbar (Fell bei wenigen Partikeln, siehe vhSimStep).
+  shader.vertexShader = shader.vertexShader.replace('gl_PointSize = size;', 'gl_PointSize = size * uSizeMul;');
   mat.userData.shader = shader;
 };
 
@@ -1436,6 +1449,7 @@ let intensity   = 1.0;     // FX-Slider: globaler Effekt-Multiplikator (0..2)
 let satFraction = 0.05;    // Satellite-Slider: Anteil sichtbarer Satelliten (0..1)
 let activeN     = N * 0.2; // Partikel-Slider: aktive Partikel-Anzahl
 let zoom        = 1.0;     // Zoom-Slider: höher = näher (Donut größer)
+let vhZoomTarget = 1.0;    // Ziel des Mausrad-Zooms; zoom folgt weich (vhSimStep)
 let islandStrength = 0.6;  // Insel-Slider: spatial-Noise vs random im freqBin
 let ringFx      = 1.0;     // Ring-FX-Slider: skaliert Tube-Inflate + xy-Atmen
 let lastIslandT = -1;      // letzter Insel-Rebuild-Zeitpunkt (für Drift-Animation)
@@ -1478,7 +1492,6 @@ let ultraDeep   = 0;     // Quadratisch geformt + gecapt → kurzer extremer Pus
 // sprechenden Slots, gesetzt über vhSetSpeaker(); vhGlowK folgt weich dem Ziel.
 const vhSpeakerRgb = { user: null, 'voice-ai': null, agent: null };
 let vhGlowR = 0, vhGlowG = 0, vhGlowB = 0, vhGlowTarget = 0, vhGlowK = 0;
-const VH_FUR_DARK_COMP = 0.3;
 let vhLayoutTick = 0;
 // Render-Loop-Steuerung (Olli 01.10.):
 //  - Transkript-Vollbild oder Tab unsichtbar (document.hidden): Loop STOPPT ganz,
@@ -1489,7 +1502,6 @@ let vhLayoutTick = 0;
 let vhSdMode    = false;   // gesetzt von applyHd()
 let vhLoopOn    = false;   // true, solange ein rAF/Timeout für animate() geplant ist
 let vhLoopTimer = null;
-let vhFrameCount = 0;      // gezeichnete Frames (Diagnose/Tests)
 const VH_SD_FRAME_MS = 1000 / 30;
 function vhLoopShouldRun() {
   return !document.hidden && !document.body.classList.contains('vh-transcript-expanded');
@@ -1515,10 +1527,7 @@ function animate() {
   const steps = vhSdMode ? 2 : 1;
   for (let s = 0; s < steps; s++) vhSimStep();
   renderer.render(scene, camera);
-  vhFrameCount++;
 }
-window.vhFrameStats = () => ({ frames: vhFrameCount, loopOn: vhLoopOn, sd: vhSdMode });
-window.vhGlowDebug = () => ({ rgb: [vhGlowR, vhGlowG, vhGlowB], target: vhGlowTarget, k: vhGlowK });
 function vhSimStep() {
   // Alle ~0.5 s prüfen, ob Zoom/Profil/Panelhöhe die Ring-Unterkante verschoben hat.
   if ((++vhLayoutTick % 30) === 0) { try { vhRingLayout(false); } catch (_) {} }
@@ -1589,10 +1598,10 @@ function vhSimStep() {
   const sigAttack = bassAttack > 0.06 ? bassAttack : 0;
   beatEnv = Math.max(sigAttack * 5, beatEnv * 0.91);
 
-  // Giraffe/Leopard im Dark-Theme: additive Überlagerung vieler Partikel würde
-  // Flecken und Grund zu Weiß sättigen. Dichte-Ausgleich hält die Palettenfarben
-  // (Farbton/Sättigung/Stufen unverändert) sichtbar. Tiger/Zebra unberührt.
-  const furDark = (!lightInvert && (spatialMode === 'voronoi' || spatialMode === 'spots')) ? VH_FUR_DARK_COMP : 1;
+  // Giraffe/Leopard (Fell mit Flecken/Rosetten): siehe applyThemeBg, beide
+  // Themes mit NormalBlending. Tiger/Zebra unberührt.
+  const furSpots = spatialMode === 'voronoi' || spatialMode === 'spots';
+  const VH_FUR_REF_N = 16000;   // Partikelzahl, ab der das Fell ohne Vergrößerung deckt
 
   // Sprecher-Leuchten: weich ein-/ausblenden, Stärke folgt der Lautstärke.
   // Gemischt wird helligkeitserhaltend (dunkle Fellflecken bleiben dunkel),
@@ -1602,6 +1611,18 @@ function vhSimStep() {
   // Tönung mit gleicher Helligkeit wie das Partikel (Kontrast des Musters
   // bleibt), plus Aufhellen proportional zur Lautstärke (= Leuchten).
   const glowGain = (1.1 + amp * 0.6) / Math.max(0.08, (vhGlowR + vhGlowG + vhGlowB) * 0.3333);
+  // Fell (Giraffe/Leopard): Leuchten nur als gleicher Faktor je Farbkanal für
+  // ALLE Partikel (Helligkeit + leichte Tönung in Sprecherfarbe). Verhältnis
+  // Fleck/Linie bzw. Rosette/Grund bleibt dadurch exakt erhalten.
+  let furGlowR = 1, furGlowG = 1, furGlowB = 1;
+  if (furSpots && glowMix > 0) {
+    const gAvg = Math.max(0.08, (vhGlowR + vhGlowG + vhGlowB) * 0.3333);
+    const furLift = 1 + glowMix * (0.35 + amp * 0.5);
+    const tint = glowMix * 0.45;
+    furGlowR = furLift * (1 + (vhGlowR / gAvg - 1) * tint);
+    furGlowG = furLift * (1 + (vhGlowG / gAvg - 1) * tint);
+    furGlowB = furLift * (1 + (vhGlowB / gAvg - 1) * tint);
+  }
 
   // Earth-Maus-Spezialfall: smooth zwischen braun und grün wechseln
   if (mouseEarth) {
@@ -1617,6 +1638,11 @@ function vhSimStep() {
     u.uTube.value  = Math.min(0.22, beatEnv * 0.025 * ringFx);
     u.uClock.value = clock;
     u.uBeat.value  = Math.min(0.15, beatEnv * 0.035 * ringFx);
+    // Fell: im Call laufen deutlich weniger Partikel (Profil/Mobile) als im
+    // Ruhebild. Damit Flecken und Rosetten geschlossen bleiben statt in lose
+    // Punkte zu zerfallen, wachsen die Punkte mit sinkender Partikelzahl
+    // (gleiche Deckung, max. 1.8x). Andere Styles unverändert.
+    u.uSizeMul.value = furSpots ? Math.min(1.8, Math.max(1, Math.sqrt(VH_FUR_REF_N / Math.max(1, activeN)))) : 1;
   }
   // Atem-Effekt entfernt — sah verzerrt aus. Tube-Inflate über Shader bleibt.
   if (points) { points.scale.set(1, 1, 1); }
@@ -1871,11 +1897,12 @@ function vhSimStep() {
         hue = (discreteHues[bucket] + hueShift + 100) % 1;
         sat = Math.min(1, discreteSats[bucket] + localAmp * 0.10);
         const furJ = spatialLitJitter ? spatialLitJitter[i] : 1;
-        if (spatialMode === 'voronoi' || spatialMode === 'spots') {
-          // Giraffe/Leopard: Helligkeit multiplikativ modulieren statt addieren
-          // und nicht bei 0.62 kappen -> Hell/Dunkel-Verhältnis des Fells bleibt
-          // beim Sprechen erhalten (vorher liefen Flecken und Grund ineinander).
-          lit = Math.min(0.85, discreteLits[bucket] * (1 + localAmp * 0.30 + bassAttack * 0.15)) * litMul * furJ * furDark;
+        if (furSpots) {
+          // Giraffe/Leopard: Helligkeit multiplikativ und für alle Partikel
+          // gleich (Gesamtlautstärke statt Band je Cluster) modulieren ->
+          // Hell/Dunkel-Verhältnis und Lage der Flecken bleiben beim Sprechen.
+          sat = discreteSats[bucket];
+          lit = Math.min(0.85, discreteLits[bucket] * (1 + amp * 0.30 + bassAttack * 0.15)) * litMul * furJ;
         } else {
           lit = Math.min(0.62, discreteLits[bucket] + localAmp * 0.20 + bassAttack * 0.10) * litMul * furJ;
         }
@@ -1904,7 +1931,7 @@ function vhSimStep() {
       const hue = (discreteHues[bucket] + hueShift + 100) % 1;
       const sat = discreteSats[bucket];
       const furJ = spatialLitJitter ? spatialLitJitter[i] : 1;
-      const lit = discreteLits[bucket] * litMul * furJ * furDark;
+      const lit = discreteLits[bucket] * litMul * furJ;
       const a   = sat * Math.min(lit, 1 - lit);
       const h12 = hue * 12;
       const k0  = h12       % 12;
@@ -1922,7 +1949,9 @@ function vhSimStep() {
     }
 
     // ── Sprecher-Leuchten (Farbe des sprechenden Slots) ─────────────────────
-    if (glowMix > 0 && !isSat) {
+    if (glowMix > 0 && !isSat && furSpots) {
+      col[i3] *= furGlowR; col[i3+1] *= furGlowG; col[i3+2] *= furGlowB;
+    } else if (glowMix > 0 && !isSat) {
       const L  = (col[i3] + col[i3+1] + col[i3+2]) * 0.3333;
       const sc = L * glowGain;
       col[i3]   += (vhGlowR * sc - col[i3])   * glowMix;
@@ -1973,13 +2002,17 @@ function vhSimStep() {
   // Sehr langsame Eigenrotation des ganzen Rings um die Donut-Achse
   points.rotation.z = clock * 0.02;     // ~1.15°/s, voller Umlauf in ~5.2 min
 
-  // Gentle camera drift, modifiziert durch Zoom-Slider (höher = näher)
-  const distMul = 1 / zoom;
+  // Gentle camera drift. Zoom (Mausrad) gleitet weich zum Ziel und fährt die
+  // Kamera bei gleicher Blickrichtung auf die Ringmitte zu (Dolly) -> Mitte
+  // bleibt an ihrem Platz, der Ring wächst gleichmäßig in alle Richtungen.
+  zoom += (vhZoomTarget - zoom) * 0.14;
+  if (Math.abs(vhZoomTarget - zoom) < 0.0005) zoom = vhZoomTarget;
   camera.position.x =          Math.sin(clock * 0.04)  * 0.44;
-  camera.position.y = (-1.65 + Math.cos(clock * 0.030) * 0.22) * distMul;
-  camera.position.z = ( 8.25 + Math.sin(clock * 0.025) * 0.22) * distMul;
+  camera.position.y = (-1.65 + Math.cos(clock * 0.030) * 0.22);
+  camera.position.z = ( 8.25 + Math.sin(clock * 0.025) * 0.22);
   // Ring leicht höher im Frame — lookAt unter Origin schiebt Donut nach oben
   camera.lookAt(0, -0.32, 0);
+  camera.position.multiplyScalar(1 / zoom);
 
   // Amp bar (Element entfernt 2026-05-28 — null-safe)
   const _ampFill = document.getElementById('amp-fill');
@@ -2177,6 +2210,10 @@ document.addEventListener('keydown', (e) => {
   if (_infoPop && !_infoPop.hasAttribute('hidden')) return;
   const _modal = document.getElementById('vh-call-modal');
   if (_modal && !_modal.hidden) return;
+  // Offenes Burger-Menü: Esc schließt nur das Menü (eigener Handler weiter
+  // unten), Transkript-Vollbild bleibt unverändert.
+  const _menu = document.getElementById('vh-foot-menu');
+  if (_menu && !_menu.hasAttribute('hidden')) return;
   if (vhTranscriptState() === 'expanded') vhTranscriptSet(vhTrPrev);
   else vhTranscriptSet('expanded');
 });
@@ -2187,27 +2224,49 @@ document.addEventListener('keydown', (e) => {
 // verkürzt, dass die Ring-Unterkante über der Panel-Oberkante endet. Der Ring
 // skaliert dabei proportional mit (vertikales FOV). Vollbild: Canvas aus.
 let vhRingCanvasH = 0;
-function vhRingBottomFrac() {
-  // Projektion der Donut-Außenkante (R_MAJOR+R_MINOR, Tube ±R_MINOR) mit der
-  // Ruhe-Kamera inkl. aktuellem Zoom; Rückgabe = Unterkante als Anteil der Höhe.
+let vhZoomMax = 2.0;     // größter Zoom, bei dem der Kringel ganz im Fenster bleibt
+// Ruhe-Kamera für Layout-Rechnungen: Blickrichtung wie bei Zoom 1, Abstand zur
+// Ringmitte 1/z (Zoom = Dolly entlang des Strahls Kamera -> Ringmitte, siehe
+// vhSimStep). Die Ringmitte bleibt dadurch beim Zoomen an derselben Stelle.
+function vhRestCam(z) {
   const cam = camera.clone();
-  const distMul = 1 / (zoom || 1);
-  cam.position.set(0, -1.65 * distMul, 8.25 * distMul);
+  cam.clearViewOffset();
+  cam.position.set(0, -1.65, 8.25);
   cam.lookAt(0, -0.32, 0);
+  cam.position.multiplyScalar(1 / (z || 1));
   cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+  return cam;
+}
+// Projizierte Außenkante des Donuts (R_MAJOR+R, Röhre ±R_MINOR) in NDC.
+function vhRingExtent(z, rOut) {
+  const cam = vhRestCam(z);
   const v = new THREE.Vector3();
-  let minY = 1;
+  let minX = 1, maxX = -1, minY = 1, maxY = -1;
   for (let a = 0; a < 48; a++) {
-    const ang = -Math.PI / 2 + (a - 24) / 24 * 0.9;  // untere Hälfte reicht
+    const ang = a / 48 * Math.PI * 2;
     for (let t = 0; t < 12; t++) {
       const ph = t / 12 * Math.PI * 2;
-      const r = R_MAJOR + R_MINOR * Math.cos(ph);
-      v.set(r * Math.cos(ang), r * Math.sin(ang), R_MINOR * Math.sin(ph)).project(cam);
-      if (v.y < minY) minY = v.y;
+      const r = R_MAJOR + rOut * Math.cos(ph);
+      v.set(r * Math.cos(ang), r * Math.sin(ang), rOut * Math.sin(ph)).project(cam);
+      if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
+      if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
     }
   }
-  return (1 - minY) / 2;
+  return { minX, maxX, minY, maxY };
 }
+function vhRingBottomFrac() {
+  // Unterkante des Rings bei Zoom 1 als Anteil der (Basis-)Canvas-Höhe.
+  return (1 - vhRingExtent(1, R_MINOR).minY) / 2;
+}
+// Kringel-Platz (Punkt B) + Zoom (Olli 01.10.):
+//  - Basis-Höhe h: so gewählt, dass die Ring-Unterkante bei Zoom 1 über der
+//    Panel-Oberkante endet (wie bisher). h hängt NICHT mehr vom Zoom ab, sonst
+//    springt der Ring beim Zoomen nach oben und schrumpft.
+//  - Die Canvas selbst ist fensterhoch; per setViewOffset zeigt sie oben genau
+//    das Basis-Bild und setzt es nach unten fort. Beim Hineinzoomen wird der
+//    Ring daher nicht an einer verkürzten Canvas-Kante abgeschnitten.
+//  - vhZoomMax: größter Zoom, bei dem der Ring (inkl. Satelliten-Saum) ganz
+//    im Fenster bleibt.
 function vhRingLayout(force) {
   const full = document.body.classList.contains('vh-transcript-expanded');
   const wrap = document.getElementById('vh-transcript-wrap');
@@ -2227,9 +2286,31 @@ function vhRingLayout(force) {
   if (!force && Math.abs(h - vhRingCanvasH) < 2) return;
   vhRingCanvasH = h;
   camera.aspect = innerWidth / h;
+  camera.setViewOffset(innerWidth, h, 0, 0, innerWidth, innerHeight);
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, h);
-  try { document.documentElement.style.setProperty('--vh-ring-bottom', Math.round(h * vhRingBottomFrac()) + 'px'); } catch (_) {}
+  renderer.setSize(innerWidth, innerHeight);
+  // Zoom-Grenze: Außenkante mit Satelliten-Saum (R_MINOR + 0.15) muss oben
+  // und unten im Fenster bleiben, seitlich ebenfalls, sofern der Ring bei
+  // Zoom 1 schon seitlich hineinpasst (Phone hochkant: Ring ist bewusst
+  // breiter als der Bildschirm, dort zählt nur oben/unten).
+  const m = 10, rOut = R_MINOR + 0.15;
+  const ext = (z) => {
+    const e = vhRingExtent(z, rOut);
+    return { x0: (e.minX + 1) / 2 * innerWidth, x1: (e.maxX + 1) / 2 * innerWidth,
+             yTop: (1 - e.maxY) / 2 * h, yBot: (1 - e.minY) / 2 * h };
+  };
+  const e1 = ext(1);
+  const sides = e1.x0 >= m && e1.x1 <= innerWidth - m;
+  const fits = (z) => {
+    const e = ext(z);
+    return e.yTop >= m && e.yBot <= innerHeight - m && (!sides || (e.x0 >= m && e.x1 <= innerWidth - m));
+  };
+  let lo = 1, hi = 2.0;
+  if (!fits(lo)) lo = 0.5;
+  if (fits(hi)) lo = hi;
+  else for (let k = 0; k < 14; k++) { const mid = (lo + hi) / 2; if (fits(mid)) lo = mid; else hi = mid; }
+  vhZoomMax = Math.max(1, lo * 0.97);   // 3 % Reserve für Drift + Atmen
+  if (typeof vhZoomTarget === 'number' && vhZoomTarget > vhZoomMax) vhZoomTarget = vhZoomMax;
 }
 vhRingLayout(true);
 
@@ -2657,7 +2738,7 @@ zoom = 1.0;
 window.addEventListener('wheel', (e) => {
   if (e.target && e.target.closest && e.target.closest('#vh-transcript-wrap')) return;
   e.preventDefault();
-  zoom = Math.max(0.5, Math.min(2.0, zoom - e.deltaY * 0.0015));
+  vhZoomTarget = Math.max(0.5, Math.min(vhZoomMax, vhZoomTarget - e.deltaY * 0.0015));
 }, { passive: false });
 
 // ── Spatial-Pattern-Builder ─────────────────────────────────────────────────
@@ -2685,6 +2766,7 @@ function vhHash01(n) {
 // gt Zellen um den Ring, gr Zellreihen quer (radial). nearest2(i) liefert für
 // Partikel i den Abstand zum nächsten / zweitnächsten Saatpunkt, die Zell-ID
 // und den Winkel des Partikels um den nächsten Saatpunkt.
+const VH_FUR_CAM_D = 8.4;   // Ruhe-Kameraabstand zur Ringebene (|(0, -1.65, 8.25)|)
 function vhRingCells(gt, gr, jit) {
   const TWO_PI = Math.PI * 2;
   const RH = 1.25;                       // radiale Halbbreite (Röhre + Satelliten)
@@ -2703,7 +2785,12 @@ function vhRingCells(gt, gr, jit) {
   return {
     cellSize: Math.sqrt((TWO_PI * R_MAJOR / gt) * (2 * RH / gr)),
     nearest2(i) {
-      const px = orig[i * 3], py = orig[i * 3 + 1];
+      // Perspektive: ein Partikel tiefer in der Röhre (z < 0) erscheint näher
+      // an der Ringmitte als eines oben. Muster daher an der Stelle auswerten,
+      // an der das Partikel aus Kamerasicht (Abstand VH_FUR_CAM_D) die
+      // Ringebene trifft; sonst verwischen Rosetten/Linien radial zu Klumpen.
+      const zk = VH_FUR_CAM_D / (VH_FUR_CAM_D - orig[i * 3 + 2]);
+      const px = orig[i * 3] * zk, py = orig[i * 3 + 1] * zk;
       const r = Math.sqrt(px * px + py * py);
       let th = Math.atan2(py, px); if (th < 0) th += TWO_PI;
       const ca = Math.floor(th / TWO_PI * gt);
@@ -2775,28 +2862,51 @@ function vhBuildSpatialLUT() {
     }
   } else if (spatialMode === 'spots') {
     // Leopard (Olli 01.10.): Rosetten = dunkler, unterbrochener Ring um eine
-    // hellere Mitte, dazu einzelne volle Tupfen; Grund goldgelb. Gleiche
-    // Zellstruktur wie Giraffe (Ringfläche), deterministisch (stabil).
-    // Buckets: 0 Grund · 1 dunkleres Tan · 2 Bernstein-Mitte · 3 Braun-Rand · 4 fast Schwarz.
-    const f = vhRingCells(Math.floor(8 + d * 4), 2, 0.28);
+    // hellere Mitte; Grund goldgelb. Eine Reihe großer Rosetten entlang der
+    // Röhrenmitte (dort ist das Fell am breitesten sichtbar), an den Flanken
+    // kleine volle Tupfen. Deterministisch (Hash), stabil über Rebuilds.
+    // Buckets: 0 Grund · 1 dunkleres Tan · 2 Bernstein · 3 Braun-Saum · 4 fast Schwarz.
+    // Mitte Tan (heller als der Ring), Ringkern fast schwarz mit braunem Saum,
+    // Lücken zeigen den Grund -> liest sich als Ring statt als Klumpen.
+    const TWO_PI = Math.PI * 2;
+    const gt = Math.floor(10 + d * 4);               // Rosetten um den Ring
+    const step = TWO_PI / gt;
+    const rho = Math.min(0.70, R_MAJOR * step * 0.50); // Rosettenradius (Welt)
     for (let i = 0; i < N; i++) {
-      const nn = f.nearest2(i);
-      const hc = vhHash01(nn.cell * 13 + 5);
-      const rho = f.cellSize * (0.40 + vhHash01(nn.cell * 17 + 1) * 0.06);
-      const rr = nn.d1 / rho;
+      const zk = VH_FUR_CAM_D / (VH_FUR_CAM_D - orig[i * 3 + 2]);
+      const px = orig[i * 3] * zk, py = orig[i * 3 + 1] * zk;
+      const pr = Math.sqrt(px * px + py * py);
+      let th = Math.atan2(py, px); if (th < 0) th += TWO_PI;
+      const ca = Math.floor(th / step);
+      let best = Infinity, bc = 0, bdx = 0, bdy = 0;
+      for (let da = -1; da <= 1; da++) {
+        const c = ((ca + da) % gt + gt) % gt;
+        const ct = (c + 0.5 + (vhHash01(c * 3 + 1) - 0.5) * 0.25) * step;
+        const cr = R_MAJOR + (vhHash01(c * 3 + 2) - 0.5) * 0.30;
+        const dx = px - cr * Math.cos(ct), dy = py - cr * Math.sin(ct);
+        const dd = dx * dx + dy * dy;
+        if (dd < best) { best = dd; bc = c; bdx = dx; bdy = dy; }
+      }
+      const rr = Math.sqrt(best) / (rho * (0.92 + vhHash01(bc * 3 + 3) * 0.12));
       let b = 0;
-      if (hc < 0.2) {
-        // voller Tupfen
-        if (rr < 0.45) b = 4; else if (rr < 0.6) b = 3;
-      } else if (rr < 1.0) {
-        // Rosette: Mitte hell (Bernstein), Ring dunkel, an 1 bis 2 Stellen offen
-        if (rr < 0.5) b = 2;
+      if (rr < 1.0) {
+        if (rr < 0.38) b = 1;                        // Mitte: Tan
+        else if (rr < 0.47) b = 2;                   // Bernstein-Saum innen
         else {
-          const k = 3 + Math.floor(vhHash01(nn.cell * 29 + 7) * 2);
-          const gap = Math.sin(nn.ang * k + hc * 40);
-          if (gap > 0.72) b = 1;                     // Lücke im Ring
-          else b = (rr > 0.6 && rr < 0.92) ? 4 : 3;  // Ringkern fast schwarz, Ränder braun
+          const k = 4 + Math.floor(vhHash01(bc * 29 + 7) * 2);
+          const gap = Math.sin(Math.atan2(bdy, bdx) * k + vhHash01(bc * 13 + 5) * 40);
+          if (gap > 0.78) b = 0;                     // Lücke im Ring zeigt den Grund
+          else b = (rr > 0.55 && rr < 0.93) ? 4 : 3;  // Ringkern fast schwarz, Saum braun
         }
+      } else {
+        // Flanken: kleine volle Tupfen zwischen und neben den Rosetten
+        const side = pr > R_MAJOR ? 1 : -1;
+        const sc = ((Math.floor(th / step * 2 + 0.5)) % (gt * 2) + gt * 2) % (gt * 2);
+        const st = (sc + (vhHash01(sc * 5 + 9 + side) - 0.5) * 0.5) * step * 0.5;
+        const sr = R_MAJOR + side * (rho + 0.18 + vhHash01(sc * 5 + 11 + side) * 0.12);
+        const sx = px - sr * Math.cos(st), sy = py - sr * Math.sin(st);
+        const sd = Math.sqrt(sx * sx + sy * sy) / (0.13 + vhHash01(sc * 7 + side) * 0.06);
+        if (sd < 0.75) b = 4; else if (sd < 1.0) b = 3;
       }
       if (b >= buckets) b = buckets - 1;
       spatialBucketLUT[i] = b;
@@ -2824,16 +2934,6 @@ function vhBuildSpatialLUT() {
   // via interpolation oder zufälliger pro-Partikel-Wahl, optional in V2.
 }
 let lastPaletteForSpatial = null;
-// Test-Hook: Giraffe/Leopard-Muster zweimal bauen -> identisch (stabil, kein Zufall).
-window.vhPatternStability = () => {
-  const keep = lastPaletteForSpatial, out = {};
-  for (const pal of ['giraffe', 'leopard']) {
-    applyPalette(pal); const a = spatialBucketLUT.slice();
-    vhBuildSpatialLUT(); out[pal] = a.every((v, i) => v === spatialBucketLUT[i]);
-  }
-  applyPalette(keep || 'ice');
-  return out;
-};
 
 function applyPalette(pal) {
   const p = PALETTES[pal];
@@ -2894,6 +2994,7 @@ function applyPalette(pal) {
   if (typeof rebuildFreqBins === 'function') rebuildFreqBins();
   // Farbregel: Style-Wechsel zieht Chip, Transkript und Kringel-Leuchten mit.
   vhApplySpeakerColorsToTranscript();
+  applyThemeBg();   // Blending folgt dem Style (Fell: NormalBlending)
 }
 // Issue #1: when user explicitly picks a palette via swatch click, pin it so
 // auto-paths (vhActivateCallPalette / vhRestorePalette / vhSetSpeaker / applyProfile)
@@ -3040,7 +3141,7 @@ function applyProfile(mode) {
   // (in Hintergrundfarbe) und decken im Light-Theme das Fellmuster mit hellen Punkten zu.
   geo.setDrawRange(0, activeN);
   islandInput.value = p.island;     islandStrength = p.island; rebuildFreqBins();
-  zoom = p.zoom;
+  vhZoomTarget = Math.min(vhZoomMax, p.zoom);
   hueInput.value = p.hue;           hueShift = p.hue;
   if (p.bright !== undefined) { brightnessInput.value = p.bright; colorBoost = p.bright; }
   if (p.size   !== undefined) { sizeInput.value = p.size;         mat.size  = p.size; }
@@ -3292,7 +3393,7 @@ vhLiveRefresh();
 
 async function vhStartCall() {
   if (!window.LivekitClient) { err.textContent = vhT('err.sdk'); return; }
-  btnCall.disabled = true; err.textContent = vhT('err.connecting');
+  btnCall.disabled = true; delete err.dataset.sticky; err.textContent = vhT('err.connecting');
   try {
     const voice    = (document.getElementById('lk-voice') || {}).value || '';
     const model    = (document.getElementById('lk-model') || {}).value || VH_LK_MODEL;
@@ -3358,6 +3459,7 @@ async function vhStartCall() {
     if (tok.vhLive) vhLiveMark();
   } catch (e) {
     console.error('[voicehook] call failed', e);
+    err.dataset.sticky = '1';
     err.textContent = vhT('err.connFailed', { msg: (e && e.message ? e.message : e) });
     try { lkRoom && lkRoom.disconnect(); } catch (_) {}
     lkRoom = null; lkConnected = false;
@@ -3379,7 +3481,9 @@ function vhEndCall(fromEvent) {
   btnCall.innerHTML = ICON_CALL_START; btnCall.classList.remove('on');
   btnCall.title = vhT('call.start');
   try { vhMuteBtnVisibility(false); } catch (_) {}  // hide mic-mute when call ends
-  if (err.textContent && err.textContent.indexOf('failed') === -1) err.textContent = '';
+  // Verbindungs-/Einladungsfehler bleiben stehen (sprachunabhängig, Flag statt
+  // Suche nach dem englischen Wort 'failed').
+  if (err.textContent && !err.dataset.sticky) err.textContent = '';
 }
 
 
@@ -3509,7 +3613,7 @@ async function vhInviteJoinAsHost() {
   if (!vhInvitePrepared) return;
   if (!window.LivekitClient) { err.textContent = vhT('err.sdk'); return; }
   const { room } = vhInvitePrepared;
-  btnCall.disabled = true; err.textContent = '';
+  btnCall.disabled = true; delete err.dataset.sticky; err.textContent = '';
   try {
     if (currentMode !== 'speech') applyProfile('speech');
     vhActivateCallPalette();
@@ -3545,6 +3649,7 @@ async function vhInviteJoinAsHost() {
     try { history.replaceState(null, '', '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
   } catch (e) {
     console.error('[voicehook] invite call failed', e);
+    err.dataset.sticky = '1';
     err.textContent = vhT('err.inviteFailed', { msg: (e && e.message ? e.message : e) });
     try { lkRoom && lkRoom.disconnect(); } catch (_) {}
     lkRoom = null; lkConnected = false;
