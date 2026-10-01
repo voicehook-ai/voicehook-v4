@@ -41,7 +41,6 @@ a { color: var(--teal); }
 .legal-wrap th { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-2); font-weight: 500; }
 .legal-wrap .back { font-family: var(--mono); font-size: 11px; color: var(--fg-3); letter-spacing: 0.08em; text-transform: uppercase; text-decoration: none; }
 .legal-wrap .back:hover { color: var(--fg-0); }
-.legal-wrap .todo { background: rgba(231,111,81,0.08); border-left: 2px solid var(--red); padding: 12px 16px; margin: 16px 0; font-family: var(--mono); font-size: 12px; color: var(--warm); }
 .legal-wrap code { font-family: var(--mono); font-size: 12px; background: var(--code-bg); padding: 2px 6px; border-radius: 2px; color: var(--teal); }
 @media (max-width: 480px) {
   .legal-wrap { margin: 40px auto 64px; padding: 0 16px; }
@@ -64,11 +63,6 @@ a { color: var(--teal); }
   <h1>Datenschutzerklärung</h1>
   <p style="color: var(--fg-2); font-size: 13px;">Stand: 1. Oktober 2026</p>
 
-  <div class="todo">
-    Entwurf, noch nicht rechtlich geprüft. Dieser Text beschreibt den technischen Stand von
-    voicehook.ai und wird vor der Freigabe juristisch überarbeitet.
-  </div>
-
   <h2>1. Verantwortlicher</h2>
   <address>
     Oliver Spitzkat<br>
@@ -76,21 +70,22 @@ a { color: var(--teal); }
     50354 Hürth<br>
     Deutschland
   </address>
-  <p>E-Mail für Datenschutzanfragen: <a href="mailto:privacy@voicehook.ai">privacy@voicehook.ai</a></p>
+  <p>E-Mail, auch für Datenschutzanfragen: <a href="mailto:support@voicehook.ai">support@voicehook.ai</a></p>
 
   <h2>2. Überblick</h2>
   <p>
     voicehook.ai ist ein Sprachanruf im Browser. Du sprichst mit einem Sprach-Bot, dessen Antworten
-    entweder ein KI-Sprachmodell oder ein von dir eingeladener KI-Agent liefert. Es gibt kein
-    Benutzerkonto und keinen Login. Unsere Seiten setzen keine Cookies und binden keine Analyse- oder
-    Werbedienste ein.
+    entweder ein KI-Sprachmodell oder ein von dir eingeladener KI-Agent liefert. Ein Gratis-Kontingent
+    kannst du ohne Anmeldung nutzen. Für bezahlte Minuten lädst du ein Guthaben auf; dafür gibt es ein
+    Konto, an dem optional deine E-Mail-Adresse hängt. Unsere Seiten setzen keine Cookies und binden
+    keine Analyse-, Tracking- oder Werbedienste ein.
   </p>
 
   <h2>3. Hosting</h2>
   <p>
-    Webseite, Programmierschnittstelle (API) und der Sprachserver laufen auf einem eigenen Server
-    bei der Hetzner Online GmbH, Industriestr. 25, 91710 Gunzenhausen, Rechenzentrum Nürnberg,
-    Deutschland. Hetzner verarbeitet die Daten als Auftragsverarbeiter.
+    Webseite, Programmierschnittstelle (API), Datenbanken und der Sprachserver laufen auf einem
+    eigenen Server bei der Hetzner Online GmbH, Industriestr. 25, 91710 Gunzenhausen, im
+    Rechenzentrum Nürnberg, Deutschland. Hetzner verarbeitet die Daten als Auftragsverarbeiter.
   </p>
 
   <h2>4. Server-Logs</h2>
@@ -98,14 +93,15 @@ a { color: var(--teal); }
   <ul>
     <li>IP-Adresse,</li>
     <li>Datum und Uhrzeit,</li>
-    <li>aufgerufene Adresse (bei Einladungslinks einschließlich des Raumnamens),</li>
+    <li>aufgerufene Adresse einschließlich Parametern (bei Einladungslinks also Raumname und Einladungscode),</li>
     <li>HTTP-Statuscode und übertragene Datenmenge,</li>
     <li>vom Browser gesendete Kopfzeilen wie Browsertyp (User-Agent) und Referrer.</li>
   </ul>
   <p>
-    Zusätzlich protokolliert der Sprachdienst technische Ereignisse eines Anrufs: Raumname,
-    Teilnehmerkennungen, Beginn, Ende und Dauer des Anrufs sowie die Sätze, die ein eingeladener
-    Agent den Bot sprechen lässt (gekürzt auf 200 Zeichen).
+    Zusätzlich protokollieren der Anwendungsserver und der Sprachdienst technische Ereignisse:
+    Raumname, Teilnehmerkennungen, Beginn, Ende und Dauer eines Anrufs, Buchungs- und
+    Fehlermeldungen sowie die Sätze, die ein eingeladener Agent den Bot sprechen lässt (gekürzt auf
+    200 Zeichen).
   </p>
   <p>
     Zweck: Betrieb, Fehlersuche und Abwehr von Missbrauch. Rechtsgrundlage: Art. 6 Abs. 1 lit. f
@@ -120,32 +116,32 @@ a { color: var(--teal); }
   <h2>5. Sprachanruf</h2>
   <h3>5.1 Verbindung</h3>
   <p>
-    Audio wird per WebRTC über einen selbst betriebenen LiveKit-Server auf unserem Server in
-    Nürnberg übertragen (rtc.voicehook.ai). Für den Beitritt stellt der Server ein Zugangstoken aus,
-    das standardmäßig nach einer Stunde abläuft. Einladungslinks sind an einen Raum gebunden und
-    laufen ebenfalls ab. Ein Anruf endet spätestens nach 60 Minuten automatisch, der Raum wird
-    danach gelöscht.
+    Audio wird per WebRTC in Echtzeit über einen selbst betriebenen LiveKit-Server auf unserem Server
+    in Nürnberg übertragen (rtc.voicehook.ai). Wir zeichnen Anrufe nicht auf. Für den Beitritt stellt
+    der Server ein Zugangstoken aus, das standardmäßig nach einer Stunde abläuft. Einladungslinks sind
+    an einen Raum gebunden und laufen ebenfalls ab. Ein Anruf endet spätestens nach 60 Minuten
+    automatisch, der Raum wird danach gelöscht.
   </p>
 
   <h3>5.2 Spracherkennung (Deepgram)</h3>
   <p>
     Damit der Bot dich versteht, wird dein Mikrofon-Audio an Deepgram, Inc. (USA) zur
-    Spracherkennung übertragen (Modell Nova-3, mit Sprechertrennung). Ein Sprachfilter auf unserem
-    Server schickt nur Abschnitte, in denen Sprache erkannt wurde; Stille wird nicht übertragen.
+    Spracherkennung übertragen. Ein Sprachfilter auf unserem Server schickt nur Abschnitte, in denen
+    Sprache erkannt wurde; Stille wird nicht übertragen.
   </p>
 
   <h3>5.3 Sprachmodell (Google Gemini)</h3>
   <p>
-    Im normalen Modus erhält Googles Gemini API (Modell Gemini 2.5 Flash) den erkannten Text des
-    Gesprächs und die Anweisungen für den Bot, um Antworten zu erzeugen. Im Live-Modus wird dein
-    Audio direkt an Gemini Live (Google) übertragen, das Spracherkennung, Antwort und Sprachausgabe
-    in einem Schritt übernimmt.
+    Im normalen Modus erhält die Gemini API von Google den erkannten Text des Gesprächs und die
+    Anweisungen für den Bot, um Antworten zu erzeugen. Im Live-Modus wird dein Audio direkt an
+    Gemini Live (Google) übertragen, das Spracherkennung, Antwort und Sprachausgabe in einem Schritt
+    übernimmt.
   </p>
 
   <h3>5.4 Sprachausgabe (Google Cloud Text-to-Speech)</h3>
   <p>
-    Die Sätze, die der Bot spricht, werden von Google Cloud Text-to-Speech (Google, Stimme
-    Chirp3-HD) in Audio umgewandelt. Google erhält dabei nur den zu sprechenden Text.
+    Die Sätze, die der Bot spricht, werden von Google Cloud Text-to-Speech in Audio umgewandelt.
+    Google erhält dabei nur den zu sprechenden Text.
   </p>
 
   <h3>5.5 Transkript und eingeladene Agenten</h3>
@@ -161,23 +157,90 @@ a { color: var(--teal); }
     von dir gestarteten Dienstes).
   </p>
 
-  <h2>6. Programmbibliotheken (jsDelivr)</h2>
+  <h2>6. Gratis-Kontingent</h2>
+  <p>
+    Ohne Guthaben gibt es eine begrenzte Zahl Gratis-Minuten pro Tag. Um sie zuzuordnen, nutzen wir
+    zwei Merkmale: eine zufällige Kennung, die dein Browser im lokalen Speicher anlegt (anon-id), und
+    deine IP-Adresse (bei IPv6 das /64-Netz). Gespeichert werden davon nur SHA-256-Hashwerte, nie die
+    Kennung oder IP-Adresse im Klartext, zusammen mit Tag, Modus, verbrauchten Minuten und dem
+    Raumnamen. Diese Einträge werden nach 7 Tagen automatisch gelöscht.
+  </p>
+  <p>
+    Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO (Bereitstellung des Gratis-Angebots) und lit. f
+    (berechtigtes Interesse, Missbrauch des kostenlosen Angebots zu verhindern).
+  </p>
+
+  <h2>7. Guthaben und Konto</h2>
+  <p>
+    Wenn du Guthaben auflädst, legt der Server ein Konto an und gibt deinem Browser ein geheimes
+    Wallet-Token, das im lokalen Speicher deines Browsers liegt. Auf dem Server wird davon nur ein
+    SHA-256-Hashwert gespeichert. In der Kontodatenbank (billing.sqlite) speichern wir:
+  </p>
+  <ul>
+    <li>Konto-ID, E-Mail-Adresse (aus dem Bezahlvorgang oder der Anmeldung) und ob sie bestätigt ist,</li>
+    <li>Guthaben und offene Beträge,</li>
+    <li>Buchungen: Aufladungen (Stripe-Sitzungs- und Zahlungs-ID, Betrag, Zeitpunkt), Erstattungen und
+      Rückbuchungen sowie den Verbrauch je Anruf (Raumname, Modus, Kosten, Zeitpunkt),</li>
+    <li>die Zuordnung, welches Konto einen Raum bezahlt.</li>
+  </ul>
+  <p>
+    Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO (Vertrag über das Guthaben) und lit. c
+    (handels- und steuerrechtliche Aufbewahrungspflichten für Buchungen).
+  </p>
+
+  <h2>8. Anmeldung</h2>
+  <h3>8.1 Anmeldung per E-Mail-Link</h3>
+  <p>
+    Gibst du deine E-Mail-Adresse ein, schicken wir dir einen Anmeldelink. Der Versand läuft über
+    Resend (Resend, Inc., USA), das dafür deine E-Mail-Adresse und den Inhalt der Mail erhält. Der
+    Link ist 15 Minuten gültig und nur einmal verwendbar; auf dem Server liegt davon nur ein
+    Hashwert zusammen mit der E-Mail-Adresse. Zum
+    Schutz vor Missbrauch begrenzen wir die Zahl der Anfragen je IP-Adresse und E-Mail-Adresse.
+  </p>
+  <h3>8.2 Anmeldung mit Google oder GitHub</h3>
+  <p>
+    Du kannst dich auch mit deinem Google- oder GitHub-Konto anmelden (OAuth). Dabei wirst du zum
+    jeweiligen Anbieter weitergeleitet und meldest dich dort an. Wir fragen nur deine E-Mail-Adresse
+    ab und übernehmen sie nur, wenn der Anbieter sie als bestätigt meldet. Gespeichert werden die
+    bestätigte E-Mail-Adresse und die Kennung deines Kontos beim Anbieter (Anbieter-ID) mit dem
+    Zeitpunkt der ersten und letzten Anmeldung. Für die Verarbeitung bei der Anmeldung auf ihren
+    Seiten sind Google bzw. GitHub selbst verantwortlich.
+  </p>
+  <p>Rechtsgrundlage für die Anmeldung: Art. 6 Abs. 1 lit. b DSGVO.</p>
+
+  <h2>9. Zahlungen (Stripe)</h2>
+  <p>
+    Zum Aufladen leiten wir dich auf die Bezahlseite von Stripe weiter (Stripe Payments Europe,
+    Ltd., 1 Grand Canal Street Lower, Dublin 2, Irland). Deine Zahlungsdaten (zum Beispiel
+    Kartendaten) gibst du direkt bei Stripe ein; wir erhalten sie nicht. Ist zu deinem Konto schon eine E-Mail-Adresse
+    gespeichert, geben wir sie an Stripe weiter, damit sie vorausgefüllt ist. Von Stripe erhalten wir
+    die bei der Zahlung angegebene E-Mail-Adresse, den Betrag und Kennungen der Zahlung sowie
+    Meldungen über Erstattungen und Rückbuchungen. Stripe kann Daten auch in die USA übermitteln.
+    Rechtsgrundlage: Art. 6 Abs. 1 lit. b und lit. c DSGVO.
+  </p>
+
+  <h2>10. Programmbibliotheken (jsDelivr)</h2>
   <p>
     Die Anrufseite lädt die Bibliotheken livekit-client und three.js vom Content Delivery Network
     jsDelivr. Dabei erhält der CDN-Betreiber deine IP-Adresse und Browser-Kopfzeilen.
     Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO (schnelle, zuverlässige Auslieferung).
   </p>
 
-  <h2>7. Cookies und lokale Speicherung</h2>
+  <h2>11. Cookies und lokale Speicherung</h2>
   <p>
-    Wir setzen keine Cookies. Die Anrufseite speichert Einstellungen im lokalen Speicher deines
-    Browsers (localStorage). Diese Daten verlassen deinen Browser nicht, mit Ausnahme der
-    Teilnehmerkennung, die beim Beitritt an den Server geht. Du kannst sie jederzeit über die
-    Browser-Einstellungen löschen.
+    Wir setzen keine Cookies. Unsere Seiten speichern einige Werte im lokalen Speicher deines
+    Browsers (localStorage). Die meisten verlassen deinen Browser nie; Teilnehmerkennung, anon-id,
+    Wallet-Token und Anmelde-Nonce gehen bei der jeweiligen Anfrage an unseren Server. Du kannst
+    alles jederzeit über die Browser-Einstellungen löschen.
   </p>
   <div class="tbl"><table>
     <thead><tr><th>Schlüssel</th><th>Inhalt</th></tr></thead>
     <tbody>
+      <tr><td><code>vh-wallet-v1</code></td><td>Wallet-Token: Zugang zu deinem Guthaben</td></tr>
+      <tr><td><code>vh_login_nonce</code></td><td>Einmalwert, der eine Anmeldung an diesen Browser bindet</td></tr>
+      <tr><td><code>vh-anon-v1</code></td><td>Zufällige Kennung für das Gratis-Kontingent (anon-id)</td></tr>
+      <tr><td><code>vh-free-seen-v1</code></td><td>Ob der Hinweis zum Gratis-Kontingent heute schon gezeigt wurde</td></tr>
+      <tr><td><code>vh-seen-v1</code></td><td>Ob du schon einmal einen Call hattest (steuert den Hinweis für Erstbesucher)</td></tr>
       <tr><td><code>vh-theme-v1</code></td><td>Helles oder dunkles Design</td></tr>
       <tr><td><code>vh-hd-v1</code></td><td>HD-Darstellung an/aus</td></tr>
       <tr><td><code>vh-tr-mode-v1</code></td><td>Position bzw. Anzeige des Transkripts</td></tr>
@@ -188,50 +251,57 @@ a { color: var(--teal); }
       <tr><td><code>vh-id:v1:&lt;raum&gt;</code></td><td>Zufällige Teilnehmerkennung je Raum, damit ein Neuladen dich nicht als neue Person zeigt</td></tr>
     </tbody>
   </table></div>
-  <p>Ein früher verwendeter Schlüssel <code>vh-recent-invites:v1</code> wird beim Aufruf gelöscht.</p>
+  <p>
+    Ein früher verwendeter Schlüssel <code>vh-recent-invites:v1</code> wird beim Aufruf gelöscht.
+    Die Bezahlseite von Stripe sowie die Anmeldeseiten von Google und GitHub können eigene Cookies
+    setzen; dafür gelten die Datenschutzhinweise dieser Anbieter.
+  </p>
 
-  <h2>8. Kontakt per E-Mail</h2>
+  <h2>12. Kontakt per E-Mail</h2>
   <p>
     E-Mails an Adressen unter voicehook.ai werden über den Weiterleitungsdienst ImprovMX an unser
     Postfach weitergeleitet. Wir verarbeiten deine Nachricht nur, um sie zu beantworten.
     Rechtsgrundlage: Art. 6 Abs. 1 lit. b bzw. lit. f DSGVO.
   </p>
 
-  <h2>9. Zahlungen (vorbereitet, noch nicht aktiv)</h2>
-  <p>
-    Eine Aufladefunktion für Guthaben ist in Vorbereitung. Zahlungen sollen dann über Stripe
-    abgewickelt werden. Derzeit findet keine Zahlungsabwicklung statt; dieser Abschnitt wird vor dem
-    Start ergänzt.
-  </p>
-
-  <h2>10. Empfänger und Drittlandübermittlung</h2>
+  <h2>13. Empfänger und Drittlandübermittlung</h2>
   <div class="tbl"><table>
     <thead><tr><th>Empfänger</th><th>Zweck</th><th>Sitz</th></tr></thead>
     <tbody>
       <tr><td>Hetzner Online GmbH</td><td>Server-Hosting</td><td>Deutschland</td></tr>
       <tr><td>Deepgram, Inc.</td><td>Spracherkennung</td><td>USA</td></tr>
-      <tr><td>Google (Gemini API, Gemini Live, Cloud Text-to-Speech)</td><td>Sprachmodell, Sprachausgabe</td><td>USA</td></tr>
+      <tr><td>Google (Gemini API, Gemini Live, Cloud Text-to-Speech)</td><td>Sprachmodell, Sprachausgabe</td><td>Irland / USA</td></tr>
+      <tr><td>Stripe Payments Europe, Ltd.</td><td>Zahlungsabwicklung</td><td>Irland</td></tr>
+      <tr><td>Resend, Inc.</td><td>Versand der Anmelde-Mails</td><td>USA</td></tr>
+      <tr><td>Google, GitHub, Inc.</td><td>Anmeldung (OAuth), nur wenn du sie wählst</td><td>Irland / USA</td></tr>
       <tr><td>jsDelivr</td><td>Auslieferung von Programmbibliotheken</td><td>siehe Betreiber</td></tr>
       <tr><td>ImprovMX</td><td>E-Mail-Weiterleitung</td><td>siehe Betreiber</td></tr>
     </tbody>
   </table></div>
   <p>
-    Bei Empfängern außerhalb der EU stützt sich die Übermittlung auf einen
-    Angemessenheitsbeschluss (EU-US Data Privacy Framework) oder auf Standardvertragsklauseln der
-    EU-Kommission; die Grundlage je Anbieter wird vor der Freigabe ergänzt.
+    Werden Daten in die USA oder ein anderes Land außerhalb der EU übermittelt, stützt sich das
+    auf einen Angemessenheitsbeschluss der EU-Kommission (für zertifizierte US-Unternehmen das
+    EU-US Data Privacy Framework) oder auf Standardvertragsklauseln der EU-Kommission.
   </p>
 
-  <h2>11. Speicherdauer</h2>
+  <h2>14. Speicherdauer</h2>
+  <p>
+    Wir speichern personenbezogene Daten, solange es für den jeweiligen Zweck erforderlich ist,
+    und darüber hinaus, soweit gesetzliche Aufbewahrungsfristen (etwa für Buchungen) es verlangen.
+    Wo der Code feste Fristen vorgibt:
+  </p>
   <ul>
     <li>Audio und Transkripte: werden von unserem Code nicht dauerhaft gespeichert.</li>
-    <li>IP-Adressen für den Missbrauchsschutz: höchstens 10 Minuten im Arbeitsspeicher.</li>
+    <li>IP-Adressen für den Missbrauchsschutz beim Anrufstart: höchstens 10 Minuten im Arbeitsspeicher.</li>
+    <li>Gratis-Kontingent (Hashwerte, Minuten): 7 Tage.</li>
+    <li>Anmeldelinks: 15 Minuten gültig; abgelaufene Links werden bei späteren Anmeldungen automatisch gelöscht.</li>
     <li>Zugangstoken: Gültigkeit standardmäßig 1 Stunde.</li>
     <li>Anrufe: enden spätestens nach 60 Minuten, der Raum wird gelöscht.</li>
+    <li>Konto und Buchungen: solange das Konto besteht, Buchungen zusätzlich bis zum Ablauf der gesetzlichen Aufbewahrungsfristen.</li>
     <li>Lokale Speicherung im Browser: bis du sie löschst.</li>
-    <li>Server-Logs: Löschfrist wird festgelegt.</li>
   </ul>
 
-  <h2>12. Deine Rechte</h2>
+  <h2>15. Deine Rechte</h2>
   <p>Du hast nach der DSGVO das Recht auf:</p>
   <ul>
     <li>Auskunft (Art. 15),</li>
@@ -241,13 +311,13 @@ a { color: var(--teal); }
     <li>Datenübertragbarkeit (Art. 20),</li>
     <li>Widerspruch gegen Verarbeitungen auf Grundlage von Art. 6 Abs. 1 lit. f (Art. 21).</li>
   </ul>
-  <p>Wende dich dafür an <a href="mailto:privacy@voicehook.ai">privacy@voicehook.ai</a>.</p>
+  <p>Wende dich dafür an <a href="mailto:support@voicehook.ai">support@voicehook.ai</a>.</p>
 
-  <h2>13. Beschwerderecht</h2>
+  <h2>16. Beschwerderecht</h2>
   <p>
     Du kannst dich bei einer Datenschutz-Aufsichtsbehörde beschweren, insbesondere in dem Land, in
     dem du wohnst oder arbeitest. Für uns zuständig ist die Landesbeauftragte für Datenschutz und
-    Informationsfreiheit Nordrhein-Westfalen, Kavalleriestr. 2-4, 40213 Düsseldorf.
+    Informationsfreiheit Nordrhein-Westfalen (LDI NRW), Kavalleriestr. 2-4, 40213 Düsseldorf.
   </p>
 </div>
 </body>

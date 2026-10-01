@@ -17,9 +17,8 @@ __SITE_MAIN__ {
   }
   handle {
     root * /var/www/voicehook
-    rewrite /impressum /impressum.html  # Footer-Seiten (PR #83)
-    rewrite /datenschutz /datenschutz.html
-    rewrite /setup /setup.html
+    @footer path /impressum /datenschutz /setup  # Footer-Seiten (PR #83)
+    rewrite @footer {path}.html
     rewrite /security /.well-known/security.txt
     rewrite /aufladen /aufladen.html  # Guthaben aufladen (Stripe Checkout)
     try_files {path} /voice.html

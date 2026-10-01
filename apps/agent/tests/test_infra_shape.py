@@ -26,7 +26,8 @@ def test_deploy_script_is_lean():
 
 
 def test_caddyfile_template_is_lean():
-    assert _loc(ROOT / "infra" / "caddy" / "Caddyfile.tmpl") <= 30
+    # 30 -> 33 (01.10.2026): 3 Zeilen für die Footer-Seiten (PR #83), Platz für /login (PR #95).
+    assert _loc(ROOT / "infra" / "caddy" / "Caddyfile.tmpl") <= 33
 
 
 def test_systemd_units_are_exactly_main_plus_live_worker():
@@ -78,7 +79,7 @@ def test_footer_pages_exist_and_are_routed():
         assert (ROOT / "web" / f"{name}.html").is_file(), name
     assert (ROOT / "web" / ".well-known" / "security.txt").is_file()
     cf = (ROOT / "infra" / "caddy" / "Caddyfile.tmpl").read_text()
-    for name in ("impressum", "datenschutz", "setup"):
-        assert f"rewrite /{name} /{name}.html" in cf, name
+    assert "@footer path /impressum /datenschutz /setup" in cf
+    assert "rewrite @footer {path}.html" in cf
     assert "rewrite /security /.well-known/security.txt" in cf
     assert "try_files {path} /voice.html" in cf  # SPA-Fallback bleibt

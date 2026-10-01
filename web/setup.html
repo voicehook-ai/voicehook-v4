@@ -84,16 +84,37 @@ a { color: var(--teal); }
 
   <h2>Der Einladungstext</h2>
   <p>Er sieht ungefähr so aus:</p>
-  <pre>voicehook.ai call: join as agent (paste &amp; run):
+  <pre>voicehook.ai Call · als Agent beitreten (einfügen und ausführen):
 
-  uvx --from git+https://github.com/voicehook-ai/voicehook-agent voicehook-agent join https://voicehook.ai/r/&lt;raum&gt; --name &lt;YourName&gt; --model &lt;your-model-id&gt; --json
+  uvx --from git+https://github.com/voicehook-ai/voicehook-agent voicehook-agent join https://voicehook.ai/r/&lt;raum&gt;?invite=&lt;code&gt; --name &lt;YourName&gt; --model &lt;your-model-id&gt; --json
 
-First-time agent? Read the skill FIRST: https://voicehook.ai/agent/SKILL.md</pre>
+Erstes Mal als Agent? Lies ZUERST den Skill: https://voicehook.ai/agent/SKILL.md</pre>
   <p>
-    Dein Agent installiert damit das Kommandozeilenwerkzeug <code>voicehook-agent</code> und tritt
-    dem Raum bei. Er gibt dabei seinen Namen und sein Modell an, beides wird im Call angezeigt.
-    Einladungslinks gelten nur für deinen Raum und laufen nach einer Stunde ab.
+    Dein Agent startet damit das Kommandozeilenwerkzeug <code>voicehook-agent</code> und tritt
+    dem Raum bei. <code>--name</code> und <code>--model</code> sind Pflicht: sein Name und sein
+    genaues Modell, beides wird im Call angezeigt. Einladungslinks gelten nur für deinen Raum
+    und laufen nach einer Stunde ab.
   </p>
+
+  <h2>Dauerhaft installieren</h2>
+  <p>Agenten, die öfter beitreten, installieren das Werkzeug einmal (aktuell Version 0.5.0):</p>
+  <pre>uv tool install git+https://github.com/voicehook-ai/voicehook-agent
+# ohne uv:
+pip install --user git+https://github.com/voicehook-ai/voicehook-agent</pre>
+  <p>Eine ältere Version aktualisierst du mit <code>uv tool install --force git+https://github.com/voicehook-ai/voicehook-agent</code>.</p>
+
+  <h2>Befehle im Call</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Befehl</th><th>Wirkung</th></tr></thead>
+    <tbody>
+      <tr><td><code>join &lt;link&gt;</code></td><td>Tritt dem Raum bei und bleibt verbunden, bis der Call endet oder <code>leave</code> kommt.</td></tr>
+      <tr><td><code>next</code></td><td>Wartet, bis du ausgesprochen hast, und gibt deinen Satz als JSON-Zeile aus.</td></tr>
+      <tr><td><code>say "…"</code></td><td>Der Sprach-Bot spricht diesen Text.</td></tr>
+      <tr><td><code>status</code></td><td>Zeigt Verbindung und Teilnehmende des Raums.</td></tr>
+      <tr><td><code>leave</code></td><td>Verlässt den Call sauber.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Der Ablauf im Gespräch ist immer gleich: <code>say</code>, dann <code>next</code>, dann wieder <code>say</code>.</p>
 
   <h2>Anleitung für Agenten</h2>
   <p>
