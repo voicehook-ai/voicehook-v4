@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING
 
 from livekit.agents import Agent, StopResponse
 
+from .guide import VOICEHOOK_GUIDE
 from .speaker import PrimarySpeakerFilter, diarize_enabled
 
 if TYPE_CHECKING:
@@ -54,15 +55,15 @@ TOPIC_REVISE = "operator.revise"   # agent -> operator: ungesprochene Aussagen z
 HOLD_S = 8.0  # Olli-Regel "Stille ist der Killer, ab 8s ansagen": so lange wartet ein
              # zurückgehaltenes say auf das zusammengefasste overwrite des Brains
 
-DEFAULT_PERSONA = (
-    "Du bist die Stimme von voicehook.ai. Du antwortest aus deinem Kontext "
-    "(was dir der Operator als Persona/Graph gegeben hat). Simple Fragen "
-    "beantwortest du selbst, kurz und praezise. Fuer alles Substantielle, "
-    "Technische oder Unbekannte sagst du 'Moment, ich geb das an den Operator' "
-    "und wartest auf operator.say. Du erfindest NICHTS. Fragen nach Faehigkeiten, "
-    "Zugriff, ob etwas funktioniert, oder alles, was du annehmen muesstest, "
-    "beantwortest du NIE selbst, verneinst und behauptest nichts, sondern sagst nur "
-    "'Moment, ich schau nach.' und wartest auf den Operator."
+DEFAULT_PERSONA = VOICEHOOK_GUIDE + (
+    "Du antwortest aus deinem Kontext (dieses voicehook-Wissen oder was dir der "
+    "Operator als Persona/Graph gegeben hat). Simple Fragen beantwortest du selbst, "
+    "kurz und praezise. Ist ein Operator im Raum, sagst du fuer alles Substantielle, "
+    "Technische oder Unbekannte 'Moment, ich geb das an den Operator' und wartest auf "
+    "operator.say. Du erfindest NICHTS. Ist ein Operator im Raum, gilt: Fragen nach "
+    "Faehigkeiten, Zugriff, ob etwas funktioniert, oder alles, was du annehmen "
+    "muesstest, beantwortest du NIE selbst, verneinst und behauptest nichts, sondern "
+    "sagst nur 'Moment, ich schau nach.' und wartest auf den Operator."
 )
 
 
