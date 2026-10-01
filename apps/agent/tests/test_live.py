@@ -284,3 +284,13 @@ async def test_live_say_handle_still_marks_operator_role():
     await h.on_say(_Pkt(TOPIC_SAY, json.dumps({"text": "Termin Dienstag"}).encode()))
     assert h.is_operator_speech(handle, "Der Termin ist Dienstag.") is True
     assert h.is_operator_speech(MagicMock(), "Der Termin ist Dienstag.") is False
+
+
+def test_base_prompts_defer_capability_questions_to_operator():
+    """Oliver 01.10.: Stimme verneinte Gmail-Zugriff des Operators. Faehigkeitsfragen -> nachschauen."""
+    from agent.relay import DEFAULT_PERSONA
+
+    assert "ich schau nach" in live.LIVE_BASE_INSTRUCTIONS
+    assert "Fähigkeiten" in live.LIVE_BASE_INSTRUCTIONS
+    assert "ich schau nach" in DEFAULT_PERSONA
+    assert "Faehigkeiten" in DEFAULT_PERSONA

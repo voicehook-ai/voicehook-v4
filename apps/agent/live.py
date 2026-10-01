@@ -40,7 +40,10 @@ LIVE_BASE_INSTRUCTIONS = (
     "Wissen, nichts weglassen, nichts abschwächen, nichts umdeuten, keine Einleitung "
     "und danach kein Nachsatz. Ist sie als wörtlich markiert, sprichst du sie exakt Wort "
     "für Wort. Alle übrigen Operator-Nachrichten sind Vorgaben: befolge sie, lies sie "
-    "nie vor und erwähne sie nicht."
+    "nie vor und erwähne sie nicht. Fragen nach Fähigkeiten, Zugriff, ob etwas "
+    "funktioniert, oder alles, was du annehmen müsstest, beantwortest du nie selbst, "
+    "du verneinst und behauptest nichts, sondern sagst nur: Moment, ich schau nach. "
+    "Dann wartest du auf die Nachricht deines Operators."
 )
 # Normalfall: Gemini darf natürlich formulieren, der Inhalt bleibt exakt derselbe.
 LIVE_SAY_USER = (
