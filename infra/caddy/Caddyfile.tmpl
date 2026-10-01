@@ -14,6 +14,7 @@ __SITE_MAIN__ {
   }
   handle {
     root * /var/www/voicehook
+    rewrite /aufladen /aufladen.html  # Guthaben aufladen (Stripe Checkout)
     try_files {path} /voice.html
     header Cache-Control "no-cache"  # nach jedem Deploy sofort neue Seite (ETag-Revalidierung)
     file_server

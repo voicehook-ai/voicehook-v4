@@ -24,7 +24,7 @@ import urllib.request
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from . import budget
+from . import billing_routes, budget
 from .health import probe_all
 from .slug import gen_slug
 from .tokens import mint_invite, mint_livekit_token, verify_invite
@@ -32,6 +32,7 @@ from .tokens import mint_invite, mint_livekit_token, verify_invite
 logger = logging.getLogger("voicehook.server")
 
 app = FastAPI(title="voicehook-agent", version="4.0.0-dev")
+app.include_router(billing_routes.router)  # Aufladen + Wallet (/api/checkout, /api/wallet, ...)
 
 
 class TokenRequest(BaseModel):
@@ -237,10 +238,18 @@ def _issue(room: str, identity: str, ttl_seconds: int, *, agent_name: str | None
     return TokenResponse(token=token, url=livekit_url, room=room, identity=identity)
 
 
+def _room_mode(room: str) -> str:
+    return "live" if _agent_for(room) == LIVE_AGENT_NAME else "normal"
+
+
 @app.post("/api/token", response_model=TokenResponse)
-def issue_token(req: TokenRequest) -> TokenResponse:
-    """Mint a LK JWT — POST flow, HMAC invite required. Auto-dispatches voice-ai."""
-    return _mint(req.room, req.identity, req.invite, req.ttl_seconds)
+def issue_token(req: TokenRequest, request: Request) -> TokenResponse:
+    """Mint a LK JWT — POST flow, HMAC invite required. Auto-dispatches voice-ai.
+
+    Optional X-Wallet-Token: bindet einen noch nicht bezahlten Raum an dieses Konto."""
+    tok = _mint(req.room, req.identity, req.invite, req.ttl_seconds)
+    billing_routes.bind_room_if_paid(request, req.room, _room_mode(req.room))
+    return tok
 
 
 _LABEL_MAX = 64
@@ -338,10 +347,14 @@ class HostCallRequest(BaseModel):
 def host_call(req: HostCallRequest, request: Request) -> TokenResponse:
     """Start a fresh call. Server-generated room (no hijack), direct mint +
     voice-ai dispatch. Stopgap per-IP rate limit until free-tier gate (#17-19)."""
+    wallet = billing_routes.wallet_for_call(request, "normal")  # Gating an: 402 ohne Guthaben
     ip = _client_ip(request)
     if not _host_rate_ok(ip):
         raise HTTPException(status_code=429, detail="rate limited — try again later")
-    return _issue(gen_slug(), req.identity, req.ttl_seconds)
+    room = gen_slug()
+    if wallet:  # vor dem Dispatch binden, damit der Worker das Konto sofort sieht
+        billing_routes.db.bind_room(room, wallet, "normal")
+    return _issue(room, req.identity, req.ttl_seconds)
 
 
 class LiveRoomRequest(BaseModel):
@@ -424,10 +437,13 @@ def public_live_room(req: HostCallRequest, request: Request) -> PublicLiveRoomRe
         raise HTTPException(status_code=503, detail="live mode not available")
     if budget.exhausted():
         raise HTTPException(status_code=402, detail="live mode is used up for this month")
+    wallet = billing_routes.wallet_for_call(request, "live")  # Gating an: 402 ohne Guthaben
     if not _host_rate_ok(_client_ip(request)):
         raise HTTPException(status_code=429, detail="rate limited, try again later")
     room = gen_slug()
     _set_room_agent(room, LIVE_AGENT_NAME)
+    if wallet:
+        billing_routes.db.bind_room(room, wallet, "live")
     tok = _issue(room, req.identity, req.ttl_seconds)  # _agent_for -> Live-Worker
     invite = mint_invite(room, req.ttl_seconds)
     base = os.environ.get("VOICEHOOK_PUBLIC_URL", "https://voicehook.ai").rstrip("/")

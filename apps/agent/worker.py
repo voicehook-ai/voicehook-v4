@@ -23,6 +23,8 @@ from livekit import rtc
 from livekit.agents import AgentSession, AutoSubscribe, JobContext, WorkerOptions, cli, room_io
 
 from . import budget
+from .billing import db as billing_db
+from .billing import pricing as billing_pricing
 from .llm import build_llm
 from .relay import DEFAULT_PERSONA, RelayAgent, build_relay_handlers, topic_dispatch
 from .voice import build_stt, build_tts
@@ -40,6 +42,7 @@ DEFAULT_MAX_CALL_SECONDS = 3600.0
 DEFAULT_IDLE_NO_HUMAN_SECONDS = 60.0
 MAX_CALL_ANNOUNCEMENT = "Maximale Gesprächsdauer erreicht. Ich beende den Call."
 LIVE_BUDGET_ANNOUNCEMENT = "Das Live-Budget für diesen Monat ist aufgebraucht. Ich beende den Call."
+WALLET_EMPTY_ANNOUNCEMENT = "Dein Guthaben ist aufgebraucht. Ich beende den Call."
 # Every teardown step is bounded so the teardown itself can never hang.
 TEARDOWN_STEP_TIMEOUT = 10.0
 
@@ -223,6 +226,59 @@ class CallGuard:
             logger.warning("[call_guard] %s failed: %r", step, e)
 
 
+class WalletCharger:
+    """Bucht echten Verbrauch x Faktor (+ MwSt) vom Wallet, das am Raum hängt.
+
+    Die Zuordnung Raum -> Konto legt der HTTP-Server an (host-call / live-room /
+    token mit X-Wallet-Token) in derselben SQLite-Datei; ohne Zuordnung bucht der
+    Charger nichts (Call wie bisher). charge() liefert genau EINMAL True, sobald der
+    Saldo <= 0 ist; ein Buchungsfehler bei gebundenem Konto zählt als leer (fail-closed).
+    """
+
+    def __init__(self, room: str, mode: str) -> None:
+        self.room = room
+        self.mode = mode  # "normal" | "live" -> Faktor 3 | 1,5
+        self.account: str | None = None
+        self.exhausted = False
+
+    def lookup(self) -> str | None:
+        if self.account is None:
+            try:
+                bound = billing_db.room_wallet(self.room)
+            except Exception as e:  # noqa: BLE001
+                logger.error("[wallet] lookup room=%s failed: %s", self.room, e)
+                bound = None
+            if bound:
+                self.account = bound[0]
+        return self.account
+
+    def is_empty(self) -> bool:
+        acc = self.lookup()
+        if acc is None:
+            return False
+        try:
+            return billing_db.balance_ueur(acc) <= 0
+        except Exception as e:  # noqa: BLE001
+            logger.error("[wallet] balance account=%s failed: %s", acc, e)
+            return True
+
+    def charge(self, usd: float) -> bool:
+        acc = self.lookup()
+        if acc is None or usd <= 0 or self.exhausted:
+            return False
+        try:
+            left = billing_db.charge(
+                acc, billing_pricing.charge_ueur(usd, self.mode), room=self.room, mode=self.mode, usd=usd
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.error("[wallet] charge account=%s failed: %s", acc, e)
+            left = 0
+        if left <= 0:
+            self.exhausted = True
+            return True
+        return False
+
+
 def is_live() -> bool:
     """Gemini-Live-Testworker (eigener Dienst voice-ai-live), sonst klassisch."""
     return os.environ.get("VOICEHOOK_PIPELINE", "pipeline").strip().lower() == "live"
@@ -256,6 +312,12 @@ async def entrypoint(ctx: JobContext) -> None:
         # Monatsbudget weg: gar nicht erst eine kostenpflichtige Live-Session öffnen.
         logger.warning("[live-budget] exhausted (%.2f USD), refusing room=%s", budget.spent_usd(), ctx.room.name)
         ctx.shutdown(reason="live_budget_exhausted")
+        return
+    wallet = WalletCharger(ctx.room.name, "live" if live_mode else "normal")
+    if wallet.is_empty():
+        # Raum gehört einem Wallet ohne Guthaben: keine kostenpflichtige Session öffnen.
+        logger.warning("[wallet] empty, refusing room=%s", ctx.room.name)
+        ctx.shutdown(reason="wallet_empty")
         return
     session = build_session()
     if live_mode:
@@ -315,6 +377,11 @@ async def entrypoint(ctx: JobContext) -> None:
                 asyncio.create_task(
                     guard_ref[0].end("live_budget", delete_room=False, announce=LIVE_BUDGET_ANNOUNCEMENT)
                 )
+        if wallet.charge(usd) and guard_ref:
+            logger.warning("[wallet] empty in room=%s, ending call", ctx.room.name)
+            asyncio.create_task(
+                guard_ref[0].end("wallet_empty", delete_room=False, announce=WALLET_EMPTY_ANNOUNCEMENT)
+            )
         if type(m).__name__ == "RealtimeModelMetrics":
             turns[0] += 1
             logger.info(
