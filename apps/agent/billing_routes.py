@@ -16,7 +16,7 @@ Ablauf (Oliver 01.10.2026):
   5. Erstattung/Rückbuchung (charge.refunded, charge.dispute.created) ziehen den
      Betrag wieder ab (Saldo nie unter 0, Fehlbetrag vermerkt), idempotent.
 
-Reihenfolge im Call: erst Gratis-Minuten (freetier.py), dann Guthaben
+Reihenfolge im Call: erst Gratis-Euro (freetier.py), dann Guthaben
 (payer_for_call). Gating per Env greift nur, wenn das Gratis-Kontingent des Modus
 aus ist: VOICEHOOK_REQUIRE_CREDITS_NORMAL=0, VOICEHOOK_REQUIRE_CREDITS_LIVE=0
   (1 = ohne gültiges Wallet mit Saldo > 0 antwortet host-call/live-room mit 402).
@@ -87,12 +87,12 @@ def wallet_token(request: Request) -> str:
 def payer_for_call(request: Request, mode: str, ip: str) -> tuple[str | None, list[str] | None]:
     """Wer zahlt einen NEUEN Raum: (Wallet-Konto | None, Gratis-Merkmale | None).
 
-    Reihenfolge (Oliver 01.10.): erst die Gratis-Minuten des Tages, dann das Guthaben.
-    Hat der Anfragende heute noch Gratis-Minuten, kommen seine Merkmale zurück (der
+    Reihenfolge (Oliver 01.10.): erst der Gratis-Euro des Tages, dann das Guthaben.
+    Hat der Anfragende heute noch Gratis-Rest, kommen seine Merkmale zurück (der
     Worker zählt sie zuerst herunter); hat er zusätzlich ein Wallet mit Saldo > 0,
     wird der Raum auch daran gebunden, der Worker bucht nach dem Gratis-Teil vom
     Guthaben weiter. Weder Gratis-Rest noch Guthaben -> 402 mit Link zum Aufladen:
-      free_limit        Gratis-Kontingent für den Modus an, heute aufgebraucht
+      free_limit        Gratis-Kontingent an, heute aufgebraucht (Normal + Live gemeinsam)
       credits_required  Gratis-Kontingent für den Modus aus und
                         VOICEHOOK_REQUIRE_CREDITS_<MODE>=1
     Gratis aus und Gating aus: (None, None), der Call läuft wie bisher ungezählt.
@@ -101,14 +101,14 @@ def payer_for_call(request: Request, mode: str, ip: str) -> tuple[str | None, li
     wallet = acc if acc is not None and db.balance_ueur(acc) > 0 else None
     if freetier.enabled(mode):
         keys = freetier.identity_keys(request.headers.get(freetier.ANON_HEADER), ip)
-        if freetier.remaining_seconds(keys, mode) > 0:
+        if freetier.remaining_ueur(keys) > 0:
             return wallet, keys
         if wallet:
             return wallet, None
         raise HTTPException(
             status_code=402,
             detail={"error": "free_limit", "topup_url": TOPUP_PATH,
-                    "free_min_per_day": freetier.limit_minutes(mode)},
+                    "free_eur_per_day": freetier.limit_eur()},
         )
     if wallet:
         return wallet, None

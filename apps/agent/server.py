@@ -383,16 +383,18 @@ def _client_ip(request: Request) -> str:
 
 @app.get("/api/free/remaining")
 def free_remaining(request: Request) -> dict:
-    """Übrige Gratis-Sekunden heute je Modus für diesen Browser (X-Anon-Id) und
-    diese IP, gezählt wie bei host-call / live-room (das knappere Merkmal gilt).
-    Nur lesen, nie buchen. Modus aus (Limit 0) -> enabled false, Sekunden 0."""
+    """Gratis-Rest heute für diesen Browser (X-Anon-Id) und diese IP, gezählt wie bei
+    host-call / live-room (das knappere Merkmal gilt), Normal und Live gemeinsam.
+    Nur lesen, nie buchen. Gratis aus -> enabled false, eur_left 0."""
+    return {"enabled": freetier.enabled(), **_free_info(request)}
+
+
+def _free_info(request: Request) -> dict:
+    """{eur_left, eur_per_day} für /api/me und /api/free/remaining (Euro, 2 Stellen)."""
+    if not freetier.enabled():
+        return {"eur_left": 0.0, "eur_per_day": 0.0}
     keys = freetier.identity_keys(request.headers.get(freetier.ANON_HEADER), _client_ip(request))
-    out: dict = {"enabled": {}}
-    for mode in ("live", "normal"):
-        on = freetier.enabled(mode)
-        out["enabled"][mode] = on
-        out[f"{mode}_s"] = max(0, int(freetier.remaining_seconds(keys, mode))) if on else 0
-    return out
+    return {"eur_left": freetier.remaining_eur(keys), "eur_per_day": round(freetier.limit_eur(), 2)}
 
 
 def _host_rate_ok(ip: str) -> bool:
@@ -414,7 +416,7 @@ class HostCallRequest(BaseModel):
 @app.post("/api/host-call", response_model=TokenResponse)
 def host_call(req: HostCallRequest, request: Request) -> TokenResponse:
     """Start a fresh call. Server-generated room (no hijack), direct mint +
-    voice-ai dispatch. Zahlt: erst Gratis-Minuten, dann Wallet (402 wenn beides leer)."""
+    voice-ai dispatch. Zahlt: erst Gratis-Euro, dann Wallet (402 wenn beides leer)."""
     ip = _client_ip(request)
     wallet, free_keys = billing_routes.payer_for_call(request, "normal", ip)
     if not _host_rate_ok(ip):
@@ -432,7 +434,7 @@ class InviteRoomResponse(TokenResponse):
 @app.post("/api/invite-room", response_model=InviteRoomResponse)
 def invite_room(req: HostCallRequest, request: Request) -> InviteRoomResponse:
     """"Agent einladen" im Normalmodus: neuer Raum mit denselben Prüfungen wie
-    /api/host-call (Gratis-Minuten, dann Wallet, 402, IP-Ratenlimit), Slug vom Server.
+    /api/host-call (Gratis-Euro, dann Wallet, 402, IP-Ratenlimit), Slug vom Server.
 
     Unterschied zu host-call: der Token des Gastgebers trägt keinen Agent-Claim
     (der Join selbst dispatcht nicht), voice-ai wird wie beim Operator-Join
@@ -469,13 +471,11 @@ _mask_email = billing_routes.mask_email  # auch in /api/login/verify
 
 @app.get("/api/me")
 def me(request: Request) -> dict:
-    """Was hat dieser Browser noch? Gratis-Sekunden heute je Modus (X-Anon-Id + IP,
-    gezählt wie host-call) und, mit gültigem X-Wallet-Token, Guthaben und die
+    """Was hat dieser Browser noch? Gratis-Rest heute in Euro (X-Anon-Id + IP, gezählt
+    wie host-call, Normal + Live gemeinsam) und, mit gültigem X-Wallet-Token, Guthaben und die
     maskierte Konto-Mail. Ohne/ungültiges Token: balance_eur und email_masked null.
     Nur lesen, nie buchen."""
-    keys = freetier.identity_keys(request.headers.get(freetier.ANON_HEADER), _client_ip(request))
-    free = {f"{m}_s": max(0, int(freetier.remaining_seconds(keys, m))) if freetier.enabled(m) else 0
-            for m in ("normal", "live")}
+    free = _free_info(request)
     acc = billing_routes.db.account_for_token(billing_routes.wallet_token(request))
     row = billing_routes.db.account(acc) if acc else None
     return {

@@ -67,7 +67,7 @@ def test_host_call_with_wallet_and_free_left_registers_both(client):
 
 
 def test_host_call_free_used_up_wallet_pays_alone(client):
-    freetier.add_seconds(freetier.identity_keys(ANON, "8.8.8.8"), "normal", 20 * 60)
+    freetier.add_ueur(freetier.identity_keys(ANON, "8.8.8.8"), 1_000_000)
     wl = _paid_wallet(client, "cs_alone")
     r = client.post("/api/host-call", json={"identity": "u"}, headers={**H, "x-wallet-token": wl["wallet_token"]})
     assert r.status_code == 200
@@ -88,18 +88,18 @@ def test_worker_does_not_charge_wallet_during_free_phase(monkeypatch):
 # ----- GET /api/me ----------------------------------------------------------------
 def test_me_without_wallet(client):
     r = client.get("/api/me", headers=H).json()
-    assert r["free"] == {"normal_s": 1200, "live_s": 600}
+    assert r["free"] == {"eur_left": 1.0, "eur_per_day": 1.0}
     assert r["balance_eur"] is None and r["email_masked"] is None
 
 
 def test_me_with_wallet_shows_balance_and_masked_mail(client):
     wl = _paid_wallet(client, "cs_me", amount_cents=2000, email="Victor@Example.com")
-    freetier.add_seconds(freetier.identity_keys(ANON, "8.8.8.8"), "live", 120)
+    freetier.add_ueur(freetier.identity_keys(ANON, "8.8.8.8"), 270_001)  # 0,270001 EUR
     r = client.get("/api/me", headers={**H, "x-wallet-token": wl["wallet_token"]}).json()
     assert r["balance_eur"] == 20.0
     assert r["email_masked"] == "v***@e***.com" and "victor" not in json.dumps(r)
     assert r["email_verified"] is False                            # Stripe-Mail ist unbestätigt
-    assert r["free"]["live_s"] == 480
+    assert r["free"] == {"eur_left": 0.72, "eur_per_day": 1.0}   # abgerundet, nie mehr als da
 
 
 def test_me_with_bogus_token_is_anonymous(client):
@@ -121,7 +121,7 @@ def test_invite_room_counts_free_and_returns_contract(client):
 
 
 def test_invite_room_402_when_free_used_and_no_wallet_then_wallet_binds(client):
-    freetier.add_seconds(freetier.identity_keys(ANON, "8.8.8.8"), "normal", 20 * 60)
+    freetier.add_ueur(freetier.identity_keys(ANON, "8.8.8.8"), 1_000_000)
     r = client.post("/api/invite-room", json={"identity": "h"}, headers=H)
     assert r.status_code == 402 and r.json()["detail"]["error"] == "free_limit"
     wl = _paid_wallet(client, "cs_inv")
@@ -315,13 +315,18 @@ class _Clock:
         return self.t
 
 
-def test_low_balance_free_only_uses_free_rest():
-    free = w.FreeMinutes("r", "normal")
-    free.counting, free.left_s = True, 299.0
-    watch = w.LowBalanceWatch(free, w.WalletCharger("r", "normal"))
-    assert watch.seconds_left() == 299.0
-    free.left_s = 301.0
-    assert watch.seconds_left() == 301.0
+def test_low_balance_free_only_uses_free_rest_in_euro():
+    """Restzeit = Gratis-Rest (µEUR) / Verbrauch; ohne bekannten Verbrauch keine Schätzung."""
+    free = w.FreeBudget("r", "normal")
+    free.counting, free.left_ueur = True, 299_000
+    clock = _Clock()
+    watch = w.LowBalanceWatch(free, w.WalletCharger("r", "normal"), clock=clock)
+    assert watch.seconds_left() is None                             # Verbrauch unbekannt
+    clock.t += 60
+    watch._costs.append((clock.t, 60_000))                          # 1 000 µEUR/s
+    assert watch.seconds_left() == pytest.approx(299.0)
+    free.left_ueur = 301_000
+    assert watch.seconds_left() == pytest.approx(301.0)
 
 
 def test_low_balance_wallet_projects_from_last_3_minutes():
@@ -346,14 +351,14 @@ def test_low_balance_free_plus_wallet_adds_up():
     db.bind_room("lb2", acc, "normal")
     wc = w.WalletCharger("lb2", "normal")
     wc.lookup()
-    free = w.FreeMinutes("lb2", "normal")
-    free.counting, free.left_s = True, 120.0
+    free = w.FreeBudget("lb2", "normal")
+    free.counting, free.left_ueur = True, 120_000                    # 0,12 EUR Gratis-Rest
     clock = _Clock()
     watch = w.LowBalanceWatch(free, wc, clock=clock)
     clock.t += 60
-    # Verbrauch so, dass 10 EUR genau 100 s reichen
-    watch._costs.append((clock.t, 10_000_000 * 60 // 100))
-    assert watch.seconds_left() == pytest.approx(220.0)
+    watch._costs.append((clock.t, 60_000))                          # 1 000 µEUR/s
+    # (0,12 EUR + 10 EUR) / 0,001 EUR/s
+    assert watch.seconds_left() == pytest.approx((120_000 + 10_000_000) / 1000)
 
 
 def test_low_balance_unlimited_room_never_warns():
@@ -363,21 +368,33 @@ def test_low_balance_unlimited_room_never_warns():
 
 
 def test_low_balance_warns_once_with_payload():
-    free = w.FreeMinutes("r", "live")
-    free.counting, free.left_s = True, 200.0
-    watch = w.LowBalanceWatch(free, w.WalletCharger("r", "live"))
+    free = w.FreeBudget("r", "live")
+    free.counting, free.left_ueur = True, 200_000
+    clock = _Clock()
+    watch = w.LowBalanceWatch(free, w.WalletCharger("r", "live"), clock=clock)
+    clock.t += 60
+    watch._costs.append((clock.t, 60_000))                          # 1 000 µEUR/s -> 200 s
     p = asyncio.run(watch.check())
     assert p["kind"] == "low_balance" and p["minutes_left"] == 4 and p["seconds_left"] == 200
-    assert p["free_s"] == 200 and p["balance_eur"] is None and p["topup_url"].endswith("/aufladen")
+    assert p["free_s"] == 200 and p["free_eur"] == 0.2
+    assert p["balance_eur"] is None and p["topup_url"].endswith("/aufladen")
     assert asyncio.run(watch.check()) is None                       # einmal pro Call
 
 
 def test_worker_sends_notice_and_announcement_once(monkeypatch):
     from .test_freetier import _run_free
 
-    monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_NORMAL", str(0.6 / 60))
+    # Topf 0,01 EUR; Verbrauch schnell genug, dass die Restzeit < 5 min ist, dann leer.
+    monkeypatch.setenv("VH_FREE_EUR_PER_DAY", "0.01")
+    real = w.LowBalanceWatch.__init__
+
+    def _fast(self, *a, **k):
+        real(self, *a, **{**k, "min_span_s": 0.05})                 # Hochrechnung schon nach 50 ms
+    monkeypatch.setattr(w.LowBalanceWatch, "__init__", _fast)
     freetier.register_room("lb-room", "normal", freetier.identity_keys(ANON, "8.8.8.8"))
-    ctx, session = _run_free(monkeypatch, room="lb-room", humans=1, wait_s=1.0, live_mode=False)
+    stt = _metric("STTMetrics", audio_duration=60.0)                # 0,024 EUR je Ereignis bei Faktor 3
+    ctx, session = _run_free(monkeypatch, room="lb-room", humans=1, wait_s=0.3, live_mode=False,
+                             metrics=[_metric("STTMetrics", audio_duration=1.0)] * 4 + [stt], gap_s=0.05)
     pub = ctx.room.local_participant.publish_data
     notices = [c for c in pub.call_args_list if c.kwargs.get("topic") == relay.TOPIC_NOTICE]
     assert len(notices) == 1 and notices[0].kwargs["reliable"] is True
