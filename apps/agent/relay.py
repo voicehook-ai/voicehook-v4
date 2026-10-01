@@ -131,6 +131,7 @@ class RelayHandlers:
     on_interrupt: callable
     on_inject: callable
     is_operator_speech: callable = None  # (handle, text) -> bool, für Transkript-Farben
+    operator_text_for: callable = None   # (handle) -> str | None: voller Operator-Text (Sprechbeginn)
     on_agent_presence: callable = None   # async (present: bool): Werksrolle aus/an
 
 
@@ -142,6 +143,9 @@ def _decode(payload: bytes) -> dict:
 
 
 TOPIC_TRANSCRIPT = "transcript"
+# Sprechbeginn/-ende einer Operator-Ausgabe (UI-Paket 6): eigenes Topic, damit
+# `transcript` weiter "gesprochen" heißt (CLI-Echo-Semantik unverändert).
+TOPIC_TRANSCRIPT_LIVE = "transcript.live"
 
 
 def _publish_transcript_safe(room: Room | None, role: str, text: str) -> None:
@@ -446,8 +450,20 @@ def build_relay_handlers(
             return False
         return any(o == t or o.startswith(t) for o in operator_texts)
 
+    def operator_text_for(handle: object) -> str | None:
+        """Voller Text der Operator-Ausgabe hinter `handle` (für transcript.live beim
+        Sprechbeginn), sonst None. Live-Modus: None, Gemini formuliert um, der Text
+        steht erst nach dem Sprechen fest."""
+        if live or handle is None or id(handle) not in operator_handles:
+            return None
+        for _seq, text, h in pending:
+            if h is handle:
+                return text
+        return None
+
     return RelayHandlers(
         is_operator_speech=is_operator_speech,
+        operator_text_for=operator_text_for,
         on_say=on_say, on_persona=on_persona, on_mode=on_mode,
         on_interrupt=on_interrupt, on_inject=on_inject,
         on_agent_presence=on_agent_presence,
