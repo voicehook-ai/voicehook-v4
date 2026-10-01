@@ -1,0 +1,15 @@
+Contact: mailto:support@voicehook.ai
+Expires: 2027-04-20T23:59:59.000Z
+Preferred-Languages: de, en
+Canonical: https://voicehook.ai/.well-known/security.txt
+Policy: https://github.com/voicehook-ai/voicehook-skill/blob/main/docs/security.md
+Acknowledgments: https://github.com/voicehook-ai/voicehook-skill/blob/main/docs/security.md#acknowledgments
+
+# voicehook.ai ∆: security disclosure
+#
+# Please report vulnerabilities to support@voicehook.ai. We aim to respond
+# within 72 hours. Coordinated disclosure is appreciated.
+#
+# Public client (MIT): https://github.com/voicehook-ai/voicehook-skill
+# The server/control plane is proprietary; the client surface (hooks, CLI,
+# payload schema) is auditable in the public repo.
