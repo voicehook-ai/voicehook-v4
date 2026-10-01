@@ -38,6 +38,14 @@ abgelehnt (Review 01.10. #2, Normal seit PR #93). Admin-/Operator-Räume stehen 
 exempt=1 drin (nicht gezählt, aber bekannt): admin/live-room, und Normal-Räume, die
 jemand mit einer gültigen HMAC-Einladung betritt, die der Server nicht selbst
 ausgestellt hat (call-starten, register_room_if_absent).
+
+Env VH_FREE_EXEMPT_KEYS (Oliver 01.10.: "nimm das limit für mich raus"): kommagetrennte
+Liste gehashter Merkmale im Format von identity_keys() ("anon:<sha256>", "ip:<sha256>"),
+keine Klartext-IPs. Trifft EINES der Merkmale eines Anfragenden bzw. Raums, ist Gratis
+unbegrenzt: kein 402 free_limit, kein Call-Ende wegen free_limit, nichts wird gebucht,
+/api/me zeigt eur_left = eur_per_day plus exempt=true. Wallet und die Live-Monatssperre
+(budget.py) bleiben unverändert. Leer/fehlend: keine Ausnahme; kaputte Einträge werden
+ignoriert. Keys erzeugen (lokal auf der Box): python -m agent.freetier keys --ip <ip> --anon <id>
 """
 
 from __future__ import annotations
@@ -56,6 +64,8 @@ from pathlib import Path
 
 DEFAULT_EUR_PER_DAY = 1.0
 ENV_EUR_PER_DAY = "VH_FREE_EUR_PER_DAY"
+ENV_EXEMPT_KEYS = "VH_FREE_EXEMPT_KEYS"
+_KEY_RE = re.compile(r"^(anon|ip):[0-9a-f]{64}$")
 UEUR_PER_EUR = 1_000_000
 ANON_HEADER = "x-anon-id"
 _ANON_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
@@ -151,6 +161,18 @@ def identity_keys(anon_id: str | None, ip: str | None) -> list[str]:
     return keys
 
 
+def exempt_keys() -> frozenset[str]:
+    """Gehashte Merkmale ohne Gratis-Limit (VH_FREE_EXEMPT_KEYS). Kaputte Einträge fallen weg."""
+    raw = os.environ.get(ENV_EXEMPT_KEYS, "")
+    return frozenset(k for k in (p.strip().lower() for p in raw.split(",")) if _KEY_RE.match(k))
+
+
+def is_exempt(keys: Iterable[str] | None) -> bool:
+    """Trifft eines der Merkmale die Ausnahmeliste? Leere Liste/Env -> False."""
+    allowed = exempt_keys()
+    return bool(allowed) and any(k in allowed for k in (keys or ()))
+
+
 def db_path() -> Path:
     base = os.environ.get("VOICEHOOK_STATE_DIR", "/opt/voicehook/state")
     return Path(base) / "freetier.sqlite"
@@ -192,6 +214,10 @@ def used_ueur(keys: Iterable[str], now: float | None = None) -> int:
 
 
 def remaining_ueur(keys: Iterable[str], now: float | None = None) -> int:
+    """Gratis-Rest heute. Ausnahme-Merkmal (VH_FREE_EXEMPT_KEYS): immer das volle Tageslimit."""
+    keys = list(keys)
+    if is_exempt(keys):
+        return limit_ueur()
     return max(0, limit_ueur() - used_ueur(keys, now))
 
 
@@ -230,10 +256,13 @@ def add_ueur(keys: Iterable[str], ueur: int, now: float | None = None) -> None:
 def consume_ueur(keys: Iterable[str], ueur: int, now: float | None = None) -> tuple[int, int]:
     """Kostenereignis aus dem Gratis-Topf nehmen, atomar (parallele Räume derselben
     Identität teilen den Topf). Liefert (aus dem Topf genommen, Rest danach).
-    Überhang = ueur - genommen geht ans Wallet."""
+    Überhang = ueur - genommen geht ans Wallet.
+    Ausnahme-Merkmal (VH_FREE_EXEMPT_KEYS): alles gilt als gedeckt, nichts wird gebucht."""
     keys = list(keys)
     if not keys:
         return 0, 0
+    if is_exempt(keys):
+        return max(0, int(ueur)), limit_ueur()
     day = day_key(now)
     limit = limit_ueur()
     conn = connect()
@@ -319,3 +348,28 @@ def room_keys(room: str) -> tuple[str, list[str]] | None:
     if row[2]:
         return row[0], []
     return row[0], [k for k in row[1].split(",") if k]
+
+
+def _main(argv: list[str] | None = None) -> int:
+    """CLI: gehashte Merkmale für VH_FREE_EXEMPT_KEYS ausgeben (lokal auf der Box)."""
+    import argparse
+
+    ap = argparse.ArgumentParser(prog="python -m agent.freetier")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    k = sub.add_parser("keys", help="gehashte Merkmale für VH_FREE_EXEMPT_KEYS")
+    k.add_argument("--ip", help="Client-IP (IPv6 zählt je /64)")
+    k.add_argument("--anon", help="X-Anon-Id des Browsers (localStorage)")
+    a = ap.parse_args(argv)
+    if a.anon and not _ANON_RE.match(a.anon.strip()):
+        ap.error("--anon ungültig (8-128 Zeichen A-Za-z0-9_-)")
+    keys = identity_keys(a.anon, a.ip)
+    if not keys:
+        ap.error("mindestens --ip oder --anon angeben")
+    for key in keys:
+        print(key)
+    print(f"{ENV_EXEMPT_KEYS}={','.join(keys)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

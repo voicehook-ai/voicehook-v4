@@ -101,7 +101,7 @@ def payer_for_call(request: Request, mode: str, ip: str) -> tuple[str | None, li
     wallet = acc if acc is not None and db.balance_ueur(acc) > 0 else None
     if freetier.enabled(mode):
         keys = freetier.identity_keys(request.headers.get(freetier.ANON_HEADER), ip)
-        if freetier.remaining_ueur(keys) > 0:
+        if freetier.is_exempt(keys) or freetier.remaining_ueur(keys) > 0:
             return wallet, keys
         if wallet:
             return wallet, None
