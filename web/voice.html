@@ -125,7 +125,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'menu.topup': 'Aufladen', 'menu.setup': 'Setup', 'menu.privacy': 'Datenschutz',
       'menu.imprint': 'Impressum', 'menu.security': 'Sicherheit', 'menu.github': 'GitHub ↗',
       'menu.mic': 'Mikrofon', 'menu.style': 'Style',
-      'style.ice': 'Eis', 'style.earth': 'Erde', 'style.fire': 'Feuer', 'style.water': 'Wasser',
+      'style.ice': 'Delta', 'style.earth': 'Erde', 'style.fire': 'Feuer', 'style.water': 'Deepsea',
       'style.air': 'Luft', 'style.forest': 'Wald', 'style.zebra': 'Zebra', 'style.giraffe': 'Giraffe',
       'style.leopard': 'Leopard', 'style.tiger': 'Tiger',
       'hd.title': 'Kringel in voller Auflösung (HD) oder sparsam (SD: einfache Pixeldichte, 30 Bilder pro Sekunde)',
@@ -261,7 +261,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'menu.topup': 'Top up', 'menu.setup': 'Setup', 'menu.privacy': 'Privacy',
       'menu.imprint': 'Imprint', 'menu.security': 'Security', 'menu.github': 'GitHub ↗',
       'menu.mic': 'Microphone', 'menu.style': 'Style',
-      'style.ice': 'Ice', 'style.earth': 'Earth', 'style.fire': 'Fire', 'style.water': 'Water',
+      'style.ice': 'Delta', 'style.earth': 'Earth', 'style.fire': 'Fire', 'style.water': 'Deepsea',
       'style.air': 'Air', 'style.forest': 'Forest', 'style.zebra': 'Zebra', 'style.giraffe': 'Giraffe',
       'style.leopard': 'Leopard', 'style.tiger': 'Tiger',
       'hd.title': 'Dome in full resolution (HD) or light (SD: single pixel density, 30 frames per second)',
@@ -340,6 +340,15 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
     'dp.sat.sub': 'Single dots floating freely around the ring',
     'dp.res.sub': 'HD is sharper, SD saves battery',
     'dp.akku.sub': 'How much computing power the ring may use'
+  });
+  // UI-Paket 8: Hinweis-"i" und Musik-Leiste minimieren.
+  Object.assign(D.de, {
+    'hint.show': 'Hinweis anzeigen', 'hint.hide': 'Hinweis ausblenden',
+    'mmin.min': 'Leiste minimieren', 'mmin.restore': 'Leiste wiederherstellen'
+  });
+  Object.assign(D.en, {
+    'hint.show': 'Show hint', 'hint.hide': 'Hide hint',
+    'mmin.min': 'Minimize panel', 'mmin.restore': 'Restore panel'
   });
   window.VH_LANG = lang;
   window.VH_I18N = D;
@@ -1101,6 +1110,48 @@ body.theme-light #vh-music-src .vh-msrc[aria-checked="true"]{border-color:rgba(3
 body.theme-light #vh-music-src .vh-msrc-hint.warn{color:#b8641a;}
 #vh-music-src .vh-msrc-hint button{appearance:none;font:inherit;background:none;border:0;padding:0 0 0 6px;cursor:pointer;color:var(--vh-teal,#6dc9d9);text-decoration:underline;text-underline-offset:2px;}
 body.theme-light #vh-music-src .vh-msrc-hint button{color:#1f7f90;}
+/* UI-Paket 8, Punkt 3: Musikmodus zeigt nur Modus-Leiste + Musikquelle (plus Kopf-
+   und Design-Knöpfe). Call-Knöpfe, Präsenz-Pills, Transkript und Gratis-Zeile
+   gehören zum Call und sind hier aus. Das Glas-Panel schrumpft auf den Inhalt. */
+body.vh-music-on #vh-bottom-bar,
+body.vh-music-on #vh-presence,
+body.vh-music-on #vh-transcript,
+body.vh-music-on #vh-tr-ticker,
+body.vh-music-on #vh-mode-info{display:none !important;}
+body.vh-music-on:not(.vh-transcript-expanded) #vh-transcript-wrap{height:auto !important;min-height:0 !important;}
+/* Punkt 1: Hinweis-"i" (Erklärtexte standardmäßig zu, im Layoutfluss). */
+.vh-i{appearance:none;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:24px;height:24px;padding:0;margin:0;
+  border:0;border-radius:50%;background:transparent;color:var(--vh-btn-fg);opacity:0.55;cursor:pointer;transition:opacity .15s,color .15s;vertical-align:middle;}
+.vh-i svg{width:15px;height:15px;display:block;}
+.vh-i:hover{opacity:0.9;}
+.vh-i[aria-expanded="true"]{opacity:1;color:var(--vh-teal,#6dc9d9);}
+body.theme-light .vh-i[aria-expanded="true"]{color:#1f7f90;}
+.vh-i:focus-visible{outline:2px solid var(--vh-teal,#6dc9d9);outline-offset:1px;}
+.vh-i[hidden]{display:none;}
+#vh-music-src .vh-msrc-row{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;}
+#vh-music-src .vh-msrc-info{margin-top:4px;line-height:1.5;opacity:0.75;}
+#vh-music-src .vh-msrc-info[hidden]{display:none;}
+/* Punkt 2: Musik-Leiste minimieren. Panel gleitet nach unten weg, ein kleiner
+   Knopf holt es zurück (Esc ebenso). Zustand in localStorage. */
+.vh-mmin{appearance:none;display:none;align-items:center;justify-content:center;flex-shrink:0;width:32px;height:32px;padding:0;margin:0;
+  border-radius:50%;cursor:pointer;background:var(--vh-btn-bg);border:1px solid var(--vh-btn-border);color:var(--vh-btn-fg);opacity:0.75;}
+.vh-mmin svg,#vh-mrestore svg{width:15px;height:15px;display:block;}
+.vh-mmin:hover{opacity:1;}
+body.vh-music-on .vh-mmin{display:inline-flex;}
+body.vh-music-on #vh-transcript-wrap{transition:transform .32s cubic-bezier(.3,.7,.3,1),opacity .25s ease,visibility 0s linear 0s;}
+body.vh-music-on.vh-music-min #vh-transcript-wrap{transform:translate(-50%,calc(100% + 40px));opacity:0;visibility:hidden;pointer-events:none;
+  transition:transform .32s cubic-bezier(.5,0,.7,.4),opacity .25s ease,visibility 0s linear .32s;}
+#vh-mrestore{position:fixed;left:50%;bottom:64px;z-index:20;width:38px;height:38px;padding:0;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+  background:var(--vh-btn-bg);border:1px solid var(--vh-btn-border);color:var(--vh-btn-fg);
+  backdrop-filter:var(--vh-btn-blur);-webkit-backdrop-filter:var(--vh-btn-blur);
+  transform:translate(-50%,16px);opacity:0;visibility:hidden;pointer-events:none;
+  transition:transform .25s ease,opacity .2s ease,visibility 0s linear .25s;}
+body.vh-music-on.vh-music-min #vh-mrestore{transform:translate(-50%,0);opacity:1;visibility:visible;pointer-events:auto;transition:transform .25s ease .15s,opacity .2s ease .15s,visibility 0s;}
+#vh-mrestore:hover{color:var(--vh-btn-fg-hov);border-color:var(--vh-btn-border-hov);}
+#vh-mrestore:focus-visible,.vh-mmin:focus-visible{outline:2px solid var(--vh-teal,#6dc9d9);outline-offset:2px;}
+@media (max-width:640px){#vh-mrestore{bottom:58px;}}
+@media (prefers-reduced-motion: reduce){body.vh-music-on #vh-transcript-wrap,#vh-mrestore,body.vh-music-on.vh-music-min #vh-transcript-wrap,body.vh-music-on.vh-music-min #vh-mrestore{transition:none;}}
 /* Unter dem Schalter (UI-Runde 3): übriger Gratis-Verbrauch in Euro (dezent) und nach Klick
    auf einen Modus dessen ungefährer Preis + Vorteile. Nur vor dem Call. */
 #vh-mode-info{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;line-height:1.5;text-align:center;color:var(--vh-btn-fg);margin:-2px 0 6px;flex-shrink:0;}
@@ -1232,37 +1283,70 @@ body.theme-light #vh-low-bal{color:#b8641a;border-color:rgba(184,100,26,0.5);}
   font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--vh-btn-fg-hov, #eee);
 }
 #vh-design-panel[hidden] { display: none; }
+/* UI-Paket 8: Panel endet über dem Menü-Knopf unten rechts (aufgeklappte Untertitel
+   machen es länger; sonst lag der Knopf über dem Panelende). */
+@media (min-width: 641px) { #vh-design-panel { max-height: calc(100vh - 124px); max-height: calc(100dvh - 124px); } }
 body.theme-light #vh-design-panel { background: rgba(250,250,252,0.94); box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
 .vh-dp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; font-size: 12px; letter-spacing: 0.06em; }
 .vh-dp-x { appearance: none; background: none; border: 0; color: inherit; font: inherit; font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 6px; opacity: 0.75; }
 .vh-dp-x:hover { opacity: 1; }
 .vh-dp-sec { margin: 10px 0 5px; font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.55; }
-.vh-dp-styles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-.vh-dp-sw { appearance: none; width: 100%; aspect-ratio: 1; max-width: 34px; justify-self: center; padding: 0; border-radius: 50%; cursor: pointer;
-  border: 1px solid var(--vh-btn-border); }
-#vh-design-panel .vh-dp-sw, #vh-design-panel .vh-dp-sw:hover, #vh-design-panel .vh-dp-sw.on { background: var(--c); }
-.vh-dp-sw.on { outline: 2px solid var(--vh-teal, #6dc9d9); outline-offset: 2px; }
-body.theme-light .vh-dp-sw.on { outline-color: #1f7f90; }
-.vh-dp-row { display: grid; grid-template-columns: 82px minmax(0, 1fr) 38px; align-items: center; gap: 8px; min-height: 28px; }
-.vh-dp-lbl { opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.vh-dp-row input[type="range"] { width: 100%; min-width: 0; margin: 0; accent-color: var(--vh-teal, #6dc9d9); cursor: pointer; }
-body.theme-light .vh-dp-row input[type="range"] { accent-color: #1f7f90; }
-.vh-dp-val { text-align: right; font-variant-numeric: tabular-nums; opacity: 0.6; font-size: 10px; }
-.vh-dp-row-btn { grid-template-columns: 82px auto; justify-content: start; }
+/* UI-Paket 8, Punkt 5 (Mockup A): Style-Kacheln mit echter Ring-Vorschau + Name,
+   4 Spalten (Platz für 12 Styles in 3 Reihen), Namen ungekürzt. */
+#vh-design-panel { --dp-acc: var(--vh-teal, #6dc9d9); --dp-track: rgba(255,255,255,0.12); --dp-card: rgba(255,255,255,0.04); --dp-cardon: rgba(109,201,217,0.12); --dp-line: rgba(255,255,255,0.10); --dp-mut: rgba(244,244,247,0.55); }
+body.theme-light #vh-design-panel { --dp-acc: #1f7f90; --dp-track: rgba(0,0,0,0.10); --dp-card: rgba(0,0,0,0.03); --dp-cardon: rgba(31,127,144,0.10); --dp-line: rgba(0,0,0,0.09); --dp-mut: rgba(20,21,26,0.55); }
+.vh-dp-styles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.vh-dp-sw { appearance: none; display: flex; flex-direction: column; align-items: stretch; gap: 3px; width: 100%; min-width: 0; margin: 0;
+  padding: 3px 3px 4px; border-radius: 10px; cursor: pointer; font: inherit; color: var(--dp-mut);
+  background: var(--dp-card); border: 1px solid var(--dp-line); transition: border-color .15s, background .15s; }
+#vh-design-panel .vh-dp-sw, #vh-design-panel .vh-dp-sw:hover, #vh-design-panel .vh-dp-sw.on { background: var(--dp-card); }
+#vh-design-panel .vh-dp-sw:hover { border-color: var(--vh-btn-border-hov, rgba(255,255,255,0.3)); }
+#vh-design-panel .vh-dp-sw.on { border-color: var(--dp-acc); background: var(--dp-cardon); color: var(--dp-acc); }
+.vh-dp-sw:focus-visible { outline: 2px solid var(--dp-acc); outline-offset: 1px; }
+.vh-dp-sw-img { display: block; width: 100%; max-width: 60px; margin: 0 auto; aspect-ratio: 1; border-radius: 7px; background: var(--img-d) center / cover no-repeat, var(--c, #000); }  /* ohne Vorschau-Bild: Farbverlauf */
+body.theme-light .vh-dp-sw-img { background: var(--img-l) center / cover no-repeat, var(--c, #f4f4f7); }
+.vh-dp-sw-name { display: block; font-size: 9px; line-height: 1.2; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Regler (Mockup A): Label links, Wert rechts, eigene Spur mit gefülltem Anteil
+   in Akzentfarbe, kleiner Daumen mit Schatten, Untertitel hinter dem "i". */
+.vh-dp-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "lbl val" "rng rng" "scl scl" "sub sub";
+  align-items: center; column-gap: 8px; row-gap: 0; margin: 7px 0 2px; }
+.vh-dp-lbl { grid-area: lbl; display: flex; align-items: center; gap: 2px; min-width: 0; opacity: 0.9; white-space: nowrap; }
+.vh-dp-lbl .vh-dp-lt { overflow: hidden; text-overflow: ellipsis; }
+.vh-dp-lbl .vh-i { width: 22px; height: 18px; margin: 0; }
+.vh-dp-lbl .vh-i svg { width: 13px; height: 13px; }
+.vh-dp-val { grid-area: val; text-align: right; font-variant-numeric: tabular-nums; color: var(--dp-mut); font-size: 10.5px; }
+.vh-dp-row input[type="range"] { grid-area: rng; -webkit-appearance: none; appearance: none; width: 100%; min-width: 0; height: 22px; margin: 0; padding: 0;
+  background: transparent; cursor: pointer; --p: 50%; }
+.vh-dp-row input[type="range"]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px;
+  background: linear-gradient(to right, var(--dp-acc) 0 var(--p), var(--dp-track) var(--p) 100%); }
+.vh-dp-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 13px; height: 13px; margin-top: -5px; border-radius: 50%;
+  background: #fff; border: 2px solid var(--dp-acc); box-shadow: 0 1px 4px rgba(0,0,0,0.35); box-sizing: border-box; }
+.vh-dp-row input[type="range"]::-moz-range-track { height: 3px; border-radius: 2px; background: var(--dp-track); }
+.vh-dp-row input[type="range"]::-moz-range-progress { height: 3px; border-radius: 2px; background: var(--dp-acc); }
+.vh-dp-row input[type="range"]::-moz-range-thumb { width: 13px; height: 13px; border-radius: 50%; background: #fff; border: 2px solid var(--dp-acc); box-shadow: 0 1px 4px rgba(0,0,0,0.35); box-sizing: border-box; }
+.vh-dp-row input[type="range"]:focus-visible { outline: 2px solid var(--dp-acc); outline-offset: 2px; border-radius: 4px; }
+.vh-dp-row-btn { grid-template-areas: "lbl val" "sub sub"; }
+.vh-dp-row-btn #btn-hd { grid-area: val; }
 #vh-design-panel #btn-hd { appearance: none; font: inherit; font-size: 10.5px; padding: 3px 12px; border-radius: 12px; cursor: pointer;
   background: transparent; color: inherit; border: 1px solid var(--vh-btn-border); min-width: 0; letter-spacing: 0.08em; }
-#vh-design-panel #btn-hd.on { border-color: var(--vh-teal, #6dc9d9); color: var(--vh-teal, #6dc9d9); }
+#vh-design-panel #btn-hd.on { border-color: var(--dp-acc); color: var(--dp-acc); }
 .vh-dp-row[hidden] { display: none !important; }
-/* Paket 7: Erklär-Untertitel (klein, gedimmt) und Skala des Cluster-Reglers */
-.vh-dp-sub { grid-column: 1 / -1; margin: -3px 0 5px; font-size: 9.5px; line-height: 1.35; opacity: 0.5; white-space: normal; }
-.vh-dp-sub-sec { margin: -2px 0 6px; }
-.vh-dp-scale { grid-column: 2; display: flex; justify-content: space-between; margin-top: -4px; font-size: 9px; opacity: 0.5; }
+.vh-dp-sub { grid-area: sub; margin: 0 0 2px; font-size: 9.5px; line-height: 1.35; color: var(--dp-mut); white-space: normal; }
+.vh-dp-sub[hidden] { display: none; }
+.vh-dp-sub-sec { margin: 5px 0 0; }
+.vh-dp-scale { grid-area: scl; display: flex; justify-content: space-between; margin-top: -3px; font-size: 9px; color: var(--dp-mut); }
 .vh-dp-sec .vh-dp-custom { opacity: 0.7; font-weight: normal; }
-.vh-dp-akku { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
-.vh-dp-akku button { appearance: none; font: inherit; font-size: 10px; padding: 5px 2px; border-radius: 8px; cursor: pointer; min-width: 0;
-  background: transparent; color: inherit; border: 1px solid var(--vh-btn-border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0; }
-.vh-dp-akku button.on { border-color: var(--vh-teal, #6dc9d9); color: var(--vh-teal, #6dc9d9); }
-body.theme-light .vh-dp-akku button.on, body.theme-light #vh-design-panel #btn-hd.on { border-color: #1f7f90; color: #1f7f90; }
+.vh-dp-sec { display: flex; align-items: center; gap: 2px; }
+.vh-dp-sec .vh-i { width: 22px; height: 18px; margin: 0; }
+.vh-dp-sec .vh-i svg { width: 13px; height: 13px; }
+/* Qualität als Umschalter im selben Stil */
+.vh-dp-akku { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; padding: 3px; border-radius: 10px; background: var(--dp-track); }
+.vh-dp-akku button { appearance: none; font: inherit; font-size: 10.5px; padding: 6px 2px; border-radius: 8px; cursor: pointer; min-width: 0;
+  background: transparent; color: var(--dp-mut); border: 1px solid transparent; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0; }
+.vh-dp-akku button:hover { color: inherit; }
+.vh-dp-akku button.on { color: inherit; background: rgba(14,16,22,0.90); border-color: var(--dp-acc); box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
+body.theme-light .vh-dp-akku button.on { background: rgba(250,250,252,0.98); }
+.vh-dp-akku button:focus-visible { outline: 2px solid var(--dp-acc); outline-offset: 1px; }
 .vh-dp-use { margin-top: 6px; line-height: 1.45; opacity: 0.85; min-height: 1.45em; }
 .vh-dp-use b { font-weight: 600; }
 .vh-dp-use[data-lvl="low"] b { color: #9ddb6d; }
@@ -1280,8 +1364,7 @@ body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
   #btn-vh-design { width: 38px; height: 38px; top: 14px; right: 106px; }
   #btn-vh-design svg { width: 17px; height: 17px; }
   #vh-design-panel { top: 60px; right: 12px; left: 12px; width: auto; max-height: calc(100vh - 136px); max-height: calc(100dvh - 136px); }
-  .vh-dp-row { min-height: 34px; grid-template-columns: 76px minmax(0, 1fr) 34px; }
-  .vh-dp-row.vh-dp-row-btn { grid-template-columns: 76px auto; }
+  .vh-dp-row input[type="range"] { height: 28px; }
 }
 /* Sehr schmal: oben ist kein Platz neben dem Logo, Knopf in die zweite Reihe rechts. */
 /* UI-Paket 6: Musik-Knopf ist in die Modus-Leiste gezogen; der Design-Knopf passt
@@ -1317,31 +1400,31 @@ body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
     <button type="button" class="vh-dp-x" id="vh-dp-close" aria-label="Schließen" data-i18n-aria="dp.close">&#215;</button></div>
   <div class="vh-dp-sec" data-i18n="dp.styles">Styles</div>
   <div class="vh-dp-styles">
-      <button type="button" class="vh-dp-sw" data-pal="ice" style="--c:linear-gradient(120deg,#7fb8e8,#b8e6f5,#ffffff)" data-i18n-title="style.ice" data-i18n-aria="style.ice" title="ice" aria-label="ice"></button>
-      <button type="button" class="vh-dp-sw" data-pal="earth" style="--c:linear-gradient(120deg,#1e5fb5,#2d8c4a,#caa56a)" data-i18n-title="style.earth" data-i18n-aria="style.earth" title="earth" aria-label="earth"></button>
-      <button type="button" class="vh-dp-sw" data-pal="fire" style="--c:linear-gradient(120deg,#7a1fbf,#ff3018,#ffd24a)" data-i18n-title="style.fire" data-i18n-aria="style.fire" title="fire" aria-label="fire"></button>
-      <button type="button" class="vh-dp-sw" data-pal="water" style="--c:#1a4ec4" data-i18n-title="style.water" data-i18n-aria="style.water" title="water" aria-label="water"></button>
-      <button type="button" class="vh-dp-sw" data-pal="air" style="--c:linear-gradient(120deg,#e9eef2,#9aa3ad,#5b8fc9)" data-i18n-title="style.air" data-i18n-aria="style.air" title="air" aria-label="air"></button>
-      <button type="button" class="vh-dp-sw" data-pal="forest" style="--c:linear-gradient(120deg,#6e4a22,#2a5a2a,#ffaf3a)" data-i18n-title="style.forest" data-i18n-aria="style.forest" title="forest" aria-label="forest"></button>
-      <button type="button" class="vh-dp-sw" data-pal="zebra" style="--c:linear-gradient(120deg,#ffffff 0%,#ffffff 49%,#0a0a0a 51%,#0a0a0a 100%)" data-i18n-title="style.zebra" data-i18n-aria="style.zebra" title="zebra" aria-label="zebra"></button>
-      <button type="button" class="vh-dp-sw" data-pal="giraffe" style="--c:linear-gradient(120deg,#e9c896,#8a5a2a,#3a2410)" data-i18n-title="style.giraffe" data-i18n-aria="style.giraffe" title="giraffe" aria-label="giraffe"></button>
-      <button type="button" class="vh-dp-sw" data-pal="leopard" style="--c:linear-gradient(120deg,#e6b428,#b88420,#1a1006)" data-i18n-title="style.leopard" data-i18n-aria="style.leopard" title="leopard" aria-label="leopard"></button>
-      <button type="button" class="vh-dp-sw" data-pal="tiger" style="--c:linear-gradient(120deg,#ff8c1a,#a04010,#0a0a0a)" data-i18n-title="style.tiger" data-i18n-aria="style.tiger" title="tiger" aria-label="tiger"></button>
+      <button type="button" class="vh-dp-sw" data-pal="ice" style="--img-d:url(/img/styles/ice-dark.webp);--img-l:url(/img/styles/ice-light.webp);--c:linear-gradient(120deg,#7fb8e8,#b8e6f5,#ffffff)" data-i18n-title="style.ice" data-i18n-aria="style.ice" title="ice" aria-label="ice"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.ice">ice</span></button>
+      <button type="button" class="vh-dp-sw" data-pal="earth" style="--img-d:url(/img/styles/earth-dark.webp);--img-l:url(/img/styles/earth-light.webp);--c:linear-gradient(120deg,#1e5fb5,#2d8c4a,#caa56a)" data-i18n-title="style.earth" data-i18n-aria="style.earth" title="earth" aria-label="earth"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.earth">earth</span></button>
+      <button type="button" class="vh-dp-sw" data-pal="fire" style="--img-d:url(/img/styles/fire-dark.webp);--img-l:url(/img/styles/fire-light.webp);--c:linear-gradient(120deg,#7a1fbf,#ff3018,#ffd24a)" data-i18n-title="style.fire" data-i18n-aria="style.fire" title="fire" aria-label="fire"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.fire">fire</span></button>
+      <button type="button" class="vh-dp-sw" data-pal="water" style="--img-d:url(/img/styles/water-dark.webp);--img-l:url(/img/styles/water-light.webp);--c:#1a4ec4" data-i18n-title="style.water" data-i18n-aria="style.water" title="water" aria-label="water"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.water">water</span></button>
+      <button type="button" class="vh-dp-sw" data-pal="air" style="--img-d:url(/img/styles/air-dark.webp);--img-l:url(/img/styles/air-light.webp);--c:linear-gradient(120deg,#e9eef2,#9aa3ad,#5b8fc9)" data-i18n-title="style.air" data-i18n-aria="style.air" title="air" aria-label="air"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.air">air</span></button>
+      <button type="button" class="vh-dp-sw" data-pal="forest" style="--img-d:url(/img/styles/forest-dark.webp);--img-l:url(/img/styles/forest-light.webp);--c:linear-gradient(120deg,#6e4a22,#2a5a2a,#ffaf3a)" data-i18n-title="style.forest" data-i18n-aria="style.forest" title="forest" aria-label="forest"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.forest">forest</span></button>
+      <button type="button" class="vh-dp-sw" data-pal="zebra" style="--img-d:url(/img/styles/zebra-dark.webp);--img-l:url(/img/styles/zebra-light.webp);--c:linear-gradient(120deg,#ffffff 0%,#ffffff 49%,#0a0a0a 51%,#0a0a0a 100%)" data-i18n-title="style.zebra" data-i18n-aria="style.zebra" title="zebra" aria-label="zebra"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.zebra">zebra</span></button>
+      <button type="button" class="vh-dp-sw" data-pal="giraffe" style="--img-d:url(/img/styles/giraffe-dark.webp);--img-l:url(/img/styles/giraffe-light.webp);--c:linear-gradient(120deg,#e9c896,#8a5a2a,#3a2410)" data-i18n-title="style.giraffe" data-i18n-aria="style.giraffe" title="giraffe" aria-label="giraffe"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.giraffe">giraffe</span></button>
+      <button type="button" class="vh-dp-sw" data-pal="leopard" style="--img-d:url(/img/styles/leopard-dark.webp);--img-l:url(/img/styles/leopard-light.webp);--c:linear-gradient(120deg,#e6b428,#b88420,#1a1006)" data-i18n-title="style.leopard" data-i18n-aria="style.leopard" title="leopard" aria-label="leopard"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.leopard">leopard</span></button>
+      <button type="button" class="vh-dp-sw" data-pal="tiger" style="--img-d:url(/img/styles/tiger-dark.webp);--img-l:url(/img/styles/tiger-light.webp);--c:linear-gradient(120deg,#ff8c1a,#a04010,#0a0a0a)" data-i18n-title="style.tiger" data-i18n-aria="style.tiger" title="tiger" aria-label="tiger"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.tiger">tiger</span></button>
   </div>
   <div class="vh-dp-sec" data-i18n="dp.ringsec">Kringel</div>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.zoom">Zoom</span><input id="zoom-ctl" type="range" min="0.5" max="4" step="0.01" value="1"><output class="vh-dp-val"></output><span class="vh-dp-sub" data-i18n="dp.zoom.sub"></span></label>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.size">Punktgröße</span><input id="size" type="range" min="0.02" max="0.20" step="0.005" value="0.155"><output class="vh-dp-val"></output><span class="vh-dp-sub" data-i18n="dp.size.sub"></span></label>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.particles">Partikel</span><input id="particle-count" type="range" min="0.1" max="1" step="0.05" value="0.2"><output class="vh-dp-val"></output><span class="vh-dp-sub" data-i18n="dp.particles.sub"></span></label>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.bright">Helligkeit</span><input id="brightness" type="range" min="0.5" max="1.5" step="0.02" value="1"><output class="vh-dp-val"></output><span class="vh-dp-sub" data-i18n="dp.bright.sub"></span></label>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.fx">Bewegung</span><input id="fx-intensity" type="range" min="0" max="1.732" step="0.02" value="1"><output class="vh-dp-val"></output><span class="vh-dp-sub" data-i18n="dp.fx.sub"></span></label>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.ring">Ring-Puls</span><input id="ring-fx" type="range" min="0" max="2.5" step="0.05" value="1"><output class="vh-dp-val"></output><span class="vh-dp-sub" data-i18n="dp.ring.sub"></span></label>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.sat">Satelliten</span><input id="sat-amount" type="range" min="0" max="1" step="0.05" value="0.05"><output class="vh-dp-val"></output><span class="vh-dp-sub" data-i18n="dp.sat.sub"></span></label>
+    <label class="vh-dp-row"><span class="vh-dp-lbl"><span class="vh-dp-lt" data-i18n="dp.zoom">Zoom</span><button type="button" class="vh-i" data-hint="dp-zoom" aria-controls="vh-dp-sub-zoom" aria-expanded="false" title="Hinweis anzeigen" aria-label="Hinweis anzeigen"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/><path d="M8 7.2v4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></span><input id="zoom-ctl" type="range" min="0.5" max="4" step="0.01" value="1"><output class="vh-dp-val"></output><span class="vh-dp-sub" id="vh-dp-sub-zoom" data-i18n="dp.zoom.sub" hidden></span></label>
+    <label class="vh-dp-row"><span class="vh-dp-lbl"><span class="vh-dp-lt" data-i18n="dp.size">Punktgröße</span><button type="button" class="vh-i" data-hint="dp-size" aria-controls="vh-dp-sub-size" aria-expanded="false" title="Hinweis anzeigen" aria-label="Hinweis anzeigen"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/><path d="M8 7.2v4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></span><input id="size" type="range" min="0.02" max="0.20" step="0.005" value="0.155"><output class="vh-dp-val"></output><span class="vh-dp-sub" id="vh-dp-sub-size" data-i18n="dp.size.sub" hidden></span></label>
+    <label class="vh-dp-row"><span class="vh-dp-lbl"><span class="vh-dp-lt" data-i18n="dp.particles">Partikel</span><button type="button" class="vh-i" data-hint="dp-particles" aria-controls="vh-dp-sub-particles" aria-expanded="false" title="Hinweis anzeigen" aria-label="Hinweis anzeigen"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/><path d="M8 7.2v4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></span><input id="particle-count" type="range" min="0.1" max="1" step="0.05" value="0.2"><output class="vh-dp-val"></output><span class="vh-dp-sub" id="vh-dp-sub-particles" data-i18n="dp.particles.sub" hidden></span></label>
+    <label class="vh-dp-row"><span class="vh-dp-lbl"><span class="vh-dp-lt" data-i18n="dp.bright">Helligkeit</span><button type="button" class="vh-i" data-hint="dp-bright" aria-controls="vh-dp-sub-bright" aria-expanded="false" title="Hinweis anzeigen" aria-label="Hinweis anzeigen"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/><path d="M8 7.2v4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></span><input id="brightness" type="range" min="0.5" max="1.5" step="0.02" value="1"><output class="vh-dp-val"></output><span class="vh-dp-sub" id="vh-dp-sub-bright" data-i18n="dp.bright.sub" hidden></span></label>
+    <label class="vh-dp-row"><span class="vh-dp-lbl"><span class="vh-dp-lt" data-i18n="dp.fx">Bewegung</span><button type="button" class="vh-i" data-hint="dp-fx" aria-controls="vh-dp-sub-fx" aria-expanded="false" title="Hinweis anzeigen" aria-label="Hinweis anzeigen"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/><path d="M8 7.2v4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></span><input id="fx-intensity" type="range" min="0" max="1.732" step="0.02" value="1"><output class="vh-dp-val"></output><span class="vh-dp-sub" id="vh-dp-sub-fx" data-i18n="dp.fx.sub" hidden></span></label>
+    <label class="vh-dp-row"><span class="vh-dp-lbl"><span class="vh-dp-lt" data-i18n="dp.ring">Ring-Puls</span><button type="button" class="vh-i" data-hint="dp-ring" aria-controls="vh-dp-sub-ring" aria-expanded="false" title="Hinweis anzeigen" aria-label="Hinweis anzeigen"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/><path d="M8 7.2v4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></span><input id="ring-fx" type="range" min="0" max="2.5" step="0.05" value="1"><output class="vh-dp-val"></output><span class="vh-dp-sub" id="vh-dp-sub-ring" data-i18n="dp.ring.sub" hidden></span></label>
+    <label class="vh-dp-row"><span class="vh-dp-lbl"><span class="vh-dp-lt" data-i18n="dp.sat">Satelliten</span><button type="button" class="vh-i" data-hint="dp-sat" aria-controls="vh-dp-sub-sat" aria-expanded="false" title="Hinweis anzeigen" aria-label="Hinweis anzeigen"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/><path d="M8 7.2v4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></span><input id="sat-amount" type="range" min="0" max="1" step="0.05" value="0.05"><output class="vh-dp-val"></output><span class="vh-dp-sub" id="vh-dp-sub-sat" data-i18n="dp.sat.sub" hidden></span></label>
     <label class="vh-dp-row" hidden><span class="vh-dp-lbl" data-i18n="dp.island">Inseln</span><input id="island" type="range" min="0" max="1" step="0.05" value="0.6"><output class="vh-dp-val"></output></label>
     <label class="vh-dp-row" hidden><span class="vh-dp-lbl" data-i18n="dp.pattern">Fellmuster</span><input id="pattern-density" type="range" min="-0.5" max="1.5" step="0.02" value="0.5"><output class="vh-dp-val"></output></label>
-    <label class="vh-dp-row" id="vh-dp-cluster-row"><span class="vh-dp-lbl" data-i18n="dp.cluster">Cluster</span><input id="cluster" type="range" min="0" max="1" step="0.02" value="0.5"><output class="vh-dp-val"></output><span class="vh-dp-scale" aria-hidden="true"><span data-i18n="dp.cluster.lo">diffus</span><span data-i18n="dp.cluster.hi">gruppiert</span></span><span class="vh-dp-sub" data-i18n="dp.cluster.sub"></span></label>
-  <div class="vh-dp-row vh-dp-row-btn"><span class="vh-dp-lbl" data-i18n="dp.res">Auflösung</span><button id="btn-hd" type="button" class="on" title="HD" data-i18n-title="hd.title">HD</button><span class="vh-dp-sub" data-i18n="dp.res.sub"></span></div>
-  <div class="vh-dp-sec"><span data-i18n="dp.akku">Qualität</span><span class="vh-dp-custom" id="vh-dp-akku-custom" hidden></span></div>
-  <div class="vh-dp-sub vh-dp-sub-sec" data-i18n="dp.akku.sub"></div>
+    <label class="vh-dp-row" id="vh-dp-cluster-row"><span class="vh-dp-lbl"><span class="vh-dp-lt" data-i18n="dp.cluster">Cluster</span><button type="button" class="vh-i" data-hint="dp-cluster" aria-controls="vh-dp-sub-cluster" aria-expanded="false" title="Hinweis anzeigen" aria-label="Hinweis anzeigen"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/><path d="M8 7.2v4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></span><input id="cluster" type="range" min="0" max="1" step="0.02" value="0.5"><output class="vh-dp-val"></output><span class="vh-dp-scale" aria-hidden="true"><span data-i18n="dp.cluster.lo">diffus</span><span data-i18n="dp.cluster.hi">gruppiert</span></span><span class="vh-dp-sub" id="vh-dp-sub-cluster" data-i18n="dp.cluster.sub" hidden></span></label>
+  <div class="vh-dp-row vh-dp-row-btn"><span class="vh-dp-lbl"><span class="vh-dp-lt" data-i18n="dp.res">Auflösung</span><button type="button" class="vh-i" data-hint="dp-res" aria-controls="vh-dp-sub-res" aria-expanded="false" title="Hinweis anzeigen" aria-label="Hinweis anzeigen"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/><path d="M8 7.2v4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></span><button id="btn-hd" type="button" class="on" title="HD" data-i18n-title="hd.title">HD</button><span class="vh-dp-sub" id="vh-dp-sub-res" data-i18n="dp.res.sub" hidden></span></div>
+  <div class="vh-dp-sec"><span data-i18n="dp.akku">Qualität</span><span class="vh-dp-custom" id="vh-dp-akku-custom" hidden></span><button type="button" class="vh-i" data-hint="dp-akku" aria-controls="vh-dp-sub-akku" aria-expanded="false" title="Hinweis anzeigen" aria-label="Hinweis anzeigen"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/><path d="M8 7.2v4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></div>
+  <div class="vh-dp-sub vh-dp-sub-sec" id="vh-dp-sub-akku" data-i18n="dp.akku.sub" hidden></div>
   <div class="vh-dp-akku" role="radiogroup" aria-labelledby="vh-dp-title">
     <button type="button" data-akku="eco" role="radio" data-i18n="dp.akku.eco">Eco</button>
     <button type="button" data-akku="normal" role="radio" data-i18n="dp.akku.normal">Normal</button>
@@ -1368,6 +1451,7 @@ body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
   </button>
 </div>
 <div id="vh-info-pop" hidden data-i18n-html="infoPop.html"></div>
+<button type="button" id="vh-mrestore" aria-controls="vh-transcript-wrap" title="Leiste wiederherstellen" aria-label="Leiste wiederherstellen" data-i18n-title="mmin.restore" data-i18n-aria="mmin.restore"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 9.5 8 5.5 12 9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 <button id="btn-theme" title="theme" aria-label="theme" data-i18n-title="theme.title" data-i18n-aria="theme.title"></button>
 <div id="label">
   <span class="dlt"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="by">by</span><span>voicehook<span class="tld">.ai</span></span>
@@ -1472,11 +1556,16 @@ body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
     <button type="button" role="radio" class="vh-seg" data-mode="music" aria-checked="false" tabindex="-1" title="Musik" data-i18n-title="mode.musicTitle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span data-i18n="mode.music">Musik</span></button>
   </div>
   <div id="vh-music-src" hidden>
+    <div class="vh-msrc-row">
     <div class="vh-msrc-opts" role="radiogroup" aria-label="Musikquelle" data-i18n-aria="msrc.aria">
       <button type="button" role="radio" class="vh-msrc" data-src="system" aria-checked="false" data-i18n="msrc.system" data-i18n-title="msrc.systemTitle">Systemton</button>
       <button type="button" role="radio" class="vh-msrc" data-src="tab" aria-checked="false" data-i18n="msrc.tab" data-i18n-title="msrc.tabTitle">Tab</button>
       <button type="button" role="radio" class="vh-msrc" data-src="mic" aria-checked="false" data-i18n="msrc.mic" data-i18n-title="msrc.micTitle">Mikrofon</button>
     </div>
+    <button type="button" class="vh-i" data-hint="msrc" aria-controls="vh-msrc-info" aria-expanded="false" title="Hinweis anzeigen" aria-label="Hinweis anzeigen"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/><path d="M8 7.2v4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+    <button type="button" id="vh-mmin" class="vh-mmin" aria-controls="vh-transcript-wrap" title="Leiste minimieren" aria-label="Leiste minimieren" data-i18n-title="mmin.min" data-i18n-aria="mmin.min"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 6.5 8 10.5 12 6.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+    <div class="vh-msrc-info" id="vh-msrc-info" hidden></div>
     <div class="vh-msrc-hint" aria-live="polite"></div>
   </div>
   <div id="vh-mode-info" hidden>
@@ -1802,6 +1891,10 @@ const USEFUL_BINS = 1024;
 // Mode-State früh deklariert damit animate() ohne TDZ-ReferenceError lesen kann.
 // applyProfile() überschreibt diesen Wert beim Mode-Wechsel.
 let currentMode = 'music';
+// Paket 8 (Punkt 0): true, solange der Musikmodus wirklich läuft (musicStart bis
+// musicOff). Dann gilt der Musik-Look von 467f26a: einheitliche Basis-Helligkeit
+// 1,85, Ausflug-Deckel wächst mit "Bewegung".
+let vhMusicLook = false;
 // Brightness-Multiplier: ebenfalls früh init'd damit animate() es lesen kann.
 // brightness-Slider input listener überschreibt das später.
 let colorBoost = 1.85;
@@ -1943,6 +2036,24 @@ document.addEventListener('visibilitychange', vhLoopKick);
 // Stufen (Oliver 01.10.): Eco, Normal, Hoch, Ultra. Eco = wenige Partikel, kleine
 // Renderauflösung, 30 fps; Normal = heutiger Standardlook, native fps; Hoch = mehr
 // Partikel; Ultra = Maximum. Alte gespeicherte Namen werden beim Laden umgesetzt.
+// Paket 8 (Punkt 0): Regler-Werte aus den Zwischenständen UI-Paket 6/7 (andere
+// Skalen: Helligkeit absolut statt relativ, Qualitätsstufen mit eigenen Partikel-
+// und Punktgrößen) einmalig verwerfen, damit niemand in alten Werten hängen bleibt.
+// Style, Zoom und Farbton bleiben. Versionsschlüssel vh-look-v1.
+(() => {
+  try {
+    if (localStorage.getItem('vh-look-v1') === '8') return;
+    const raw = localStorage.getItem('vh-music-state-v3');
+    if (raw) {
+      const s = JSON.parse(raw) || {};
+      ['fx', 'ring', 'sat', 'pc', 'island', 'bright', 'size', 'pd', 'cl'].forEach(k => { delete s[k]; });
+      localStorage.setItem('vh-music-state-v3', JSON.stringify(s));
+    }
+    localStorage.removeItem('vh-akku-v1');
+    localStorage.removeItem('vh-akku-custom-v1');
+    localStorage.setItem('vh-look-v1', '8');
+  } catch (_) {}
+})();
 const VH_AKKU = {
   eco:    { cap: 0.10, fps: 30, pr: 0.75 },
   normal: { cap: 1.00, fps: 0,  pr: 0    },
@@ -2024,11 +2135,10 @@ function animate() {
 // Effektive Partikelzahl je Bild: Slider-Wert, für Felle mindestens VH_FUR_PC
 // (feines, geschlossenes Muster), gedeckelt durch die Akku-Stufe.
 const VH_FUR_PC = 0.6;
-// UI-Paket 6 (Punkt 15, Oliver: "die brauchen einfach mehr partikel oder größere"):
-// Style-Defaults nur für Giraffe und Leopard: mehr Partikel und etwas größere Punkte,
-// damit Flecken/Rosetten ohne Reglerdrehen lesbar sind. Musterlogik unverändert,
-// Akku-Deckel (cap) geht weiter vor.
-const VH_FUR_STYLE = { giraffe: { pc: 0.95, size: 1.15 }, leopard: { pc: 0.95, size: 1.15 } };
+// Paket 8 (Punkt 0, Oliver: Standard soll wieder der 467f26a-Look sein): die
+// Giraffe/Leopard-Sonderwerte aus UI-Paket 6 (pc 0,95, Punkte x1,15) sind raus,
+// alle Felle wieder mit VH_FUR_PC und Punktgröße x1 wie in 467f26a.
+const VH_FUR_STYLE = {};
 function vhEffectiveN() {
   const cap = Math.floor(N * (VH_AKKU[vhAkku] || VH_AKKU.full).cap);
   const fs = VH_FUR_STYLE[lastPaletteForSpatial];
@@ -2119,8 +2229,9 @@ function vhSimStep() {
   vhGlowK += (vhGlowTarget - vhGlowK) * 0.12;
   // Paket 7: Ring-Puls (ringFx) skaliert auch das Aufleuchten bei Stimme.
   // litA/litB = Amplitude bzw. Bass-Flanke, wie sie in Helligkeit/Glow eingehen;
-  // 0 = weder Pulsen noch Aufleuchten.
-  const litK = Math.max(0, ringFx);
+  // 0 = weder Pulsen noch Aufleuchten. Paket 8: über 1 nicht stärker als in
+  // 467f26a (dort wirkte Ring-Puls nur auf das Pulsen), sonst glüht Musik heller.
+  const litK = Math.min(1, Math.max(0, ringFx));
   const litA = amp * litK;
   const litB = bassAttack * litK;
   const litU = ultraDeep * litK;
@@ -2186,7 +2297,8 @@ function vhSimStep() {
   // ── Loop-Invarianten 1×/Frame statt 20000×/Frame ─────────────────────────
   // Paket 7: fester Deckel. Früher 0.40 * max(1, intensity): "Bewegung" ließ
   // die Punkte weiter auseinanderfliegen und hob damit nebenbei das Leuchten.
-  const cap         = 0.40;
+  // Paket 8: im Musikmodus wieder wie 467f26a (Bewegung max -> weiter Ausflug).
+  const cap         = vhMusicLook ? 0.40 * Math.max(1, intensity) : 0.40;
   const satIntScale = Math.min(1.0, intensity * 0.5);
   const beatStrong0 = Math.max(0, beatEnv - 0.10) * 1.5 * satIntScale;
   // Trig-Cache: sin(clock*0.7 + turb[i]) per sum-of-angles ohne sin im Hot-Loop
@@ -2753,6 +2865,8 @@ document.addEventListener('keydown', (e) => {
   // unten), Transkript-Vollbild bleibt unverändert.
   const _menu = document.getElementById('vh-foot-menu');
   if (_menu && !_menu.hasAttribute('hidden')) return;
+  // UI-Paket 8: im Musikmodus gibt es kein Transkript; Esc holt nur die Leiste zurück.
+  if (document.body.classList.contains('vh-music-on')) { if (window.vhMusicMinSet) window.vhMusicMinSet(false); return; }
   if (vhTranscriptState() === 'expanded') vhTranscriptSet(vhTrPrev);
   else vhTranscriptSet('expanded');
 });
@@ -3198,7 +3312,8 @@ let vhBrightRel = parseFloat(brightnessInput.value);
 function vhApplyBright() {
   let pal = null; try { pal = lastPaletteForSpatial; } catch (_) { /* vor applyPalette */ }
   const b = VH_STYLE_BRIGHT[pal] || { d: 1.85, l: 1.85 };
-  const base = document.body.classList.contains('theme-light') ? b.l : b.d;
+  // Paket 8: Musikmodus = 467f26a-Look, einheitliche Basis 1,85 für alle Styles.
+  const base = vhMusicLook ? 1.85 : (document.body.classList.contains('theme-light') ? b.l : b.d);
   colorBoost = base * vhBrightRel;
 }
 window.vhApplyBright = vhApplyBright;
@@ -5654,8 +5769,15 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
     const lo = parseFloat(el.min), hi = parseFloat(el.max);
     return Math.round((v - lo) / (hi - lo) * 100) + '%';
   };
-  const syncOut = (el) => { const o = el.parentElement && el.parentElement.querySelector('output'); if (o) o.textContent = fmt(el); };
+  const syncOut = (el) => {
+    const o = el.parentElement && el.parentElement.querySelector('output'); if (o) o.textContent = fmt(el);
+    // UI-Paket 8 (Mockup A): gefüllter Anteil der Spur
+    const lo = parseFloat(el.min), hi = parseFloat(el.max), v = parseFloat(el.value);
+    if (hi > lo && Number.isFinite(v)) el.style.setProperty('--p', (Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100).toFixed(2) + '%');
+  };
   const ranges = [...panel.querySelectorAll('input[type="range"]')];
+  // Label zeigt fest auf den Regler (das "i" im Label darf ihn nicht ersetzen)
+  ranges.forEach(el => { const l = el.closest('label'); if (l && el.id) l.htmlFor = el.id; });
   ranges.forEach(el => { syncOut(el); el.addEventListener('input', () => syncOut(el)); });
   // Zoom-Regler <-> Mausrad/Pinch
   zoomCtl.max = String(VH_ZOOM_MAX); zoomCtl.min = String(VH_ZOOM_MIN);
@@ -5692,6 +5814,9 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
   const setAkku = (k, opts) => {
     if (!VH_AKKU[k]) return;
     vhAkku = k;
+    // UI-Paket 8, Punkt 4 (Oliver: "ultra und hoch immer hd an"): Hoch und Ultra
+    // schalten HD (volle Pixeldichte) ein; Eco/Normal lassen HD wie es ist.
+    if ((k === 'high' || k === 'ultra') && !(opts && opts.auto)) { hdOn = true; try { localStorage.setItem(HD_KEY, '1'); } catch (_) {} }
     if (!(opts && opts.auto)) { try { localStorage.setItem(VH_AKKU_KEY, k); } catch (_) {} }
     try { localStorage.removeItem(VH_AKKU_CUSTOM_KEY); } catch (_) {}
     // Punkt 9: Regler springen sichtbar auf das Preset der Stufe
@@ -5710,6 +5835,10 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
   };
   window.vhSetAkku = setAkku;
   akkuBtns.forEach(b => b.addEventListener('click', () => setAkku(b.dataset.akku)));
+  // Punkt 4: Auflösung von Hand umschalten = eigene Einstellung ("Eigene"), wie die Regler.
+  [document.getElementById('btn-hd'), document.getElementById('vh-foot-hd')].forEach((hb) => {
+    if (hb) hb.addEventListener('click', () => { try { localStorage.setItem(VH_AKKU_CUSTOM_KEY, '1'); } catch (_) {} markAkku(); });
+  });
   ['particle-count', 'size'].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', () => {
@@ -5752,6 +5881,8 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
     try { localStorage.removeItem(VH_AKKU_KEY); } catch (_) {}
     setAkku(vhAkkuDefault());
     try { localStorage.removeItem(VH_AKKU_KEY); } catch (_) {}
+    // Paket 8: im Musikmodus führt "Zurücksetzen" zum Musik-Look, nicht zum Sprach-Standard.
+    if (window.vhMusicIsOn && window.vhMusicIsOn() && window.vhMusicLookApply) window.vhMusicLookApply();
     saveState();
   });
   const open = (on) => {
@@ -5848,9 +5979,19 @@ function vhMusicSrcRender() {
   const optsEl = box.querySelector('.vh-msrc-opts');
   if (optsEl) optsEl.hidden = opts.length < 2;
   const hint = box.querySelector('.vh-msrc-hint');
+  const info = box.querySelector('.vh-msrc-info');
   if (!hint) return;
   hint.textContent = ''; hint.classList.remove('warn');
-  if (vhMsrcMsg) {
+  // UI-Paket 8: Erklärtext (Quelle, Chrome/Edge, Kopfhörer, Bluetooth) liegt hinter
+  // dem "i" (standardmäßig zu); Fehler mit "Erneut versuchen" bleiben sichtbar.
+  const parts = [];
+  if (vhMsrcMsg && vhMsrcMsg.info) parts.push(vhMsrcMsg.text);
+  if (cur === 'system') parts.push(vhT('msrc.hintSystem'));
+  else if (cur === 'tab') parts.push(vhT('msrc.hintTab'));
+  else parts.push(vhT(c.mobile ? 'msrc.hintMobile' : 'msrc.hintMic'));
+  if (!c.system && !c.mobile) parts.push(vhT('msrc.onlyChrome'));
+  if (info) info.textContent = parts.join(' ');
+  if (vhMsrcMsg && !vhMsrcMsg.info) {
     hint.classList.add('warn');
     hint.appendChild(document.createTextNode(vhMsrcMsg.text));
     if (vhMsrcMsg.retry) {
@@ -5858,14 +5999,7 @@ function vhMusicSrcRender() {
       r.addEventListener('click', () => vhMusicCapture(vhMusicSrc()));
       hint.appendChild(r);
     }
-    return;
   }
-  const parts = [];
-  if (cur === 'system') parts.push(vhT('msrc.hintSystem'));
-  else if (cur === 'tab') parts.push(vhT('msrc.hintTab'));
-  else parts.push(vhT(c.mobile ? 'msrc.hintMobile' : 'msrc.hintMic'));
-  if (!c.system && !c.mobile) parts.push(vhT('msrc.onlyChrome'));
-  hint.textContent = parts.join(' ');
 }
 window.vhMusicSrcRender = vhMusicSrcRender;
 function vhMusicUse(stream, label) {
@@ -5942,7 +6076,7 @@ async function vhMusicCapture(src) {
       const r = await vhMusicMic();
       if (!window.vhMusicIsOn || !window.vhMusicIsOn()) { r.stream.getTracks().forEach(t => t.stop()); return; }
       vhMusicUse(r.stream, r.label || 'mic');
-      if (r.onlyBt || r.onlyBtMobile) { vhMsrcMsg = { text: vhT('msrc.onlyBt'), retry: false }; vhMusicSrcRender(); }
+      if (r.onlyBt || r.onlyBtMobile) { vhMsrcMsg = { text: vhT('msrc.onlyBt'), retry: false, info: true }; vhMusicSrcRender(); }
     }
   } catch (e) {
     const denied = e && (e.name === 'NotAllowedError' || e.name === 'AbortError');
@@ -5973,6 +6107,70 @@ async function vhMusicCapture(src) {
     const n = btns[(i + d + btns.length) % btns.length]; n.focus(); pickSrc(n.dataset.src);
   });
 })();
+// ── UI-Paket 8: Hinweis-"i" (Punkt 1) ──────────────────────────────────────
+// Jedes .vh-i[data-hint] klappt sein aria-controls-Ziel auf/zu. Standard: zu.
+// Zustand je Hinweis in localStorage (vh-hints-v1, try/catch). Die Texte stehen im
+// Layoutfluss (kein absolute), überlappen also nichts.
+const VH_HINTS_KEY = 'vh-hints-v1';
+function vhHintsLoad() { try { return JSON.parse(localStorage.getItem(VH_HINTS_KEY) || '{}') || {}; } catch (_) { return {}; } }
+function vhHintApply(btn, open) {
+  const el = document.getElementById(btn.getAttribute('aria-controls'));
+  if (el) el.hidden = !open;
+  btn.setAttribute('aria-expanded', String(open));
+  const lbl = vhT(open ? 'hint.hide' : 'hint.show');
+  btn.title = lbl; btn.setAttribute('aria-label', lbl);
+}
+function vhHintsInit(root) {
+  const st = vhHintsLoad();
+  (root || document).querySelectorAll('.vh-i[data-hint]').forEach((b) => {
+    vhHintApply(b, st[b.dataset.hint] === 1);
+    if (b.dataset.vhHintWired) return;
+    b.dataset.vhHintWired = '1';
+    b.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const open = b.getAttribute('aria-expanded') !== 'true';
+      vhHintApply(b, open);
+      const s = vhHintsLoad();
+      if (open) s[b.dataset.hint] = 1; else delete s[b.dataset.hint];
+      try { localStorage.setItem(VH_HINTS_KEY, JSON.stringify(s)); } catch (_) {}
+    });
+  });
+}
+window.vhHintsInit = vhHintsInit;
+vhHintsInit();
+
+// ── UI-Paket 8: Musik-Leiste minimieren (Punkt 2) ─────────────────────────
+const VH_MMIN_KEY = 'vh-music-min-v1';
+function vhMusicMinSet(on, opts) {
+  const was = document.body.classList.contains('vh-music-min');
+  document.body.classList.toggle('vh-music-min', !!on);
+  if (!(opts && opts.load)) { try { localStorage.setItem(VH_MMIN_KEY, on ? '1' : '0'); } catch (_) {} }
+  const wrap = document.getElementById('vh-transcript-wrap');
+  const gone = !!on && document.body.classList.contains('vh-music-on');
+  if (wrap) { if (gone) wrap.setAttribute('inert', ''); else wrap.removeAttribute('inert'); }
+  if (was !== !!on && !(opts && opts.load)) {
+    // Fokus folgt: minimiert -> Wiederherstellen-Knopf, zurück -> Minimieren-Knopf
+    const f = document.getElementById(on ? 'vh-mrestore' : 'vh-mmin');
+    if (f && document.body.classList.contains('vh-music-on')) setTimeout(() => { try { f.focus({ preventScroll: true }); } catch (_) {} }, on ? 340 : 0);
+  }
+}
+window.vhMusicMinSet = vhMusicMinSet;
+(() => {
+  const mi = document.getElementById('vh-mmin');
+  const re = document.getElementById('vh-mrestore');
+  if (mi) mi.addEventListener('click', (e) => { e.stopPropagation(); vhMusicMinSet(true); });
+  if (re) re.addEventListener('click', (e) => { e.stopPropagation(); vhMusicMinSet(false); });
+  let v = null; try { v = localStorage.getItem(VH_MMIN_KEY); } catch (_) {}
+  vhMusicMinSet(v === '1', { load: true });
+  // Außerhalb des Musikmodus wirkt die Klasse nicht (CSS an body.vh-music-on gebunden);
+  // inert nur, solange die Leiste wirklich weg ist.
+  new MutationObserver(() => {
+    const wrap = document.getElementById('vh-transcript-wrap'); if (!wrap) return;
+    const gone = document.body.classList.contains('vh-music-on') && document.body.classList.contains('vh-music-min');
+    if (gone) wrap.setAttribute('inert', ''); else wrap.removeAttribute('inert');
+  }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+})();
+
 async function vhMusicOffForCall() {
   if (window.vhMusicIsOn && window.vhMusicIsOn()) { try { await window.vhMusicSet(false); } catch (_) {} try { vhLiveRender(true); } catch (_) {} }
 }
@@ -6029,19 +6227,35 @@ async function vhMusicOffForCall() {
     if (!musicOn) return;
     ['fx-intensity','island','brightness','ring-fx','sat-amount','particle-count','size']
       .forEach(_restoreRange);
+    vhMusicLook = false;
+    document.body.classList.remove('vh-music-on');
     try { applyProfile('speech'); } catch (e) { console.error('[vh-music] revert profile', e); }
+    try { vhApplyBright(); } catch (_) {}
     if (typeof lkConnected !== 'undefined' && lkConnected) { try { vhCallAnalyserRestore(); } catch (e) { console.error('[vh-music] restore call audio', e); } }
     else if (micActive) { try { stopAudio(); } catch (e) { console.error('[vh-music] stopMic', e); } }
     musicOn = false;
   };
-  const musicStart = async () => {
-    try { applyProfile('music'); } catch (e) { console.error('[vh-music] profile', e); }
+  // Musik-Look (467f26a): Bewegung/Inseln max, Ring-Puls/Satelliten halber Weg zum
+  // Max, Partikel 0,55, Punktgröße Standard. Helligkeit: 467f26a lag bei 2,2 absolut
+  // ((1,85 + 2,5) / 2); der Regler ist seit Paket 7 relativ zur Basis 1,85.
+  const VH_MUSIC_BRIGHT_REL = 1.18;   // 1,85 x 1,18 = 2,18 (Reglerraster 0,02; 467f26a: 2,2)
+  const musicLook = () => {
+    vhMusicLook = true;
     ['fx-intensity','island'].forEach(_maxRange);
-    ['brightness','ring-fx','sat-amount'].forEach(_halfGlow);
+    ['ring-fx','sat-amount'].forEach(_halfGlow);
+    _setRange('brightness', VH_MUSIC_BRIGHT_REL);
     _setRange('particle-count', 0.55);
     const sizeEl = document.getElementById('size');
     if (sizeEl) _setRange('size', sizeEl.getAttribute('value') || 0.155);
+  };
+  window.vhMusicLookApply = musicLook;   // "Zurücksetzen" im Musikmodus
+  const musicStart = async () => {
+    try { applyProfile('music'); } catch (e) { console.error('[vh-music] profile', e); }
+    musicLook();
     musicOn = true;
+    // UI-Paket 8: Musik zeigt kein Transkript; Vollbild würde den Ring verdecken.
+    try { if (vhTranscriptState() === 'expanded') vhTranscriptSet('bottom'); } catch (_) {}
+    document.body.classList.add('vh-music-on');
     try { vhMusicSrcRender(); } catch (_) {}
     await vhMusicCapture(vhMusicSrc());
   };
