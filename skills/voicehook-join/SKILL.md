@@ -5,19 +5,16 @@ description: Join an existing voicehook.ai voice-call as the senior brain behind
 
 # voicehook-join — drive a voicehook v4 call as senior brain
 
-> **Stand 2026-09-30** (voicehook-v4 PR #70: LiveKit 1.8.3, `operator.revise`). Kanonisch: `voicehook-ai/voicehook-v4:skills/voicehook-join/SKILL.md`.
+> **Stand 2026-10-01** (voicehook-v4 bis PR #81: `operator.revise`, Transkript-Rollen, Live-Modus, Sprach- und Sprecherfilter). Kanonisch: `voicehook-ai/voicehook-v4:skills/voicehook-join/SKILL.md`.
 
 ## ⚠️ ZUERST: CLI **und** Skill aktualisieren (Olivers Regel)
 
-**Die CLI ist wichtiger als der Skill-Text.** Belegter Ausfall 2026-09-25: der
-Skill wurde brav gegen v4 diffed, die CLI aber nicht angefasst. Sie war 0.2.0
-vom 15.09., und Commit `f59a9c1c` vom **17.09.** hatte die Topics von
-`senior.*` auf `operator.*` umbenannt. Die CLI publizierte weiter `senior.say`,
-der Worker hörte auf `operator.say` — Oliver hörte 20 Minuten lang nur die
-Ausweichfloskel "ich gebe das an den Operator weiter", also wörtlich den neuen
-Topic-Namen. Nichts warf einen Fehler: kein `[warn]`, kein Stale-Drop, FIFO
-sauber geleert. **Ein stiller Topic-Mismatch sieht exakt aus wie ein toter
-Worker.**
+**Die CLI ist wichtiger als der Skill-Text.** Belegter Ausfall 2026-09-25: der Skill wurde brav gegen v4 diffed,
+die CLI aber nicht angefasst. Sie war 0.2.0 vom 15.09., und Commit `f59a9c1c` vom **17.09.** hatte die Topics von
+`senior.*` auf `operator.*` umbenannt. Die CLI publizierte weiter `senior.say`, der Worker hörte auf `operator.say`;
+Oliver hörte 20 Minuten lang nur die Ausweichfloskel "ich gebe das an den Operator weiter", also wörtlich den neuen
+Topic-Namen. Nichts warf einen Fehler: kein `[warn]`, kein Stale-Drop, FIFO sauber geleert.
+**Ein stiller Topic-Mismatch sieht exakt aus wie ein toter Worker.**
 
 Deshalb IMMER zuerst die Version vergleichen, erst danach den Skill-Text:
 
@@ -43,13 +40,11 @@ diff <(grep -E '^#{1,3} ' ~/.claude/skills/voicehook-join/SKILL.md) \
      <(grep -E '^#{1,3} ' /tmp/SKILL-v4.md)
 ```
 
-Kanonisch: Skill-Text in **voicehook-v4** `skills/voicehook-join/`, CLI-Code in **voicehook-agent**
-(dessen SKILL.md liegt ab PR #70 auch unter voicehook.ai/agent/SKILL.md; vorher nur SPA-Hülle).
+Kanonisch: Skill-Text in **voicehook-v4** `skills/voicehook-join/`, CLI-Code in **voicehook-agent** (Agent-Skill live: voicehook.ai/agent/SKILL.md).
 
 ## Design: strict mouthpiece
 
-Die voice-ai generiert **nie** selbst. `RelayAgent.on_user_turn_completed` wirft
-serverseitig `StopResponse`. Sie sagt ausschliesslich:
+Die voice-ai generiert **nie** selbst. `RelayAgent.on_user_turn_completed` wirft serverseitig `StopResponse`. Sie sagt ausschliesslich:
 
 1. Text, den du per `operator.say` schickst (wortwörtliches TTS)
 2. Inhalt der zuletzt injizierten `operator.persona` (begrenztes Wissen)
@@ -67,6 +62,7 @@ Alles andere ist Halluzination und gehört als v4-Issue gemeldet.
 | `operator.interrupt` | `{}` | alles stoppen; Ungesprochenes kommt als `operator.revise` zurück |
 | `operator.revise` | ← `{unspoken[], new, text}` | vom Agent an dich: was NICHT gesprochen wurde + Anweisung |
 | `operator.inject` | `{text, role?}` | synthetischer chat-ctx-Eintrag, wird NICHT gesprochen |
+| `transcript` | ← `{role, text}` | `user`; `operator` = deine Aussage, erst NACH dem Aussprechen (bei Abbruch nur der gesprochene Teil); `agent` = Eigenantwort der voice-ai. Browser: operator rot, agent blau |
 
 ## Serverseitig, kein Roundtrip nötig (v4, fixt v3#61)
 
@@ -80,19 +76,16 @@ Alles andere ist Halluzination und gehört als v4-Issue gemeldet.
 ## CLI-Stand auf DIESER Box (wichtig, weicht vom v4-Text ab)
 
 Installiert via `pip3 install --user --break-system-packages git+https://github.com/voicehook-ai/voicehook-agent`
-(kein `uv` vorhanden; `python3 -m venv` scheitert mangels ensurepip; System-pip
-ist per PEP 668 gesperrt).
+(kein `uv` vorhanden; `python3 -m venv` scheitert mangels ensurepip; System-pip ist per PEP 668 gesperrt).
 
-Stand 2026-09-25: **0.3.0**. Kennt weiterhin **kein `--auto` und kein
-`--memory-dir`** — der v4-Zehnzeiler funktioniert also nach wie vor nicht.
-Vorhandene Flags (aus `join --help`, nicht aus dem Gedächtnis):
+Stand 2026-09-25: **0.3.0**. Kennt weiterhin **kein `--auto` und kein `--memory-dir`**, der v4-Zehnzeiler
+funktioniert also nach wie vor nicht. Vorhandene Flags (aus `join --help`, nicht aus dem Gedächtnis):
 `--name --model` (**Pflicht ab 0.4.0**, sonst Exit 2; Web-Chip: Ladekreis, dann "Name · Modell") `--identity --topic --username --prompt --greet/--no-greet --json
 --persona --persona-file --keep-alive/--no-keep-alive --notify-url
 --wake-only-user --wake-all --suppress-echo --say-ttl --strict-relay
 --graph --graph-interval`
 
-**Folge:** FIFO-Halter weiterhin von Hand. Sobald die CLI `--auto` kann, ersetzt
-das den ganzen Block.
+**Folge:** FIFO-Halter weiterhin von Hand. Sobald die CLI `--auto` kann, ersetzt das den ganzen Block.
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -107,14 +100,12 @@ sleep 7; tail -n 8 /tmp/$SESS.out        # erwartet: connected + persona auto-pu
 
 Drei Betriebsfallen, alle am 2026-09-25 erlebt:
 - **`setsid` benutzen.** Ohne das stirbt der Join mit der Bash-Tool-Shell.
-- **Niemals `pkill -f "voicehook-agent join"`.** Das Muster steht auch in der
-  eigenen Kommandozeile, die Shell killt sich selbst (Exit 144) und alles
-  danach im selben Aufruf läuft nie. Stattdessen gezielt:
+- **Niemals `pkill -f "voicehook-agent join"`.** Das Muster steht auch in der eigenen Kommandozeile, die Shell
+  killt sich selbst (Exit 144) und alles danach im selben Aufruf läuft nie. Stattdessen gezielt:
   `pgrep -af "voicehook-agent join" | grep -v "bin/bash -c"` und per PID killen.
-- **Beim ersten Testlauf `--suppress-echo` WEGLASSEN.** Mit dem Flag fehlt das
-  `{"role":"agent"}`-Echo im Stream, und dann ist "gesprochen" nicht von
-  "verschluckt" zu unterscheiden. Erst wenn das Echo einmal sichtbar war,
-  darf es wieder rein.
+- **Echo = Beweis.** Deine Aussage kommt als `{"role":"operator"}` zurück, sobald sie
+  gesprochen ist; fehlt es, wurde sie verschluckt. `--suppress-echo` (CLI ≤0.4.0)
+  filtert nur `role:"agent"` und greift bei v4 deshalb nicht.
 
 Steuern und mitlesen (kein `jq` auf dieser Box, deshalb python3):
 
@@ -125,8 +116,7 @@ tail -n 30 /tmp/vh-call.out
 
 ## Reihenfolge: ALLES vorbereiten, DANN verbinden
 
-Eine dünne Persona beim Join heisst: die voice-ai weiss nichts, überbrückt zu dir,
-und der User hört Stille. Also erst Persona rendern, dann connecten.
+Eine dünne Persona beim Join heisst: die voice-ai weiss nichts, überbrückt zu dir, und der User hört Stille. Also erst Persona rendern, dann connecten.
 
 1. Persona-Text schreiben (`/tmp/$SESS.persona`), Secrets raus
 2. FIFO-Halter starten
@@ -137,8 +127,7 @@ und der User hört Stille. Also erst Persona rendern, dann connecten.
 
 ## Monitor scharfstellen — die Hauptfehlerquelle
 
-Ohne Listener endet dein Chat-Turn nach dem Gruss und niemand liest
-`/tmp/$SESS.out` weiter. Jeder User-Turn danach läuft in Stille.
+Ohne Listener endet dein Chat-Turn nach dem Gruss und niemand liest `/tmp/$SESS.out` weiter. Jeder User-Turn danach läuft in Stille.
 
 ```bash
 stat -c %s /tmp/$SESS.out > /tmp/$SESS.offset
@@ -152,10 +141,9 @@ Zusätzlich `/loop` als Fallback-Heartbeat, falls der Monitor hängt.
 ## Sprechmodi
 
 - **Antwort** (`operator.say`): erst wenn der User fertig ist. 1-3 Sätze, Rückfrage 5-10 Wörter.
-- **Unterbrechen** (`operator.interrupt` + `operator.say`): Standard ist **nein**.
-  Nur bei echter Notwendigkeit und höflich: wichtige Korrektur, die der User
-  JETZT hören muss, ein "stopp" von ihm, oder sanftes Zurückholen, wenn er
-  abdriftet. Formuliere es zuvorkommend, nie schroff.
+- **Unterbrechen** (`operator.interrupt` + `operator.say`): Standard ist **nein**. Nur bei echter Notwendigkeit
+  und höflich: wichtige Korrektur, die der User JETZT hören muss, ein "stopp" von ihm, oder sanftes Zurückholen,
+  wenn er abdriftet. Formuliere es zuvorkommend, nie schroff.
 - **Backchannel**: macht v4 selbst. Nicht pushen.
 
 ## Aussagen-Disziplin (Olli 30.09.: "redet 3 min nach")
@@ -169,13 +157,25 @@ Zusätzlich `/loop` als Fallback-Heartbeat, falls der Monitor hängt.
 - **`operator.say` kurz halten: unter ~60 Zeichen, ~8s TTS.** Längere Pushes
   verwirft livekit-agents. Mehrteiler: ab Teil 2 `mode:"append"`.
 - **Stille ist der Killer.** Ab 8s ansagen (Status-say mit `mode:"append"`), über 15s delegieren.
-- **PII und Secrets: niemals in Persona, say oder Graph.** Alles reitet im
-  Klartext über den LiveKit-Datenkanal (v3#27). Persönliche Inhalte des Users
-  nur so weit hineingeben, wie der Call sie wirklich braucht.
+- **PII und Secrets: niemals in Persona, say oder Graph.** Alles reitet im Klartext über den LiveKit-Datenkanal
+  (v3#27). Persönliche Inhalte des Users nur so weit hineingeben, wie der Call sie wirklich braucht.
 - **Schweres delegieren**, damit der Call schnell bleibt: langes Bash,
   Recherche, Refactors gehen an einen Hintergrund-Agenten, vorher ansagen.
 - **Live prüfen statt annehmen.** Ein zweiter `--json`-Listener zeigt, ob die
   voice-ai wirklich gesprochen hat.
+
+## Live-Modus und Filter (v4, serverseitig)
+
+- **Live-Modus** (Gemini Live): `GET /api/live/status` → `{"available":bool}` (nie Beträge).
+  `POST /api/live-room {identity, ttl_seconds?}` → wie `/api/host-call` plus `invite_url`,
+  `expires_in`, `agent:"voice-ai-live"`. 402 = Monatsbudget weg (Default 10 USD, UTC-Monat),
+  404 aus, 503 nicht konfiguriert, 429 Ratenlimit. Join wie immer per Invite. Achtung:
+  `operator.say` ist dort **nicht wörtlich**, Gemini sagt es sinngemäß; Persona kommt als
+  markierter User-Turn. Budget im Call erreicht → Ansage, Call endet.
+- **Sprachfilter** (Pipeline): nur Audio mit erkannter Sprache geht an die STT, Stille kostet nichts.
+- **Sprechererkennung** (Pipeline): Hintergrundstimmen (TV, Nachbar) erreichen das LLM nicht.
+  Lernphase am Anfang: bis ein Sprecher ~3s geredet hat, geht alles durch; beginnt
+  pro STT-Verbindung neu. Fehlt die Sprecher-Info, geht das Segment durch.
 
 ## Fehlerbilder
 
