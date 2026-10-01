@@ -90,6 +90,9 @@ tool calls, so every later call uses the absolute wrapper, e.g. `/tmp/vh-ab12cd/
 - Never write into shared paths (`personas/*.txt`, `/tmp/vh-call.*`). Use your own `$D`.
 - Alone in the call and you want the voicebot to know context: `--persona "<3-5 lines>"`
   at join. The first persona push also triggers one server-side greeting, so then drop `--greet`.
+- Every persona you push MUST contain this rule (the voicebot has no tools, you do): "Questions about
+  capabilities, access, whether something works, or anything you would have to assume: never answer,
+  never deny, never claim. Say only 'Moment, ich schau nach.' and wait for the operator."
 
 ## Fallback: CLI 0.4.0 (no next/say/leave)
 
