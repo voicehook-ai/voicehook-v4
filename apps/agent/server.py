@@ -24,7 +24,7 @@ import urllib.request
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from . import billing_routes, budget, freetier
+from . import billing_routes, budget, freetier, oauth_routes
 from .health import probe_all
 from .slug import gen_slug
 from .tokens import mint_invite, mint_livekit_token, verify_invite
@@ -33,6 +33,7 @@ logger = logging.getLogger("voicehook.server")
 
 app = FastAPI(title="voicehook-agent", version="4.0.0-dev")
 app.include_router(billing_routes.router)  # Aufladen + Wallet (/api/checkout, /api/wallet, ...)
+app.include_router(oauth_routes.router)  # Anmelden mit Google/GitHub (/api/auth/...)
 
 
 class TokenRequest(BaseModel):

@@ -42,6 +42,15 @@ Schema:
         (Review 01.10. #2: sonst Endlos-Calls per bekanntem Slug).
     usage(id, account_id, room, mode, usd, charge_ueur, balance_after_ueur, ts)
         Jede Abbuchung einzeln, nachvollziehbar; charge_ueur = tatsächlich abgezogen.
+    oauth_states(state_hash PK, provider, code_verifier, next_path, nonce_hash,
+                 requester_hash, created_at, expires_at)
+        Laufende Google/GitHub-Anmeldungen (oauth_routes.py): state nur als Hash,
+        einmalig (beim Callback gelöscht), OAUTH_STATE_TTL_S gültig. nonce_hash /
+        requester_hash wie in login_links; der Callback legt damit einen normalen
+        Login-Link an, eingelöst wird er über /api/login/verify wie der Mail-Link.
+    oauth_identities(provider, subject, email, created_at, last_login_at)
+        Welche Anbieter-ID (Google sub / GitHub id) zuletzt mit welcher BESTÄTIGTEN
+        Adresse kam. Nur Vermerk: die Konto-Identität bleibt die E-Mail.
 """
 
 from __future__ import annotations
@@ -121,6 +130,24 @@ CREATE TABLE IF NOT EXISTS login_links (
     used_at REAL,
     requester_hash TEXT,
     nonce_hash TEXT
+);
+CREATE TABLE IF NOT EXISTS oauth_states (
+    state_hash TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    code_verifier TEXT NOT NULL,
+    next_path TEXT NOT NULL,
+    nonce_hash TEXT NOT NULL,
+    requester_hash TEXT,
+    created_at REAL NOT NULL,
+    expires_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS oauth_identities (
+    provider TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    email TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_login_at TEXT NOT NULL,
+    PRIMARY KEY (provider, subject)
 );
 """
 
@@ -530,18 +557,34 @@ def create_login_link(email: str, *, requester_token: str | None = None,
     requester_token = Wallet-Token des anfordernden Browsers (X-Wallet-Token); nur
     dieses Wallet darf beim Einlösen verknüpft werden (Login-CSRF, PR #93).
     Liefert (token, nonce): token geht in die Mail, nonce in die POST-Antwort."""
+    nonce = "vhn_" + secrets.token_urlsafe(32)
+    token = _insert_login_link(email, requester_hash=_token_hash_or_none(requester_token),
+                               nonce_hash=_hash(nonce), ttl_seconds=ttl_seconds, now=now)
+    return token, nonce
+
+
+def create_login_link_for_nonce(email: str, *, nonce_hash: str, requester_hash: str | None,
+                                ttl_seconds: float = LOGIN_TTL_S, now: float | None = None) -> str:
+    """Login-Link wie create_login_link, aber für eine schon ausgegebene login_nonce
+    (OAuth: die Nonce ging bei /api/auth/<p>/start an den Browser, der Link entsteht
+    erst im Callback). Eingelöst wird er unverändert über consume_login_link."""
+    return _insert_login_link(email, requester_hash=requester_hash, nonce_hash=nonce_hash,
+                              ttl_seconds=ttl_seconds, now=now)
+
+
+def _insert_login_link(email: str, *, requester_hash: str | None, nonce_hash: str,
+                       ttl_seconds: float, now: float | None) -> str:
     now = time.time() if now is None else now
     token = "vhl_" + secrets.token_urlsafe(32)
-    nonce = "vhn_" + secrets.token_urlsafe(32)
     with _Tx() as conn:
         conn.execute("DELETE FROM login_links WHERE expires_at < ?", (now - 86400,))
         conn.execute(
             "INSERT INTO login_links (token_hash, email, created_at, expires_at, requester_hash, nonce_hash)"
             " VALUES (?, ?, ?, ?, ?, ?)",
             (_hash(token), normalize_email(email), now, now + float(ttl_seconds),
-             _token_hash_or_none(requester_token), _hash(nonce)),
+             requester_hash, nonce_hash),
         )
-    return token, nonce
+    return token
 
 
 class LoginLink(NamedTuple):
@@ -686,3 +729,70 @@ def login_verified_email(
             [(_hash(wallet), target, "wallet", now), (_hash(code), target, "recovery", now)],
         )
     return target, wallet, code, requester is not None
+
+
+# ----- OAuth (Google/GitHub, oauth_routes.py) ----------------------------------
+OAUTH_STATE_TTL_S = 10 * 60
+
+
+class OAuthState(NamedTuple):
+    provider: str
+    code_verifier: str
+    next_path: str
+    nonce_hash: str
+    requester_hash: str | None
+
+
+def create_oauth_state(provider: str, next_path: str, *, requester_token: str | None = None,
+                       ttl_seconds: float = OAUTH_STATE_TTL_S,
+                       now: float | None = None) -> tuple[str, str, str]:
+    """Neuer OAuth-Ablauf: liefert (state, login_nonce, code_verifier).
+    Gespeichert werden state und Nonce nur als Hash; der PKCE-Verifier muss im
+    Klartext bleiben (er geht beim Code-Tausch an den Anbieter) und wird mit dem
+    state beim Callback gelöscht."""
+    now = time.time() if now is None else now
+    state = secrets.token_urlsafe(32)
+    nonce = "vhn_" + secrets.token_urlsafe(32)
+    verifier = secrets.token_urlsafe(64)  # 86 Zeichen, RFC 7636: 43..128
+    with _Tx() as conn:
+        conn.execute("DELETE FROM oauth_states WHERE expires_at < ?", (now,))
+        conn.execute(
+            "INSERT INTO oauth_states (state_hash, provider, code_verifier, next_path, nonce_hash,"
+            " requester_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (_hash(state), provider, verifier, next_path, _hash(nonce),
+             _token_hash_or_none(requester_token), now, now + float(ttl_seconds)),
+        )
+    return state, nonce, verifier
+
+
+def consume_oauth_state(provider: str, state: str | None, *,
+                        now: float | None = None) -> OAuthState | None:
+    """state einlösen: einmalig (wird immer gelöscht), nur für denselben Anbieter,
+    nur vor Ablauf. None = unbekannt, benutzt, abgelaufen oder falscher Anbieter."""
+    if not state or len(state) > 200:
+        return None
+    now = time.time() if now is None else now
+    with _Tx() as conn:
+        row = conn.execute(
+            "SELECT provider, code_verifier, next_path, nonce_hash, requester_hash, expires_at"
+            " FROM oauth_states WHERE state_hash = ?", (_hash(state),),
+        ).fetchone()
+        if row is None:
+            return None
+        conn.execute("DELETE FROM oauth_states WHERE state_hash = ?", (_hash(state),))
+        if float(row["expires_at"]) <= now or row["provider"] != provider:
+            return None
+        return OAuthState(row["provider"], row["code_verifier"], row["next_path"],
+                          row["nonce_hash"], row["requester_hash"])
+
+
+def record_oauth_identity(provider: str, subject: str, email: str) -> None:
+    """Anbieter-ID zur bestätigten Adresse vermerken (letzte gewinnt)."""
+    now = _now()
+    with _Tx() as conn:
+        conn.execute(
+            "INSERT INTO oauth_identities (provider, subject, email, created_at, last_login_at)"
+            " VALUES (?, ?, ?, ?, ?) ON CONFLICT(provider, subject) DO UPDATE SET"
+            " email = excluded.email, last_login_at = excluded.last_login_at",
+            (provider, str(subject), normalize_email(email), now, now),
+        )

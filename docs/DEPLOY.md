@@ -132,6 +132,9 @@ dasselbe Konto zuerst verrechnet. Der Wiederherstellungs-Link gilt genau einmal 
 | `VOICEHOOK_REQUIRE_CREDITS_LIVE` | `0` | `1` = `/api/live-room` ohne Wallet mit Saldo > 0 -> 402; greift nur, wenn das Gratis-Kontingent Live aus ist |
 | `RESEND_API_KEY` | leer | Resend-API-Key für die Login-Mails; leer = Login aus (`/api/login` -> 503 `login_unavailable`) |
 | `MAIL_FROM` | `voicehook <login@voicehook.ai>` | Absender der Login-Mail (Domain muss in Resend verifiziert sein) |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | leer | OAuth-Client "Mit Google fortfahren" auf `/login`; fehlt einer der beiden Werte: Knopf ausgegraut, `/api/auth/google/*` -> 503 |
+| `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` | leer | dasselbe für "Mit GitHub fortfahren" (`/api/auth/github/*`) |
+| `VOICEHOOK_PUBLIC_URL` | `https://voicehook.ai` | Basis für Stripe-Rücksprung, Login-Link und OAuth-Callback (`<URL>/api/auth/<anbieter>/callback`) |
 | `VH_LOW_BALANCE_WARN_SECONDS` | `300` | Worker: ab dieser Restzeit (Gratis + Guthaben) einmal pro Call Hinweis + Ansage |
 | `VOICEHOOK_PRICE_FACTOR_NORMAL` / `_LIVE` | `3` / `1.5` | Abbuchung = Anbieterkosten x Faktor |
 | `VOICEHOOK_VAT_RATE` | `0.19` | MwSt obendrauf |
@@ -208,3 +211,46 @@ dem Deploy angefordert wurden, haben keine Nonce (Spalte `login_links.nonce_hash
 ergänzt, Altbestand NULL) und gehen nur über die Rückfrage (`confirm=1`). In den ersten 24 h im Log
 auf gehäufte `GET /api/login/verify` mit 409 achten; danach ist der Übergang vorbei, es ist nichts
 zurückzubauen.
+
+### Login-Seite `/login` (Google, GitHub, E-Mail-Link)
+
+Seite `/login` (Caddy schreibt auf `web/login.html` um). Alle "Anmelden"-Links auf `voice.html` und
+`/aufladen` führen auf `/login?next=<relativer Pfad der Ausgangsseite>`; nach dem Login geht es dorthin
+zurück. `next` gilt nur als relativer Pfad (beginnt mit `/`, nicht `//` oder `/\`, keine
+Steuerzeichen, nicht `/login`), sonst `/aufladen` (Schutz gegen Open-Redirect, Server und Seite prüfen
+beide). `GET /api/auth/providers` -> `{google, github, email}` sagt der Seite, welche Wege eingerichtet
+sind; der Rest steht ausgegraut mit "bald verfügbar" da.
+
+Ablauf Google/GitHub: `POST /api/auth/<anbieter>/start {next}` (mit `X-Wallet-Token`, falls vorhanden;
+Ratenlimit 5 je IP in 10 min, eigener Zähler) -> `{authorize_url, login_nonce}`. Der Server legt einen
+einmaligen `state` (10 min, nur als Hash in `oauth_states`) mit PKCE-Verifier (S256), `next`, Nonce- und
+Wallet-Hash an. Der Anbieter ruft `GET /api/auth/<anbieter>/callback?code&state` auf: `state` wird
+verbraucht, der Code getauscht, dann zählt nur eine bestätigte Adresse (Google: `email_verified=true`
+aus userinfo; GitHub: `/user/emails` mit `primary` und `verified`). Daraus entsteht ein normaler
+Login-Link (wie aus der Mail), gebunden an die Nonce und das Wallet aus `start`, und der Browser geht
+per 302 auf `/login?next=...#login=<token>`. Ab da gilt unverändert der Magic-Link-Vertrag oben
+(`/api/login/verify` mit Nonce 200, sonst 409 `confirm_required` mit Rückfrage). Konto-Identität bleibt
+die bestätigte E-Mail: gleiche Adresse über Mail, Google oder GitHub = dasselbe Konto. Die Anbieter-ID
+(Google `sub`, GitHub `id`) wird nur in `oauth_identities` vermerkt. Fehler enden auf
+`/login#error=<denied|state|provider|email_unverified>`.
+
+#### OAuth-Apps anlegen
+
+**Google** (Google Cloud Console, APIs & Services):
+1. OAuth-Zustimmungsbildschirm: Typ "Extern", App-Name voicehook, Support-Mail, Domain `voicehook.ai`;
+   Scopes `openid` und `email` (keine weiteren). Danach veröffentlichen ("In Produktion").
+2. Anmeldedaten -> OAuth-Client-ID -> Anwendungstyp "Webanwendung".
+   Autorisierte Weiterleitungs-URI: `https://voicehook.ai/api/auth/google/callback`
+   (exakt so, ohne Schrägstrich am Ende; für die Testbox zusätzlich `<VOICEHOOK_PUBLIC_URL>/api/auth/google/callback`).
+3. Client-ID -> `GOOGLE_OAUTH_CLIENT_ID`, Clientschlüssel -> `GOOGLE_OAUTH_CLIENT_SECRET`.
+
+**GitHub** (Settings -> Developer settings -> OAuth Apps -> New OAuth App, bei der Organisation):
+1. Homepage URL `https://voicehook.ai`,
+   Authorization callback URL `https://voicehook.ai/api/auth/github/callback`.
+2. Scope fragt der Server selbst an: `user:email` (nur Adressen lesen). PKCE (S256) wird mitgeschickt.
+3. Client ID -> `GITHUB_OAUTH_CLIENT_ID`, "Generate a new client secret" -> `GITHUB_OAUTH_CLIENT_SECRET`.
+
+Beide Paare in `/opt/voicehook/.env` (Secrets aus dem orb, nie ins Repo), Agent neu starten (Env wird
+beim Start gelesen). Prüfen: `curl -s https://voicehook.ai/api/auth/providers` zeigt `true` für den Anbieter.
+Hinweis Logs: der Callback-Query (`code`, `state`) steht wie jede URL im Caddy- und uvicorn-Access-Log;
+der Code ist einmalig und ohne PKCE-Verifier wertlos, der Server selbst loggt weder Code noch Token.

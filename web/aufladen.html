@@ -162,12 +162,7 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
   <div class="fineprint" id="t-fine">Zahlung über Stripe. Kein Abo.</div>
 
   <div class="login" id="login-box">
-    <button class="linkbtn" id="login-open" type="button"></button>
-    <form id="login-form" novalidate hidden>
-      <input type="email" id="login-email" autocomplete="email" inputmode="email" required>
-      <button class="cta ghost" id="login-go" type="submit"></button>
-    </form>
-    <div class="msg" id="login-msg" aria-live="polite" hidden></div>
+    <a class="linkbtn" id="login-open" href="/login?next=%2Faufladen"></a>
   </div>
 </main>
 
@@ -219,10 +214,10 @@ const T = {
         soonMsg:'Die Zahlung ist noch nicht freigeschaltet.', err:'Das hat nicht geklappt. Bitte versuch es noch einmal.',
         fine:'Zahlung über Stripe. Kein Abo.<br>Mit der E-Mail, die du bei Stripe angibst, wird dein Konto angelegt. Auf anderen Geräten meldest du dich per E-Mail-Link an.',
         login:'Schon Guthaben? Anmelden', loginPh:'deine@email.de', loginSend:'Link senden',
-        loginHint:'Die E-Mail, die du bei Stripe angegeben hast.', loginSent:'Link gesendet. Öffne ihn aus deinem Postfach.',
+        loginSent:'Link gesendet. Öffne ihn aus deinem Postfach.',
         loginBad:'Bitte eine gültige E-Mail eingeben', loginUnavail:'Anmelden bald verfügbar',
         loginRate:'Zu viele Versuche. Bitte warte ein paar Minuten.', loginMailFail:'Die E-Mail ließ sich nicht senden. Bitte versuch es später noch einmal.',
-        loginExpired:'Dieser Anmelde-Link ist abgelaufen oder wurde schon benutzt. Fordere unten einen neuen an.',
+        loginExpired:'Dieser Anmelde-Link ist abgelaufen oder wurde schon benutzt. Melde dich unten noch einmal an.',
         verifying:'Anmeldung wird geprüft …', loggedInAs:e=>'Angemeldet als '+e,
         askH:e=>'Anmelden als '+e+'?', askTxt:'In diesem Browser ist schon ein Guthaben gespeichert. „Anmelden“ wechselt zu diesem Konto, „Abbrechen“ lässt alles wie es ist.',
         askYes:'Anmelden', askNo:'Abbrechen', askKept:'Abgebrochen. Dieser Browser bleibt im bisherigen Konto.',
@@ -239,10 +234,10 @@ const T = {
         soonMsg:'Payments are not enabled yet.', err:'That did not work. Please try again.',
         fine:'Payment via Stripe. No subscription.<br>Your account is created with the email you give Stripe. On other devices you log in with an email link.',
         login:'Already have credit? Log in', loginPh:'you@example.com', loginSend:'Send link',
-        loginHint:'The email you entered at Stripe.', loginSent:'Link sent. Open it from your inbox.',
+        loginSent:'Link sent. Open it from your inbox.',
         loginBad:'Please enter a valid email', loginUnavail:'Login coming soon',
         loginRate:'Too many attempts. Please wait a few minutes.', loginMailFail:'The email could not be sent. Please try again later.',
-        loginExpired:'This login link has expired or was already used. Request a new one below.',
+        loginExpired:'This login link has expired or was already used. Log in again below.',
         verifying:'Checking your login …', loggedInAs:e=>'Logged in as '+e,
         askH:e=>'Log in as '+e+'?', askTxt:'This browser already holds credit. “Log in” switches to this account, “Cancel” leaves everything as it is.',
         askYes:'Log in', askNo:'Cancel', askKept:'Cancelled. This browser stays in its previous account.',
@@ -271,8 +266,7 @@ $('t-rate').textContent = T.rate; $('t-fine').innerHTML = T.fine; $('t-done-h1')
 $('t-done-bal').textContent = T.doneBal; $('t-rec-h').textContent = T.recH; $('t-rec-txt').textContent = T.recTxt;
 $('rec-copy').textContent = T.copy; $('go-call').textContent = T.call; $('more').textContent = T.more;
 $('dial').setAttribute('aria-label', T.amount); document.title = 'voicehook · ' + T.brand;
-$('login-open').textContent = T.login; $('login-email').placeholder = T.loginPh;
-$('login-email').setAttribute('aria-label', T.loginPh); $('login-go').textContent = T.loginSend;
+$('login-open').textContent = T.login;
 $('confirm-open').textContent = T.confirmMail; $('confirm-email').placeholder = T.loginPh;
 $('confirm-email').setAttribute('aria-label', T.loginPh); $('confirm-go').textContent = T.loginSend;
 $('ask-yes').textContent = T.askYes; $('ask-no').textContent = T.askNo;
@@ -414,18 +408,19 @@ $('rec-copy').addEventListener('click', async () => {
 $('go-call').addEventListener('click', () => { location.href = '/'; });
 $('more').addEventListener('click', () => { $('view-done').hidden = true; $('view-topup').hidden = false; loadBalance(); });
 
-// ---- Anmelden per E-Mail-Link (Vertrag PR #93) ----
+// ---- Anmelden: Link auf /login?next=<diese Seite> (Google, GitHub, E-Mail-Link) ----
+function loginHref(){ return '/login?next=' + encodeURIComponent(location.pathname + location.search); }
+
+// ---- "E-Mail bestätigen" nach dem Checkout (Vertrag PR #93) ----
 // POST /api/login {email} MIT X-Wallet-Token (falls vorhanden): der Server bindet
 // den Link an genau dieses Wallet und antwortet mit login_nonce (localStorage).
 // Die Mail enthält /aufladen#login=<token>; init() löst ihn über
 // GET /api/login/verify?token=&nonce= ein. Kein Token kommt je aus der URL.
 let loginUnavail = false;
 function setMsg(el, text, warn){ el.textContent = text; el.className = 'msg' + (warn ? ' warn' : ''); el.hidden = !text; }
-function loginMsg(text, warn){ setMsg($('login-msg'), text, warn); }
 function markLoginUnavail(){
   loginUnavail = true;
-  $('login-open').disabled = true; $('login-open').textContent = T.loginUnavail;
-  $('login-form').hidden = true; $('confirm-form').hidden = true;
+  $('confirm-form').hidden = true;
   $('confirm-open').disabled = true; $('confirm-open').hidden = false; $('confirm-open').textContent = T.loginUnavail;
 }
 // -> true = gesendet
@@ -445,15 +440,6 @@ async function sendLoginLink(email, input, go, msg){
   go.disabled = false;
   return false;
 }
-$('login-open').addEventListener('click', () => {
-  if (loginUnavail) return;
-  const f = $('login-form'); f.hidden = !f.hidden;
-  if (!f.hidden) { loginMsg(T.loginHint); $('login-email').focus(); } else loginMsg('');
-});
-$('login-form').addEventListener('submit', e => {
-  e.preventDefault();
-  sendLoginLink($('login-email').value.trim(), $('login-email'), $('login-go'), loginMsg);
-});
 // "E-Mail bestätigen" nach dem Checkout: gleicher Aufruf, Wallet-Header = dieses Konto.
 const confirmMsg = (t, w) => setMsg($('confirm-msg'), t, w);
 $('confirm-open').addEventListener('click', () => {
@@ -505,7 +491,7 @@ async function verifyLogin(token, confirmed){
   if (r.status === 400) {
     $('view-ask').hidden = true; $('view-topup').hidden = false;
     showMsg(T.loginExpired, true); await loadBalance();
-    $('login-box').hidden = false; $('login-form').hidden = false; loginMsg(T.loginHint); return;
+    $('login-box').hidden = false; return;
   }
   if (r.status === 409) {
     const c = (d && typeof d.detail === 'object' && d.detail) || d || {};
@@ -549,6 +535,7 @@ async function init(){
   const hash = new URLSearchParams(location.hash.slice(1));
   const sid = q.get('session_id'), rec = hash.get('r'), login = hash.get('login');
   if (sid || q.get('topup') || rec || login || q.has('wallet')) history.replaceState(null, '', location.pathname);
+  $('login-open').href = loginHref();
   try {
     const r = await fetch('/api/billing/config');
     if (r.ok) {
