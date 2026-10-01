@@ -58,6 +58,17 @@ _NON_HUMAN_IDENTITY = re.compile(
 )
 
 
+def is_operator_agent(participant: Any) -> bool:
+    """Externer Agent (Operator): der Server markiert dessen Token mit vh.role=agent
+    (server.py, invite=1-Zweig von /token)."""
+    attrs = getattr(participant, "attributes", None) or {}
+    return attrs.get("vh.role") == "agent"
+
+
+def operator_agent_present(room: Any) -> bool:
+    return any(is_operator_agent(p) for p in room.remote_participants.values())
+
+
 def _positive_env_seconds(name: str, default: float) -> float:
     raw = os.environ.get(name, "")
     try:
@@ -463,6 +474,14 @@ async def entrypoint(ctx: JobContext) -> None:
             return
         asyncio.create_task(handler(packet))
 
+    # Werksrolle (voicehook-Guide) automatisch aus, sobald ein externer Agent im Raum
+    # ist, auch ohne Persona-Push; geht der letzte Agent, ist sie wieder an.
+    def _sync_role(*_args) -> None:  # noqa: ANN002
+        asyncio.create_task(handlers.on_agent_presence(operator_agent_present(ctx.room)))
+
+    for _ev in ("participant_connected", "participant_disconnected", "participant_attributes_changed"):
+        ctx.room.on(_ev, _sync_role)
+
     # Publish user STT transcripts back on the `transcript` topic so the
     # browser UI sees what the agent heard. (v3 parity, PR-12.)
     @session.on("user_input_transcribed")
@@ -568,6 +587,8 @@ async def entrypoint(ctx: JobContext) -> None:
         room=ctx.room,
         room_options=room_io.RoomOptions(close_on_disconnect=True, delete_room_on_close=False),
     )
+    # Agent war schon vor voice-ai im Raum (Operator-Join dispatcht voice-ai erst)
+    await handlers.on_agent_presence(operator_agent_present(ctx.room))
 
 
 def build_worker_options() -> WorkerOptions:
