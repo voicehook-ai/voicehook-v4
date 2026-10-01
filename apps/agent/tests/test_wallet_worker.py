@@ -73,7 +73,7 @@ def test_normal_call_charges_factor_3(monkeypatch):
     assert db.balance_ueur(acc) == 10_000_000 - expected
 
 
-def test_live_call_charges_factor_1_5_and_budget_unchanged(monkeypatch):
+def test_live_call_charges_factor_1_5_and_skips_month_budget(monkeypatch):
     acc = _account(1000)
     db.bind_room("r1", acc, "live")
     rt = _metric("RealtimeModelMetrics", input_tokens=1000, output_tokens=500,
@@ -81,7 +81,7 @@ def test_live_call_charges_factor_1_5_and_budget_unchanged(monkeypatch):
     _run(monkeypatch, live_mode=True, metrics=[rt])
     usd = (1000 * 3.00 + 500 * 12.00) / 1e6
     assert db.balance_ueur(acc) == 10_000_000 - round(usd * pricing.DEFAULT_USD_EUR * 1.5 * 1.19 * 1e6)
-    assert budget.spent_usd() == pytest.approx(usd)            # Live-Monatsbudget bucht weiter
+    assert budget.spent_usd() == 0                              # Review #7: Budget nur Gratis/Demo
 
 
 def test_room_without_wallet_is_not_charged(monkeypatch):
@@ -138,8 +138,8 @@ def test_charger_fails_closed_on_db_error(monkeypatch):
 # ----- Review 01.10. LOW: Raum ohne Wallet öffnet die DB nicht je Kostenereignis --
 def test_unbound_room_reads_wallet_binding_once_per_job(monkeypatch):
     calls = []
-    real = db.room_wallet
-    monkeypatch.setattr(db, "room_wallet", lambda room: calls.append(room) or real(room))
+    real = db.room_binding
+    monkeypatch.setattr(db, "room_binding", lambda room: calls.append(room) or real(room))
     opened = []
     real_connect = db.connect
     stt = _metric("STTMetrics", audio_duration=1.0)

@@ -10,6 +10,9 @@ __SITE_MAIN__ {
   }
   @api path /api/* /healthz /status
   handle @api {
+    # Kein trusted_proxies: Caddy verwirft eingehende X-Forwarded-For-Werte und setzt
+    # die echte Client-IP. Die API nimmt das LETZTE Element (server._client_ip). Kommt
+    # je ein CDN davor, hier trusted_proxies <CDN-Netze> setzen, sonst zählt die CDN-IP.
     reverse_proxy 127.0.0.1:7400
   }
   handle {

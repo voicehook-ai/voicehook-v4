@@ -361,7 +361,7 @@ async function recover(code){
   try {
     const r = await fetch('/api/wallet/recover', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ code }) });
     if (!r.ok) { showMsg(T.badRec, true); return; }
-    const d = await r.json(); setToken(d.wallet_token); showDone(d, null, T.restored);
+    const d = await r.json(); setToken(d.wallet_token); showDone(d, d.recovery_url, T.restored);  // alter Link ist jetzt ungültig: neuen zeigen
   } catch { showMsg(T.err, true); }
 }
 

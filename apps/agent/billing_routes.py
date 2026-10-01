@@ -268,8 +268,12 @@ class RecoverRequest(BaseModel):
 
 @router.post("/api/wallet/recover")
 def api_wallet_recover(req: RecoverRequest) -> dict:
-    """Wiederherstellungs-Link einlösen -> neues Wallet-Token für dieses Gerät."""
-    acc = db.account_for_token(req.code, "recovery")
-    if acc is None:
+    """Wiederherstellungs-Link einlösen -> neues Wallet-Token für dieses Gerät.
+
+    Der Code wird dabei rotiert (Review 01.10. #7): der alte Link gilt nicht mehr,
+    die Antwort enthält den neuen (recovery_url), die Seite zeigt ihn an."""
+    got = db.redeem_recovery(req.code)
+    if got is None:
         raise HTTPException(status_code=404, detail="unknown recovery code")
-    return {"wallet_token": db.issue_token(acc, "wallet"), **_wallet_view(acc)}
+    acc, token, code = got
+    return {"wallet_token": token, "recovery_url": _recovery_url(code), **_wallet_view(acc)}

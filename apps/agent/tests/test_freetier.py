@@ -101,11 +101,17 @@ def test_limit_hits_when_either_anon_or_ip_reached(client):
     assert _live(client, ANON_B, ip="2.2.2.2").status_code == 200   # Positivkontrolle: beides frisch
 
 
-def test_ip_from_first_forwarded_for_element(client):
+def test_ip_from_last_forwarded_for_element(client):
+    """Review 01.10. #4: das letzte Element hat Caddy gesetzt, davor kann der Client
+    beliebiges eintragen. Ein vorangestellter Fake-Wert umgeht die Sperre nicht."""
     _use(None, ip="5.5.5.5", minutes=20)
     r = client.post("/api/live-room", json={"identity": "u"},
-                    headers={"x-forwarded-for": "5.5.5.5, 10.0.0.1"})
+                    headers={"x-forwarded-for": "9.9.9.9, 5.5.5.5"})
     assert r.status_code == 402
+    # Positivkontrolle: eine andere echte (letzte) IP ist frei
+    r = client.post("/api/live-room", json={"identity": "u"},
+                    headers={"x-forwarded-for": "5.5.5.5, 6.6.6.6"})
+    assert r.status_code == 200
 
 
 def test_new_utc_day_resets(client):
@@ -232,7 +238,8 @@ def test_worker_paid_room_is_not_tracked(monkeypatch):
     assert freetier.used_seconds(keys, "live") == 0
 
 
-def test_worker_room_without_free_entry_is_not_limited(monkeypatch):
+def test_worker_admin_room_exempt_is_not_limited(monkeypatch):
     monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_LIVE", str(0.1 / 60))
+    freetier.register_room("admin-room", "live", [], exempt=True)
     ctx, _ = _run_free(monkeypatch, room="admin-room", humans=1, wait_s=0.4)
     ctx.shutdown.assert_not_called()

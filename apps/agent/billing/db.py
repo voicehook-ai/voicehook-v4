@@ -5,11 +5,12 @@ laufen auf derselben Box und teilen sich das State-Verzeichnis). WAL + Busy-Time
 jede Schreiboperation in einer eigenen BEGIN-IMMEDIATE-Transaktion.
 
 Schema:
-    accounts(id, email, balance_ueur, created_at, updated_at)
+    accounts(id, email, balance_ueur, debt_ueur, created_at, updated_at)
         Konto = Wallet (geheimes Token + Wiederherstellungs-Link), NICHT die E-Mail.
         Die Checkout-E-Mail wird nur vermerkt; Stripe prüft sie nicht, deshalb wird
         NIE über die E-Mail zusammengeführt (Review 01.10.: Konto-Übernahme).
-        Saldo in µEUR, brutto.
+        Saldo in µEUR, brutto. debt_ueur = offener Fehlbetrag aus Erstattung/
+        Rückbuchung, wird bei der nächsten Gutschrift zuerst verrechnet.
     tokens(token_hash PK, account_id, kind 'wallet'|'recovery', created_at, last_used_at)
         Nur SHA-256 der Tokens wird gespeichert; der Klartext geht genau einmal
         an den Browser (Wallet-Token -> localStorage, Recovery -> Link).
@@ -20,11 +21,15 @@ Schema:
     reversals(key PK, session_id, kind 'refund'|'dispute', cents, debited_ueur,
               shortfall_ueur, ts)
         Erstattungen/Rückbuchungen: je Schlüssel genau einmal abgezogen. Reicht der
-        Saldo nicht, bleibt er bei 0 und der Fehlbetrag steht in shortfall_ueur.
-    room_wallets(room PK, account_id, mode, created_at)
-        Welches Konto zahlt für welchen Raum (erste Zuordnung gewinnt).
+        Saldo nicht, bleibt er bei 0 und der Fehlbetrag steht in shortfall_ueur
+        (und als Schuld in accounts.debt_ueur).
+    room_wallets(room PK, account_id, mode, created_at, expires_at, closed_at)
+        Welches Konto zahlt für welchen Raum (erste Zuordnung gewinnt). Gilt nur
+        bis expires_at (= Anlage + Token-TTL) und nur bis zum Call-Ende (closed_at,
+        vom Worker gesetzt). Danach läuft kein Call mehr auf Kosten des Kontos
+        (Review 01.10. #2: sonst Endlos-Calls per bekanntem Slug).
     usage(id, account_id, room, mode, usd, charge_ueur, balance_after_ueur, ts)
-        Jede Abbuchung einzeln, nachvollziehbar.
+        Jede Abbuchung einzeln, nachvollziehbar; charge_ueur = tatsächlich abgezogen.
 """
 
 from __future__ import annotations
@@ -35,6 +40,7 @@ import os
 import secrets
 import sqlite3
 import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -46,6 +52,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
     email TEXT NOT NULL,
     balance_ueur INTEGER NOT NULL DEFAULT 0,
+    debt_ueur INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -77,7 +84,9 @@ CREATE TABLE IF NOT EXISTS room_wallets (
     room TEXT PRIMARY KEY,
     account_id TEXT NOT NULL REFERENCES accounts(id),
     mode TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    expires_at REAL,
+    closed_at TEXT
 );
 CREATE TABLE IF NOT EXISTS usage (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,6 +125,15 @@ def _migrate(conn: sqlite3.Connection) -> None:
     cols = {r[1] for r in conn.execute("PRAGMA table_info(stripe_sessions)").fetchall()}
     if "payment_intent" not in cols:
         conn.execute("ALTER TABLE stripe_sessions ADD COLUMN payment_intent TEXT")
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(accounts)").fetchall()}
+    if "debt_ueur" not in cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN debt_ueur INTEGER NOT NULL DEFAULT 0")
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(room_wallets)").fetchall()}
+    if "expires_at" not in cols:  # Altbestand ohne Ablauf: sofort abgelaufen (fail-closed)
+        conn.execute("ALTER TABLE room_wallets ADD COLUMN expires_at REAL")
+        conn.execute("UPDATE room_wallets SET expires_at = 0")
+    if "closed_at" not in cols:
+        conn.execute("ALTER TABLE room_wallets ADD COLUMN closed_at TEXT")
     conn.executescript(_INDEXES)
 
 
@@ -187,7 +205,7 @@ def account(account_id: str) -> sqlite3.Row | None:
     conn = connect()
     try:
         return conn.execute(
-            "SELECT id, email, balance_ueur, created_at, updated_at FROM accounts WHERE id = ?",
+            "SELECT id, email, balance_ueur, debt_ueur, created_at, updated_at FROM accounts WHERE id = ?",
             (account_id,),
         ).fetchone()
     finally:
@@ -232,9 +250,13 @@ def record_stripe_session(
             " payment_intent) VALUES (?, ?, ?, ?, ?)",
             (session_id, acc, amount_cents, now, payment_intent or None),
         )
+        credit = amount_cents * 10_000  # 1 Cent = 10_000 µEUR
+        debt = int(conn.execute("SELECT debt_ueur FROM accounts WHERE id = ?", (acc,)).fetchone()[0])
+        offset = min(debt, credit)  # offener Fehlbetrag (Erstattung/Rückbuchung) zuerst
         conn.execute(
-            "UPDATE accounts SET balance_ueur = balance_ueur + ?, updated_at = ? WHERE id = ?",
-            (amount_cents * 10_000, now, acc),  # 1 Cent = 10_000 µEUR
+            "UPDATE accounts SET balance_ueur = balance_ueur + ?, debt_ueur = debt_ueur - ?,"
+            " updated_at = ? WHERE id = ?",
+            (credit - offset, offset, now, acc),
         )
     return True
 
@@ -270,41 +292,112 @@ def issue_token(account_id: str, kind: str = "wallet") -> str:
     return token
 
 
+_LAST_USED_EVERY_S = 3600  # last_used_at höchstens stündlich schreiben (Lesen ohne Schreibsperre)
+
+
 def account_for_token(token: str | None, kind: str = "wallet") -> str | None:
+    """Konto zum Token. Reiner Lesezugriff ohne BEGIN IMMEDIATE (Review 01.10. #7):
+    Saldo-Abfragen blockieren keine Abbuchung. last_used_at nur, wenn älter als 1 h."""
     if not token or len(token) > 200:
         return None
-    with _Tx() as conn:
+    h = _hash(token)
+    conn = connect()
+    try:
         row = conn.execute(
-            "SELECT account_id FROM tokens WHERE token_hash = ? AND kind = ?", (_hash(token), kind)
+            "SELECT account_id, last_used_at FROM tokens WHERE token_hash = ? AND kind = ?", (h, kind)
         ).fetchone()
         if row is None:
             return None
-        conn.execute(
-            "UPDATE tokens SET last_used_at = ? WHERE token_hash = ?", (_now(), _hash(token))
-        )
+        last = row["last_used_at"]
+        stale = True
+        if last:
+            with contextlib.suppress(ValueError):
+                stale = (datetime.now(UTC) - datetime.fromisoformat(last)).total_seconds() > _LAST_USED_EVERY_S
+        if stale:  # Zeitstempel ist Komfort: nie warten (busy_timeout 0), Sperre -> auslassen
+            conn.execute("PRAGMA busy_timeout = 0")
+            with contextlib.suppress(sqlite3.OperationalError):
+                conn.execute("UPDATE tokens SET last_used_at = ? WHERE token_hash = ?", (_now(), h))
         return row["account_id"]
+    finally:
+        conn.close()
+
+
+def redeem_recovery(code: str | None) -> tuple[str, str, str] | None:
+    """Recovery-Code einlösen und dabei ROTIEREN (Review 01.10. #7): der alte Code
+    gilt danach nicht mehr. Liefert (account_id, neues Wallet-Token, neuer Code)."""
+    if not code or len(code) > 200:
+        return None
+    wallet = "vhw_" + secrets.token_urlsafe(32)
+    new_code = "vhr_" + secrets.token_urlsafe(32)
+    with _Tx() as conn:
+        row = conn.execute(
+            "SELECT account_id FROM tokens WHERE token_hash = ? AND kind = 'recovery'", (_hash(code),)
+        ).fetchone()
+        if row is None:
+            return None
+        acc = row["account_id"]
+        now = _now()
+        conn.execute("DELETE FROM tokens WHERE token_hash = ?", (_hash(code),))
+        conn.executemany(
+            "INSERT INTO tokens (token_hash, account_id, kind, created_at) VALUES (?, ?, ?, ?)",
+            [(_hash(wallet), acc, "wallet", now), (_hash(new_code), acc, "recovery", now)],
+        )
+    return acc, wallet, new_code
 
 
 # ----- Raum -> Konto ----------------------------------------------------------
-def bind_room(room: str, account_id: str, mode: str) -> bool:
-    """Konto zahlt für diesen Raum. Erste Zuordnung gewinnt (True = neu gebunden)."""
+DEFAULT_BIND_TTL_S = 3600
+
+
+def bind_room(room: str, account_id: str, mode: str, ttl_seconds: float = DEFAULT_BIND_TTL_S,
+              *, now: float | None = None) -> bool:
+    """Konto zahlt für diesen Raum, längstens `ttl_seconds` (= Token-TTL) und nur bis
+    zum Call-Ende (close_room). Erste Zuordnung gewinnt (True = neu gebunden)."""
+    now = time.time() if now is None else now
     with _Tx() as conn:
         cur = conn.execute(
-            "INSERT OR IGNORE INTO room_wallets (room, account_id, mode, created_at) VALUES (?, ?, ?, ?)",
-            (room, account_id, mode, _now()),
+            "INSERT OR IGNORE INTO room_wallets (room, account_id, mode, created_at, expires_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (room, account_id, mode, _now(), now + float(ttl_seconds)),
         )
         return cur.rowcount == 1
 
 
-def room_wallet(room: str) -> tuple[str, str] | None:
+def room_binding(room: str, now: float | None = None) -> tuple[str, str, str] | None:
+    """(account_id, mode, state) mit state 'active' | 'closed' | 'expired', oder None
+    (Raum hat nie einem Konto gehört)."""
+    now = time.time() if now is None else now
     conn = connect()
     try:
         row = conn.execute(
-            "SELECT account_id, mode FROM room_wallets WHERE room = ?", (room,)
+            "SELECT account_id, mode, expires_at, closed_at FROM room_wallets WHERE room = ?", (room,)
         ).fetchone()
     finally:
         conn.close()
-    return (row["account_id"], row["mode"]) if row else None
+    if row is None:
+        return None
+    if row["closed_at"]:
+        state = "closed"
+    elif row["expires_at"] is None or float(row["expires_at"]) <= now:
+        state = "expired"
+    else:
+        state = "active"
+    return row["account_id"], row["mode"], state
+
+
+def room_wallet(room: str, now: float | None = None) -> tuple[str, str] | None:
+    """(account_id, mode) nur für eine AKTIVE Bindung (nicht beendet, nicht abgelaufen)."""
+    b = room_binding(room, now)
+    return (b[0], b[1]) if b and b[2] == "active" else None
+
+
+def close_room(room: str) -> bool:
+    """Call-Ende: Bindung schließen, danach zahlt das Konto für diesen Raum nichts mehr."""
+    with _Tx() as conn:
+        cur = conn.execute(
+            "UPDATE room_wallets SET closed_at = ? WHERE room = ? AND closed_at IS NULL", (_now(), room)
+        )
+        return cur.rowcount == 1
 
 
 # ----- Abbuchung --------------------------------------------------------------
@@ -317,7 +410,8 @@ def charge(account_id: str, ueur: int, *, room: str, mode: str, usd: float) -> i
         ).fetchone()
         if row is None:
             return 0
-        new = max(0, int(row["balance_ueur"]) - ueur)
+        old = int(row["balance_ueur"])
+        new = max(0, old - ueur)
         now = _now()
         conn.execute(
             "UPDATE accounts SET balance_ueur = ?, updated_at = ? WHERE id = ?", (new, now, account_id)
@@ -325,7 +419,7 @@ def charge(account_id: str, ueur: int, *, room: str, mode: str, usd: float) -> i
         conn.execute(
             "INSERT INTO usage (account_id, room, mode, usd, charge_ueur, balance_after_ueur, ts)"
             " VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (account_id, room, mode, float(usd), ueur, new, now),
+            (account_id, room, mode, float(usd), old - new, new, now),  # tatsächlich abgezogen
         )
         return new
 
@@ -341,7 +435,8 @@ def reverse_payment(
     Gesamtsumme dieser Art (Stripe meldet bei charge.refunded `amount_refunded`
     kumuliert), abgezogen wird dann nur der Zuwachs. Immer gedeckelt auf das, was
     von der Session noch nicht zurückgenommen wurde. Der Saldo fällt nie unter 0;
-    der nicht gedeckte Teil wird in reversals.shortfall_ueur vermerkt.
+    der nicht gedeckte Teil wird in reversals.shortfall_ueur vermerkt und als Schuld
+    (accounts.debt_ueur) bei der nächsten Gutschrift abgezogen.
     Ergebnis: {'status': 'reversed'|'duplicate'|'unknown_payment'|'nothing', ...}.
     """
     with _Tx() as conn:
@@ -376,10 +471,11 @@ def reverse_payment(
             " VALUES (?, ?, ?, ?, ?, ?, ?)",
             (key, s["session_id"], kind, cents, debited, shortfall, now),
         )
-        if debited:
+        if debited or shortfall:
             conn.execute(
-                "UPDATE accounts SET balance_ueur = balance_ueur - ?, updated_at = ? WHERE id = ?",
-                (debited, now, s["account_id"]),
+                "UPDATE accounts SET balance_ueur = balance_ueur - ?, debt_ueur = debt_ueur + ?,"
+                " updated_at = ? WHERE id = ?",
+                (debited, shortfall, now, s["account_id"]),
             )
         return {"status": "reversed" if cents else "nothing", "account_id": s["account_id"],
                 "cents": cents, "debited_ueur": debited, "shortfall_ueur": shortfall}

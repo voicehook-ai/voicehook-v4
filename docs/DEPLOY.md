@@ -119,7 +119,10 @@ meldet `/api/billing/config` `checkout_available: false`, die Seite zeigt "bald 
 Konto = Wallet (Token im Browser + Wiederherstellungs-Link), nie die E-Mail: ein Checkout ohne
 gültiges Wallet-Token legt immer ein neues Konto an. Zahlen tut nur, wer den Raum über
 `/api/host-call` oder `/api/live-room` mit `X-Wallet-Token` anlegt; `/api/token` (Beitritt per
-Einladung) bindet nie ein Wallet.
+Einladung) bindet nie ein Wallet. Die Bindung Raum -> Wallet gilt nur bis zum Call-Ende (der Worker
+schließt sie) und höchstens die Token-TTL; danach antworten Joins in diesen Raum mit 410 und der
+Worker lehnt ihn ab. Ein Fehlbetrag aus Erstattung/Rückbuchung wird bei der nächsten Gutschrift auf
+dasselbe Konto zuerst verrechnet. Der Wiederherstellungs-Link gilt genau einmal und wird dabei erneuert.
 
 | Env in `/opt/voicehook/.env` | Default | Bedeutung |
 |---|---|---|
@@ -147,9 +150,11 @@ Signing-Secret als `STRIPE_WEBHOOK_SECRET` setzen, danach Agent neu starten (Env
 Räume ohne Wallet bekommen höchstens `VOICEHOOK_FREE_MIN_PER_DAY_*` Gesprächsminuten pro UTC-Tag
 (Zeit mit mindestens einem Menschen im Raum). Gezählt wird je Merkmal des Raum-Erstellers: anonyme
 ID aus dem Header `X-Anon-Id` (8 bis 128 Zeichen `A-Za-z0-9_-`, sonst ignoriert) und Client-IP
-(erstes Element von `X-Forwarded-For`). Erreicht EINES der Merkmale das Limit, antworten
+(letztes Element von `X-Forwarded-For`, das Caddy selbst setzt; IPv6 je /64-Netz). Erreicht EINES der Merkmale das Limit, antworten
 `/api/host-call` bzw. `/api/live-room` mit 402 `{error: free_limit, topup_url: /aufladen}`; ein
 laufender Gratis-Call endet mit der Ansage "Deine Gratisminuten für heute sind um. Lade Guthaben
 auf." Gespeichert werden nur SHA-256-Hashes der Merkmale in `/opt/voicehook/state/freetier.sqlite`
 (älter als 7 Tage wird gelöscht). Räume mit Wallet sind ausgenommen. Die Obergrenze pro Live-Call
-(`VH_MAX_CALL_SECONDS=1200` im Live-Dienst) gilt zusätzlich.
+(`VH_MAX_CALL_SECONDS=1200` im Live-Dienst) gilt zusätzlich. Der Live-Worker ist fail-closed: ein
+Live-Raum ohne Wallet und ohne Gratis-Eintrag wird abgelehnt (Admin-Räume stehen als Ausnahme drin).
+Das Live-Monatsbudget gilt nur für Gratis/Demo-Räume, Wallet-Räume sind davon ausgenommen.

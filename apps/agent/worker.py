@@ -106,8 +106,10 @@ class CallGuard:
         idle_seconds: float,
         clock: Callable[[], float] = time.monotonic,
         live: bool = False,
+        on_end: Callable[[], Any] | None = None,
     ) -> None:
         self._live = live
+        self._on_end = on_end  # z. B. Wallet-Bindung schließen; läuft vor shutdown, nie blockierend
         self._ctx = ctx
         self._session = session
         self._max_seconds = max_seconds
@@ -215,6 +217,11 @@ class CallGuard:
             if delete_room:
                 await self._bounded("delete_room", self._ctx.delete_room(room_name))
         finally:
+            if self._on_end is not None:
+                try:
+                    self._on_end()  # kurzer SQLite-Schreibzugriff, Fehler nie bis shutdown durchreichen
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("[call_guard] on_end failed: %r", e)
             self._ctx.shutdown(reason=f"call_guard:{reason}")
 
     async def _announce(self, text: str) -> None:
@@ -238,7 +245,9 @@ class WalletCharger:
 
     Die Zuordnung Raum -> Konto legt der HTTP-Server an (nur host-call / live-room,
     VOR dem Dispatch) in derselben SQLite-Datei; ohne Zuordnung bucht der Charger
-    nichts (Call wie bisher). Die Zuordnung wird genau EINMAL je Job gelesen: ein Raum
+    nichts (Call wie bisher). Ist die Zuordnung beendet (Call-Ende) oder abgelaufen
+    (TTL), gilt der Raum als `refused`: der Worker lehnt ihn ab, nie läuft ein Call
+    auf Kosten des Kontos weiter (Review 01.10. #1). Die Zuordnung wird genau EINMAL je Job gelesen: ein Raum
     ohne Wallet öffnet danach bei keinem Kostenereignis mehr die Datenbank.
     charge() liefert genau EINMAL True, sobald der Saldo <= 0 ist; ein Buchungsfehler
     bei gebundenem Konto zählt als leer (fail-closed).
@@ -249,19 +258,31 @@ class WalletCharger:
         self.mode = mode  # "normal" | "live" -> Faktor 3 | 1,5
         self.account: str | None = None
         self.exhausted = False
+        self.refused = False
         self._looked_up = False
 
     def lookup(self) -> str | None:
         if not self._looked_up:
             self._looked_up = True
             try:
-                bound = billing_db.room_wallet(self.room)
+                bound = billing_db.room_binding(self.room)
             except Exception as e:  # noqa: BLE001
                 logger.error("[wallet] lookup room=%s failed: %s", self.room, e)
                 bound = None
-            if bound:
+            if bound and bound[2] == "active":
                 self.account = bound[0]
+            elif bound:
+                self.refused = True  # Bindung beendet/abgelaufen: nicht auf dessen Kosten
         return self.account
+
+    def close(self) -> None:
+        """Call-Ende: Bindung schließen (danach kein neuer Call auf Kosten des Kontos)."""
+        if self.account is None:
+            return
+        try:
+            billing_db.close_room(self.room)
+        except Exception as e:  # noqa: BLE001
+            logger.error("[wallet] close room=%s failed: %s", self.room, e)
 
     def is_empty(self) -> bool:
         acc = self.lookup()
@@ -311,9 +332,11 @@ class FreeMinutes:
         self.keys: list[str] = []
         self._clock = clock
         self._task: asyncio.Task | None = None
+        self.known = False  # Raum steht in free_rooms (gezählt oder Admin-Ausnahme)
 
     def load(self) -> bool:
-        """True = Gratis-Raum mit aktivem Limit, wird gezählt."""
+        """True = Gratis-Raum mit aktivem Limit, wird gezählt. `known` sagt, ob der
+        Raum überhaupt als Gratis-/Admin-Raum angelegt wurde (Lesefehler -> unbekannt)."""
         if not freetier.enabled(self.mode):
             return False
         try:
@@ -321,6 +344,7 @@ class FreeMinutes:
         except Exception as e:  # noqa: BLE001
             logger.error("[free] lookup room=%s failed: %s", self.room, e)
             return False
+        self.known = found is not None
         if not found or not found[1]:
             return False
         self.keys = found[1]
@@ -391,16 +415,33 @@ async def entrypoint(ctx: JobContext) -> None:
     )
 
     live_mode = is_live()
-    if live_mode and budget.exhausted():
-        # Monatsbudget weg: gar nicht erst eine kostenpflichtige Live-Session öffnen.
+    mode = "live" if live_mode else "normal"
+    wallet = WalletCharger(ctx.room.name, mode)
+    paid = wallet.lookup() is not None
+    if wallet.refused:
+        # Bindung beendet oder abgelaufen: der Raum läuft nie wieder auf Kosten des Kontos.
+        logger.warning("[wallet] binding closed/expired, refusing room=%s", ctx.room.name)
+        ctx.shutdown(reason="wallet_binding_closed")
+        return
+    if live_mode and not paid and budget.exhausted():
+        # Monatsbudget (nur Gratis/Demo) weg: keine kostenpflichtige Live-Session öffnen.
         logger.warning("[live-budget] exhausted (%.2f USD), refusing room=%s", budget.spent_usd(), ctx.room.name)
         ctx.shutdown(reason="live_budget_exhausted")
         return
-    wallet = WalletCharger(ctx.room.name, "live" if live_mode else "normal")
     if wallet.is_empty():
         # Raum gehört einem Wallet ohne Guthaben: keine kostenpflichtige Session öffnen.
         logger.warning("[wallet] empty, refusing room=%s", ctx.room.name)
         ctx.shutdown(reason="wallet_empty")
+        return
+    # Gratis-Kontingent: nur Räume ohne Wallet, die der HTTP-Server als Gratis-Raum
+    # angelegt hat (host-call / live-room). Bezahlte Räume sind ausgenommen.
+    free = FreeMinutes(ctx.room.name, mode)
+    counted = not paid and free.load()
+    if live_mode and not paid and freetier.enabled("live") and not free.known:
+        # fail-closed (Review 01.10. #2): Live-Raum ohne Wallet und ohne Gratis-Eintrag
+        # (z. B. aufgeräumt oder nie über live-room angelegt) läuft nicht unbegrenzt.
+        logger.warning("[free] live room=%s has neither wallet nor free entry, refusing", ctx.room.name)
+        ctx.shutdown(reason="free_room_unknown")
         return
     session = build_session()
     if live_mode:
@@ -453,7 +494,7 @@ async def entrypoint(ctx: JobContext) -> None:
         usd = meter.add(m)
         if usd <= 0:
             return
-        if live_mode:
+        if live_mode and not paid:  # Monatsbudget nur für Gratis/Demo (Review #7)
             month = budget.add_usd(usd)
             if month >= budget.limit_usd() and guard_ref:
                 logger.warning("[live-budget] reached %.4f USD in room=%s, ending call", month, ctx.room.name)
@@ -513,13 +554,11 @@ async def entrypoint(ctx: JobContext) -> None:
         max_seconds=max_call_seconds(),
         idle_seconds=idle_no_human_seconds(),
         live=live_mode,
+        on_end=wallet.close if paid else None,
     )
     guard_ref.append(guard)
     guard.start()
-    # Gratis-Kontingent: nur Räume ohne Wallet, die der HTTP-Server als Gratis-Raum
-    # angelegt hat (host-call / live-room). Bezahlte Räume sind ausgenommen.
-    free = FreeMinutes(ctx.room.name, "live" if live_mode else "normal")
-    if wallet.lookup() is None and free.load():
+    if counted:
         free.start(guard)
     # Explicit room options (don't rely on lib defaults): close the session when
     # the linked participant leaves. Room deletion is owned by CallGuard so it

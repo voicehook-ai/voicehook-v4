@@ -256,7 +256,8 @@ def test_db_charge_clamps_and_logs_usage():
     conn = db.connect()
     rows = conn.execute("SELECT charge_ueur, balance_after_ueur FROM usage ORDER BY id").fetchall()
     conn.close()
-    assert [tuple(r) for r in rows] == [(4_000_000, 6_000_000), (9_000_000, 0)]
+    # Review 01.10. #5: protokolliert wird der TATSÄCHLICH abgezogene Betrag (6, nicht 9 EUR)
+    assert [tuple(r) for r in rows] == [(4_000_000, 6_000_000), (6_000_000, 0)]
 
 
 # ----- Gating ---------------------------------------------------------------------

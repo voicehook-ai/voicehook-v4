@@ -6,7 +6,9 @@ UTC-Tag. Gesprächsminuten = Zeit, in der mindestens ein Mensch im Raum ist.
 Identität ohne Login, zwei Merkmale je Raum-Ersteller:
   - anonyme ID aus dem Browser (Header X-Anon-Id, die Oberfläche setzt sie aus
     localStorage; ohne/ungültigen Header zählt nur die IP),
-  - Client-IP (X-Forwarded-For erstes Element, wie server._client_ip).
+  - Client-IP (wie server._client_ip: letztes X-Forwarded-For-Element = das, was
+    Caddy selbst angehängt hat). IPv6 zählt je /64-Netz (Review 01.10. #3: ein
+    Anschluss bekommt ein ganzes /64, sonst neue Adresse = neues Kontingent).
 Gezählt wird je Merkmal; das Limit greift, sobald EINES der Merkmale es erreicht.
 Gespeichert werden nur SHA-256-Hashes der Merkmale, nie IP oder ID im Klartext.
 
@@ -18,12 +20,18 @@ Annahme: Live- und Normal-Minuten zählen getrennt (je Modus ein Zähler).
 Datei: $VOICEHOOK_STATE_DIR/freetier.sqlite. Der HTTP-Server prüft beim Anlegen des
 Raums (402 free_limit) und merkt sich Raum -> Merkmale; der Worker liest das EINMAL
 beim Start und bucht im Takt die Minuten, solange ein Mensch da ist.
+
+free_rooms wird _KEEP_DAYS (7) Tage gehalten, länger als jede Raumzuordnung im
+Server (Token-TTL max. 1 Tag). Der Live-Worker ist fail-closed: Live-Raum ohne
+Wallet und ohne free_rooms-Eintrag wird abgelehnt (Review 01.10. #2). Admin-Räume
+stehen mit exempt=1 drin (nicht gezählt, aber bekannt).
 """
 
 from __future__ import annotations
 
 import contextlib
 import hashlib
+import ipaddress
 import os
 import re
 import sqlite3
@@ -53,7 +61,8 @@ CREATE TABLE IF NOT EXISTS free_rooms (
     room TEXT PRIMARY KEY,
     mode TEXT NOT NULL,
     keys TEXT NOT NULL,
-    created_at REAL NOT NULL
+    created_at REAL NOT NULL,
+    exempt INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -91,6 +100,20 @@ def _hash(kind: str, value: str) -> str:
     return kind + ":" + hashlib.sha256(f"{kind}:{value}".encode()).hexdigest()
 
 
+def ip_bucket(ip: str) -> str:
+    """IP -> Zähl-Einheit: IPv4 voll, IPv6 als /64-Netz (IPv4-gemappt -> IPv4).
+    Unparsebares bleibt wie es ist (z. B. 'unknown')."""
+    try:
+        addr = ipaddress.ip_address(ip.split("%", 1)[0])
+    except ValueError:
+        return ip
+    if isinstance(addr, ipaddress.IPv6Address):
+        if addr.ipv4_mapped:
+            return str(addr.ipv4_mapped)
+        return str(ipaddress.IPv6Network((addr, 64), strict=False))
+    return str(addr)
+
+
 def identity_keys(anon_id: str | None, ip: str | None) -> list[str]:
     """Merkmale eines Anfragenden (gehasht). Ungültige Anon-ID wird ignoriert."""
     keys = []
@@ -99,7 +122,7 @@ def identity_keys(anon_id: str | None, ip: str | None) -> list[str]:
         keys.append(_hash("anon", anon))
     ip = (ip or "").strip()
     if ip:
-        keys.append(_hash("ip", ip))
+        keys.append(_hash("ip", ip_bucket(ip)))
     return keys
 
 
@@ -119,6 +142,9 @@ def connect() -> sqlite3.Connection:
         with _INIT_LOCK:
             if key not in _INITIALIZED:
                 conn.executescript(_SCHEMA)
+                cols = {r[1] for r in conn.execute("PRAGMA table_info(free_rooms)").fetchall()}
+                if "exempt" not in cols:
+                    conn.execute("ALTER TABLE free_rooms ADD COLUMN exempt INTEGER NOT NULL DEFAULT 0")
                 _INITIALIZED.add(key)
     return conn
 
@@ -167,18 +193,23 @@ def add_seconds(keys: Iterable[str], mode: str, seconds: float, now: float | Non
         conn.close()
 
 
-def register_room(room: str, mode: str, keys: Iterable[str], now: float | None = None) -> None:
-    """Gratis-Raum merken (Raum -> Merkmale des Erstellers), alte Einträge aufräumen."""
+def register_room(
+    room: str, mode: str, keys: Iterable[str], now: float | None = None, *, exempt: bool = False
+) -> None:
+    """Gratis-Raum merken (Raum -> Merkmale des Erstellers), alte Einträge aufräumen.
+    exempt=True: Raum ist bekannt, wird aber nicht gezählt (Admin-Testraum)."""
     now = time.time() if now is None else now
     conn = connect()
     try:
         conn.execute("BEGIN IMMEDIATE")
         try:
             conn.execute(
-                "INSERT OR REPLACE INTO free_rooms (room, mode, keys, created_at) VALUES (?, ?, ?, ?)",
-                (room, mode, ",".join(keys), now),
+                "INSERT OR REPLACE INTO free_rooms (room, mode, keys, created_at, exempt) VALUES (?, ?, ?, ?, ?)",
+                (room, mode, ",".join(keys), now, 1 if exempt else 0),
             )
-            conn.execute("DELETE FROM free_rooms WHERE created_at < ?", (now - 2 * 86400,))
+            # Länger halten als jede Raumzuordnung (Token-TTL <= 1 Tag), sonst fiele ein
+            # alter Raum aus der Zählung (Review 01.10. #2).
+            conn.execute("DELETE FROM free_rooms WHERE created_at < ?", (now - _KEEP_DAYS * 86400,))
             conn.execute("DELETE FROM free_usage WHERE day < ?", (day_key(now - _KEEP_DAYS * 86400),))
             conn.execute("COMMIT")
         except BaseException:
@@ -189,12 +220,15 @@ def register_room(room: str, mode: str, keys: Iterable[str], now: float | None =
 
 
 def room_keys(room: str) -> tuple[str, list[str]] | None:
-    """(mode, keys) eines Gratis-Raums oder None (Raum mit Wallet / anderer Weg)."""
+    """(mode, keys) eines Gratis-Raums oder None (Raum mit Wallet / anderer Weg).
+    Admin-Räume (exempt) liefern leere keys: bekannt, aber nicht gezählt."""
     conn = connect()
     try:
-        row = conn.execute("SELECT mode, keys FROM free_rooms WHERE room = ?", (room,)).fetchone()
+        row = conn.execute("SELECT mode, keys, exempt FROM free_rooms WHERE room = ?", (room,)).fetchone()
     finally:
         conn.close()
     if row is None:
         return None
+    if row[2]:
+        return row[0], []
     return row[0], [k for k in row[1].split(",") if k]
