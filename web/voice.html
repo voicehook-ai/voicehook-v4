@@ -139,6 +139,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'pay.missing': 'Für diesen Modus brauchst du Guthaben',
       'pay.topup': 'Aufladen',
       'free.left': 'Gratis heute: {v}',
+      'free.unl': 'Gratis: unbegrenzt (Test)',
       'bal.label': 'Guthaben {v}',
       'login.link': 'Anmelden', 'login.have': 'Schon Guthaben? Anmelden',
       'login.as': 'angemeldet: {e}',
@@ -276,6 +277,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'pay.missing': 'This mode needs credit',
       'pay.topup': 'Top up',
       'free.left': 'Free today: {v}',
+      'free.unl': 'Free: unlimited (test)',
       'bal.label': 'credit {v}',
       'login.link': 'Log in', 'login.have': 'Already have credit? Log in',
       'login.as': 'logged in: {e}',
@@ -4429,7 +4431,8 @@ function vhModeInfoRender() {
     // eur_per_day 0 = Gratis aus: dann keine Gratis-Angabe.
     if (vhFree && Number(vhFree.eur_per_day) > 0) {
       const eur = Math.max(0, Number(vhFree.eur_left) || 0);
-      parts.push(eur <= 0 ? vhT('pay.free') : vhT('free.left', { v: vhEur ? vhEur.format(eur) : eur.toFixed(2) + ' €' }));
+      if (vhFree.exempt === true) parts.push(vhT('free.unl'));
+      else parts.push(eur <= 0 ? vhT('pay.free') : vhT('free.left', { v: vhEur ? vhEur.format(eur) : eur.toFixed(2) + ' €' }));
     }
     if (vhMe && typeof vhMe.balance_eur === 'number' && isFinite(vhMe.balance_eur) && vhEur) {
       parts.push(vhT('bal.label', { v: vhEur.format(vhMe.balance_eur) }));

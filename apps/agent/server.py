@@ -422,7 +422,10 @@ def _free_info(request: Request) -> dict:
     if not freetier.enabled():
         return {"eur_left": 0.0, "eur_per_day": 0.0}
     keys = freetier.identity_keys(request.headers.get(freetier.ANON_HEADER), _client_ip(request))
-    return {"eur_left": freetier.remaining_eur(keys), "eur_per_day": round(freetier.limit_eur(), 2)}
+    per_day = round(freetier.limit_eur(), 2)
+    if freetier.is_exempt(keys):  # VH_FREE_EXEMPT_KEYS (Owner-Test): unbegrenzt
+        return {"eur_left": per_day, "eur_per_day": per_day, "exempt": True}
+    return {"eur_left": freetier.remaining_eur(keys), "eur_per_day": per_day}
 
 
 def _host_rate_ok(ip: str) -> bool:

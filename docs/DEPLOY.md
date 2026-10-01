@@ -142,6 +142,7 @@ dasselbe Konto zuerst verrechnet. Der Wiederherstellungs-Link gilt genau einmal 
 | `VOICEHOOK_TOPUP_AMOUNTS_EUR` | `10,20,50` | Vorschlagsbeträge |
 | `VOICEHOOK_TOPUP_MIN_EUR` / `_MAX_EUR` | `10` / `200` | Spanne des Drehreglers (Minimum nie unter 10) |
 | `VH_FREE_EUR_PER_DAY` | `1.0` | Gratis-Verbrauch in Euro (Kundenpreis inkl. Faktor und MwSt) pro UTC-Tag und Identität, Normal und Live gemeinsam; `0` = aus; kaputter Wert (kein Zahlwert, negativ, inf/nan) = 0 € Gratis bei weiter aktiver Prüfung (ohne Wallet 402), nie unbegrenzt |
+| `VH_FREE_EXEMPT_KEYS` | leer | Merkmale ohne Gratis-Limit (Owner-Test), kommagetrennt, nur gehashte Keys im Format `anon:<sha256>` / `ip:<sha256>` (siehe unten); leer = keine Ausnahme, kaputte Einträge werden ignoriert |
 | `VH_FREE_TICK_SECONDS` | `5` | Prüftakt der Restzeit-Warnung im Worker (bucht nichts) |
 | `VH_REQUIRE_OPERATOR_INVITE` | `0` | Operator-Join `GET /api/token?invite=1` und `/api/bridge/join` ohne HMAC-Einladung (`op_invite` bzw. `?invite=` in der URL): `0` = Übergangsfrist, erlaubt, aber laut geloggt (`legacy operator join without invite`); `1` = 403. Ungültige Signatur ist immer 403. Umschalten auf `1`, sobald die neue voicehook-agent CLI 1 bis 2 Tage draußen ist und das Log keine Legacy-Joins mehr zeigt |
 
@@ -192,6 +193,24 @@ mit bekanntem Zahler; ein selbst ausgedachter neuer Slug bekommt keinen Gratis-A
 Das Live-Monatsbudget zählt alles, was nicht das Guthaben zahlt: Gratis/Demo-Räume ganz, Wallet-Räume
 ihren Gratis-Teil. Beendet wird am Budget nur ein Raum ohne Wallet; ist das Budget schon erschöpft,
 zahlt bei Wallet-Räumen das Guthaben von Anfang an (kein Gratis-Teil).
+
+**Gratis-Ausnahme für den Owner (`VH_FREE_EXEMPT_KEYS`).** Trifft eines der Merkmale eines
+Anfragenden bzw. Raums die Liste, ist Gratis unbegrenzt: kein 402 `free_limit`, kein Call-Ende
+wegen `free_limit`, in `free_usage_eur` wird nichts gebucht. `/api/me` und `/api/free/remaining`
+liefern dann `free: {eur_left: eur_per_day, eur_per_day, exempt: true}`, die Seite zeigt
+"Gratis: unbegrenzt (Test)". Wallet und Live-Monatsbudget (`budget.py`) bleiben unverändert, die
+Live-Sperre gilt auch für den Owner. In der Env stehen nur Hashes, keine Klartext-IP. Keys lokal
+auf der Box erzeugen (IP und Anon-ID gehen nicht in Logs; Anon-ID = `localStorage` des Browsers,
+IPv6 zählt je /64):
+
+```sh
+cd /opt/voicehook && .venv/bin/python -m agent.freetier keys --ip <ip> --anon <anon-id>
+# Ausgabe: je Merkmal ein Key, zuletzt die fertige Zeile VH_FREE_EXEMPT_KEYS=anon:...,ip:...
+```
+
+Zeile in `/opt/voicehook/.env` eintragen, danach `voicehook-agent` (enthält den HTTP-Server :7400)
+und `voicehook-agent-live` neu starten, nicht während eines laufenden Calls (die Env wird beim Start gelesen). Ein Key reicht (z. B. nur die Anon-ID,
+wenn die IP wechselt).
 
 ### Login per Magic-Link
 

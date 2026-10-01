@@ -368,6 +368,7 @@ class FreeBudget:
         self.counting = False  # Gratis-Teil läuft (geladen und noch nicht aufgebraucht)
         self.done = False      # Gratis-Teil aufgebraucht, Wallet zahlt weiter
         self.left_ueur: int | None = None  # zuletzt bekannter Gratis-Rest (µEUR)
+        self.unlimited = False  # Merkmal in VH_FREE_EXEMPT_KEYS: nie leer, nichts gebucht
         self._looked_up = False
         self._found: tuple[str, list[str]] | None = None
 
@@ -380,6 +381,7 @@ class FreeBudget:
             return False
         self.keys = found[1]
         self.counting = True
+        self.unlimited = freetier.is_exempt(self.keys)  # VH_FREE_EXEMPT_KEYS
         return True
 
     def lookup(self) -> tuple[str, list[str]] | None:
@@ -409,7 +411,7 @@ class FreeBudget:
             return  # inzwischen schon per Kostenereignis entschieden
         if self.left_ueur is None:
             self.left_ueur = left
-        if left > 0:
+        if left > 0 or self.unlimited:
             return
         self.counting = False
         wallet = self._wallet
@@ -433,7 +435,7 @@ class FreeBudget:
             logger.error("[free] book room=%s failed: %s", self.room, e)
             taken, left = 0, 0  # fail-closed
         self.left_ueur = left
-        if left <= 0:
+        if left <= 0 and not self.unlimited:
             self.counting = False
         return ueur - taken
 
