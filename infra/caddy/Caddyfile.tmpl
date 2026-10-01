@@ -21,6 +21,7 @@ __SITE_MAIN__ {
     rewrite @footer {path}.html
     rewrite /security /.well-known/security.txt
     rewrite /aufladen /aufladen.html  # Guthaben aufladen (Stripe Checkout)
+    rewrite /login /login.html  # Anmelden (Google, GitHub, E-Mail-Link)
     try_files {path} /voice.html
     header Cache-Control "no-cache"  # nach jedem Deploy sofort neue Seite (ETag-Revalidierung)
     file_server

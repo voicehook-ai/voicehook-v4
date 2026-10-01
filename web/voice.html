@@ -128,15 +128,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'free.left': 'noch {n} min gratis heute',
       'free.lt1': 'noch unter 1 min gratis heute',
       'bal.label': 'Guthaben {v}',
-      'login.link': 'Anmelden', 'login.have': 'Schon Guthaben? Anmelden', 'login.title': 'Anmelden mit E-Mail-Link',
-      'login.ph': 'deine@email.de', 'login.send': 'Link senden',
-      'login.hint': 'Die E-Mail, die du bei Stripe angegeben hast.',
-      'login.sent': 'Link gesendet. Öffne ihn aus deinem Postfach.',
-      'login.bad': 'Bitte eine gültige E-Mail eingeben',
-      'login.unavail': 'Anmelden bald verfügbar',
-      'login.rate': 'Zu viele Versuche. Bitte warte ein paar Minuten.',
-      'login.mailfail': 'Die E-Mail ließ sich nicht senden. Bitte versuch es später noch einmal.',
-      'login.err': 'Das hat nicht geklappt. Bitte versuch es noch einmal.',
+      'login.link': 'Anmelden', 'login.have': 'Schon Guthaben? Anmelden',
       'login.as': 'angemeldet: {e}',
       'topup.title': 'Guthaben aufladen', 'topup.amount': 'Betrag', 'topup.close': 'Schließen',
       'topup.go': 'Weiter zu Stripe · {a}', 'topup.busy': 'Verbinde mit Stripe …',
@@ -261,15 +253,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'free.left': '{n} min free left today',
       'free.lt1': 'under 1 min free left today',
       'bal.label': 'credit {v}',
-      'login.link': 'Log in', 'login.have': 'Already have credit? Log in', 'login.title': 'Log in with an email link',
-      'login.ph': 'you@example.com', 'login.send': 'Send link',
-      'login.hint': 'The email you entered at Stripe.',
-      'login.sent': 'Link sent. Open it from your inbox.',
-      'login.bad': 'Please enter a valid email',
-      'login.unavail': 'Login coming soon',
-      'login.rate': 'Too many attempts. Please wait a few minutes.',
-      'login.mailfail': 'The email could not be sent. Please try again later.',
-      'login.err': 'That did not work. Please try again.',
+      'login.link': 'Log in', 'login.have': 'Already have credit? Log in',
       'login.as': 'logged in: {e}',
       'topup.title': 'Top up credit', 'topup.amount': 'Amount', 'topup.close': 'Close',
       'topup.go': 'Continue to Stripe · {a}', 'topup.busy': 'Connecting to Stripe …',
@@ -1012,16 +996,16 @@ body.theme-light #vh-mode-info .vh-md-price{color:#1f7f90;}
 body.theme-light #vh-mode-info a,body.theme-light .vh-pay-link{color:#1f7f90;}
 /* Billing-Runde 4: Gratis + Guthaben + Aufladen/Anmelden als Link-Knöpfe in der
    Gratis-Zeile; Aufladen öffnet INLINE #vh-topup (Chips + Drehregler aus
-   aufladen.html), Anmelden #vh-login (E-Mail-Link). Beide auch im Call sichtbar. */
+   aufladen.html), Anmelden führt auf /login?next=<diese Seite>. Beide auch im Call sichtbar. */
 .vh-linkbtn{appearance:none;background:none;border:0;padding:0;margin:0;font:inherit;cursor:pointer;color:var(--vh-teal,#6dc9d9);text-decoration:underline;text-underline-offset:2px;}
 body.theme-light .vh-linkbtn{color:#1f7f90;}
 .vh-linkbtn.vh-quiet{color:inherit;opacity:0.85;}
 #vh-mode-info .vh-free-left{opacity:1;}
 #vh-mode-info .vh-me-txt{opacity:0.6;}
 #vh-mode-info .vh-sep{opacity:0.45;}
-#vh-topup,#vh-login,#vh-low-bal{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--vh-btn-fg);flex-shrink:0;
+#vh-topup,#vh-low-bal{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--vh-btn-fg);flex-shrink:0;
   border:1px solid var(--vh-btn-border);background:var(--vh-btn-bg);border-radius:8px;padding:8px 10px;margin:0 0 6px;}
-#vh-topup[hidden],#vh-login[hidden],#vh-low-bal[hidden]{display:none;}
+#vh-topup[hidden],#vh-low-bal[hidden]{display:none;}
 /* Panel oder Modus-Details offen: Glas-Panel wächst nach oben, statt Inhalt unter
    die Call-Leiste zu schieben oder das Transkript zu zerquetschen (Review-Altlast 320 px). */
 body.vh-wrap-grow:not(.vh-transcript-expanded):not(.vh-transcript-min) #vh-transcript-wrap{height:auto;min-height:var(--vh-wrap-h,140px);}
@@ -1056,12 +1040,6 @@ body.theme-light .vh-tu-go{background:#1f8fa3;color:#fff;}
 .vh-tu-msg.warn{color:#f2a65a;opacity:1;}
 body.theme-light .vh-tu-msg.warn{color:#b8641a;}
 .vh-tu-fine{opacity:0.5;line-height:1.45;font-size:9.5px;}
-#vh-login form{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
-#vh-login form[hidden]{display:none;}
-#vh-login input{flex:1 1 150px;min-width:0;font:inherit;font-size:16px;padding:5px 8px;border-radius:6px;border:1px solid var(--vh-btn-border-hov);background:transparent;color:var(--vh-btn-fg-hov);}
-@media (min-width:641px){#vh-login input{font-size:11px;}}
-#vh-login .vh-tu-go{min-height:30px;padding:6px 10px;}
-#vh-login .vh-lg-hint{opacity:0.55;margin-top:5px;line-height:1.45;}
 #vh-low-bal{border-color:rgba(242,166,90,0.55);color:#f2a65a;text-align:center;line-height:1.5;padding:5px 10px;}
 body.theme-light #vh-low-bal{color:#b8641a;border-color:rgba(184,100,26,0.5);}
 /* Review-Altlast: Vorteile-Text quetscht bei 320 px das Transkript. Schmal: eine
@@ -1267,14 +1245,6 @@ body.theme-light #vh-low-bal{color:#b8641a;border-color:rgba(184,100,26,0.5);}
         <button type="button" class="vh-linkbtn vh-quiet" id="vh-tu-login" data-i18n="login.have">Already have credit? Log in</button>
       </div>
     </div>
-  </div>
-  <div id="vh-login" role="group" hidden>
-    <div class="vh-tu-head"><span data-i18n="login.title">Log in with an email link</span><button type="button" class="vh-tu-x" id="vh-login-x" aria-label="Close" data-i18n-aria="topup.close">&times;</button></div>
-    <form id="vh-login-form" novalidate>
-      <input type="email" id="vh-login-email" autocomplete="email" inputmode="email" required data-i18n-aria="login.ph">
-      <button type="submit" class="vh-tu-go" id="vh-login-go" data-i18n="login.send">Send link</button>
-    </form>
-    <div class="vh-lg-hint" id="vh-login-msg" aria-live="polite" data-i18n="login.hint"></div>
   </div>
   <div id="vh-tr-ticker" aria-live="polite"></div>
   <div id="vh-invite-banner" hidden></div>
@@ -3637,14 +3607,13 @@ function vhTuMsg(text, warn) {
   vhTu.msg.textContent = text || ''; vhTu.msg.className = 'vh-tu-msg' + (warn ? ' warn' : ''); vhTu.msg.hidden = !text;
 }
 function vhPanelSync() {
-  const lg = document.getElementById('vh-login'), det = vhModeInfo && vhModeInfo.querySelector('.vh-mode-detail');
+  const det = vhModeInfo && vhModeInfo.querySelector('.vh-mode-detail');
   const low = document.getElementById('vh-low-bal');
-  const open = (vhTu.box && !vhTu.box.hidden) || (lg && !lg.hidden) || (det && !det.hidden && !vhModeInfo.hidden) || (low && !low.hidden);
+  const open = (vhTu.box && !vhTu.box.hidden) || (det && !det.hidden && !vhModeInfo.hidden) || (low && !low.hidden);
   document.body.classList.toggle('vh-wrap-grow', !!open);
 }
 function vhTopupOpen() {
   if (!vhTu.box) return;
-  const lg = document.getElementById('vh-login'); if (lg) lg.hidden = true;
   if (vhTu.box.hidden) { vhTuChips(); vhTuRender(); vhTuMsg(''); vhTu.box.hidden = false; }
   vhPanelSync();
 }
@@ -3713,58 +3682,14 @@ function vhReturnCheck() { if (vhTopupPending && !document.hidden) vhFreeRefresh
 window.addEventListener('focus', vhReturnCheck);
 document.addEventListener('visibilitychange', vhReturnCheck);
 
-// ── Anmelden per E-Mail-Link (Vertrag PR #93) ─────────────────────────────────
-// POST /api/login {email} MIT X-Wallet-Token (falls vorhanden) -> login_nonce
-// (localStorage vh_login_nonce). Die Mail führt auf /aufladen#login=<token>,
-// dort wird der Link über GET /api/login/verify?token=&nonce= eingelöst. Diese Seite nimmt NIE ein Token aus der URL (Login-Fixation).
-// 503 login_unavailable: Anmelden-Links weg, Panel sagt "bald verfügbar".
-let vhLoginUnavail = false;
-const vhLg = {
-  box: document.getElementById('vh-login'), form: document.getElementById('vh-login-form'),
-  email: document.getElementById('vh-login-email'), go: document.getElementById('vh-login-go'),
-  msg: document.getElementById('vh-login-msg'),
-};
-if (vhLg.email) vhLg.email.placeholder = vhT('login.ph');
+// ── Anmelden: Seite /login (Google, GitHub, E-Mail-Link) ─────────────────────
+// Alle Anmelden-Knöpfe führen auf /login?next=<diese Seite> (nur relativer Pfad,
+// /login prüft ihn nochmals). Der Rückweg setzt das Wallet-Token in localStorage;
+// das storage-Event oben lädt /api/me dann neu.
+function vhLoginHref() { return '/login?next=' + encodeURIComponent(location.pathname + location.search); }
+function vhLoginGo() { location.href = vhLoginHref(); }
 const vhTuLogin = document.getElementById('vh-tu-login');
-if (vhTuLogin) vhTuLogin.addEventListener('click', () => vhLoginToggle());
-function vhLoginToggle() {
-  if (!vhLg.box) return;
-  const open = vhLg.box.hidden;
-  if (open) { vhTopupClose(); vhLg.box.hidden = false; vhPanelSync(); try { vhLg.email.focus(); } catch (_) {} }
-  else { vhLg.box.hidden = true; vhPanelSync(); }
-}
-const vhLoginX = document.getElementById('vh-login-x');
-if (vhLoginX) vhLoginX.addEventListener('click', () => { if (vhLg.box) vhLg.box.hidden = true; vhPanelSync(); });
-function vhLoginMsg(text, warn) {
-  if (!vhLg.msg) return;
-  vhLg.msg.textContent = text; vhLg.msg.classList.toggle('vh-tu-msg', !!warn); vhLg.msg.classList.toggle('warn', !!warn);
-}
-if (vhLg.form) vhLg.form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const email = (vhLg.email.value || '').trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) { vhLoginMsg(vhT('login.bad'), true); return; }
-  vhLg.go.disabled = true;
-  try {
-    const r = await fetch('/api/login', { method: 'POST', headers: vhPayHeaders(), body: JSON.stringify({ email }) });
-    if (r.ok) {
-      // login_nonce bindet den Link an diesen Browser; /aufladen schickt ihn bei verify mit.
-      try { const d = await r.json(); if (d && typeof d.login_nonce === 'string' && d.login_nonce) localStorage.setItem('vh_login_nonce', d.login_nonce); } catch (_) {}
-      vhLoginMsg(vhT('login.sent'), false);
-      vhLg.email.disabled = true;
-      vhLg.box.classList.add('vh-sent');
-      return;
-    }
-    if (r.status === 503) {
-      vhLoginUnavail = true;
-      vhLoginMsg(vhT('login.unavail'), true);
-      if (vhLg.form) vhLg.form.hidden = true;
-      try { vhModeInfoRender(); } catch (_) {}
-      return;
-    }
-    vhLoginMsg(vhT(r.status === 400 ? 'login.bad' : r.status === 429 ? 'login.rate' : r.status === 502 ? 'login.mailfail' : 'login.err'), true);
-  } catch (_) { vhLoginMsg(vhT('login.err'), true); }
-  vhLg.go.disabled = false;
-});
+if (vhTuLogin) vhTuLogin.addEventListener('click', vhLoginGo);
 
 // ── Hinweis "bald leer" (Data-Topic operator.notice {kind:'low_balance', minutes_left})
 // Sichtbar im Call mit Aufladen-Knopf. Nach Call-Ende: waren Gratis UND Guthaben
@@ -3836,17 +3761,17 @@ function vhModeInfoRender() {
       if (vhMe && vhMe.email_masked) txt.title = vhT('login.as', { e: vhMe.email_masked });
       if (parts.length) { freeEl.appendChild(txt); freeEl.appendChild(vhSep()); }
       freeEl.appendChild(vhTopupBtn());
-      if (!vhLoggedIn() && !vhLoginUnavail) {
+      if (!vhLoggedIn()) {
         const wrap = document.createElement('span');
         wrap.className = 'vh-login-wrap';
         wrap.appendChild(vhSep());
         const lg = document.createElement('button');
         lg.type = 'button'; lg.className = 'vh-linkbtn vh-quiet vh-login-link'; lg.textContent = vhT('login.link');
-        lg.addEventListener('click', () => vhLoginToggle());
+        lg.addEventListener('click', vhLoginGo);
         wrap.appendChild(lg);
         freeEl.appendChild(wrap);
       }
-      const tl = document.getElementById('vh-tu-login'); if (tl) tl.hidden = vhLoggedIn() || vhLoginUnavail;
+      const tl = document.getElementById('vh-tu-login'); if (tl) tl.hidden = vhLoggedIn();
       showFree = true;
     }
     freeEl.hidden = !showFree;
