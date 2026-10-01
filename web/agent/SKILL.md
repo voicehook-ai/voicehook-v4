@@ -76,6 +76,8 @@ would be spoken literally as TTS instead of being routed to the control plane.
   Mode B (Wissenstransfer):** voice-ai antwortet simple Fragen selbst aus der
   Persona/dem Graph, `operator.say` überschreibt für Substantives.
 - `--suppress-echo` keeps your own relayed TTS out of the operator stream (#10).
+  CLI 0.4.0 and older only filter `role:"agent"`; since v4 marks your spoken
+  text as `role:"operator"` (see step 4), the flag has no effect there.
 - `--say-ttl <sec>` drops a `operator.say` that went stale (older than `<sec>` or
   superseded by a newer user-turn) instead of speaking it late (#9).
 - `--notify-url <url>` / `_wake` stdout markers wake a coding agent per
@@ -200,7 +202,15 @@ In `--json` mode every event is one JSON line. You should see:
 {"role":"system","text":"connected — N peers: [...]","topic":"_meta"}
 ```
 
-User-turns and voice-ai-turns appear as `{"role":"user|agent","text":"...","topic":"transcript"}`.
+Everything appears as `{"role":"user|operator|agent","text":"...","topic":"transcript"}`:
+
+| role | meaning |
+|---|---|
+| `user` | final STT of the human (after the speech and speaker filters, see "Server-side filters") |
+| `operator` | YOUR `operator.say`, published only AFTER voice-ai actually spoke it; on an interruption only the spoken part. Browser shows it red |
+| `agent` | voice-ai's own answer from its persona (auto mode). Browser shows it blue |
+
+No `operator` line after your push = it was not spoken (yet). That echo is your proof.
 
 ### 4a. MANDATORY: install the Hotswap-Persona (BEFORE the greeting)
 
@@ -379,6 +389,34 @@ Killing the tmux session (SIGTERM) ends the call cleanly. You can also send an
 explicit quit on stdin: `/q` (plain) or `{"topic":"quit"}` (json). Under the
 default `--keep-alive`, only these explicit signals end the session — Ctrl-D /
 stdin-EOF no longer quits.
+
+## Live mode (Gemini Live, voicehook-v4 PR #79)
+
+A second worker (`voice-ai-live`) runs rooms on a realtime model instead of STT + LLM + TTS.
+
+```bash
+curl -s https://voicehook.ai/api/live/status            # {"available":true|false}, never amounts
+curl -s -X POST https://voicehook.ai/api/live-room \
+  -H 'content-type: application/json' -d '{"identity":"host","ttl_seconds":3600}'
+# -> {token,url,room,identity, invite_url, expires_in, agent:"voice-ai-live"}
+```
+
+- Errors: `402` monthly live budget used up (default 10 USD per UTC month, fail-closed),
+  `404` live mode switched off, `503` not configured, `429` rate limit (shared with `/api/host-call`).
+- You join with `invite_url` exactly as in step 3; every later dispatch in that room
+  goes to the live worker.
+- Differences for you: `operator.say` is NOT verbatim. It reaches the model as a marked
+  user turn ("[Operator] Sag jetzt sinngemäß ..."), so the wording changes. The `operator`
+  transcript line shows what was really said. `operator.persona` is added as a marked
+  user turn too. If the budget runs out mid-call, voice-ai announces it and ends the call.
+
+## Server-side filters (pipeline mode, nothing to do for you)
+
+- **Speech filter**: only audio with detected speech goes to the STT; silence costs nothing.
+- **Speaker filter**: background voices (TV, neighbour) are dropped before the LLM.
+  Learning phase at the start: until one speaker has about 3 s of speech everything
+  passes; it restarts with every new STT connection. Segments without speaker info pass.
+  Expect the first seconds of a call to still contain background chatter.
 
 ## Why Hotswap-Persona is mandatory
 
