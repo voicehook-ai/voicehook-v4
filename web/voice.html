@@ -3,14 +3,314 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22%3E%3Ctext y=%2232%22 font-size=%2232%22 fill=%22%236dc9d9%22%3E%E2%88%86%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22%3E%3Cpath d=%22M20 4.5 37 35.5H3Z%22 fill=%22none%22 stroke=%22%236dc9d9%22 stroke-width=%223.5%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E">
 
-<title>voicehook — talk to any AI</title>
+<title>voicehook — Talk with your agents</title>
 <script>
 /* VH_BUILD — auto-replaced by .github/workflows/deploy.yml on every deploy.
    PLACEHOLDER_SHA and PLACEHOLDER_TS are sed-substituted with the short git
    sha and UTC build timestamp before scp. Read by the footer version chip. */
 window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
+</script>
+<script>
+/* UI-Sprache (Olli 01.10.): navigator.language beginnt mit "de" -> Deutsch,
+   sonst Englisch. Kein Umschalter. Alle sichtbaren Texte laufen über vhT(key,
+   vars); statisches Markup trägt data-i18n* (vhApplyI18n am Ende von body).
+   Die Sprache der Stimme (Delta) ist davon unberührt. */
+(function () {
+  var lang = 'en';
+  try { lang = /^de\b/i.test(String(navigator.language || '')) ? 'de' : 'en'; } catch (_) {}
+  var D = {
+    de: {
+      'title': 'voicehook · Talk with your agents',
+      'tagline': 'Talk with your agents',
+      'info.title': 'voicehook Info', 'info.aria': 'Info',
+      'music.tip': 'Musikmodus: Mikro an, Effekte hoch', 'music.aria': 'Musikmodus',
+      'mute.title': 'Mikrofon (stumm / an)', 'mute.aria': 'Mikrofon stumm schalten',
+      'mute.muted': 'Mikro ist stumm (Call läuft), klick zum Sprechen',
+      'mute.live': 'Mikro stumm schalten (Call läuft weiter)',
+      'call.label': 'Agent einladen', 'call.aria': 'Agent einladen',
+      'call.title': 'Kopiert den Einladungslink und verbindet dich als Gastgeber',
+      'call.hangup': 'Auflegen', 'call.end': 'Call beenden',
+      'call.start': 'KI-Call starten (Mikro geht an)',
+      'call.inCall': 'Im Call{live} · Einladungslink kopiert: {url}',
+      'call.failed': 'Fehlgeschlagen: {msg}',
+      'speaker.title': 'Lautsprecher (stumm / an)', 'speaker.aria': 'Lautsprecher stumm schalten',
+      'speaker.muted': 'Lautsprecher stumm, klick zum Hören',
+      'speaker.live': 'Lautsprecher stumm schalten (Call läuft weiter)',
+      'theme.title': 'Hell / Dunkel',
+      'infoPop.html':
+        '<h3>voicehook.ai · was passiert hier?</h3>' +
+        '<p><strong>Mit KI sprechen:</strong> Live-Sprachcall mit unserem Voice-Agent (Sprache zu Text, Sprachmodell, Text zu Sprache über wss://rtc.voicehook.ai). Starte den Call und sprich einfach. Jeder Gesprächszug landet unten im Transkript.</p>' +
+        '<p><strong>Sprache / Musik:</strong> Sprache ist der KI-Call. Musik macht den Kringel zum Visualizer, der auf dein Mikro reagiert (oder auf das, was im Tab läuft).</p>' +
+        '<p><strong>Agent einladen:</strong> Du bekommst einen Einladungstext. Füg ihn in eine andere KI-Sitzung ein (Claude Code, Cursor, ZeroClaw, Hermes). Der externe Agent kommt als zweites Gehirn dazu und kann Antworten in deinen Call sprechen lassen.</p>' +
+        '<p><strong>Teilnehmer-Chips:</strong> grau = nicht im Raum · farbiges ∆ = im Raum · leuchtend = spricht gerade. Jeder Sprecher hat seine eigene Farbe aus dem gewählten Style; Chip, Transkript und Kringel-Leuchten passen immer zusammen.</p>' +
+        '<p><strong>Transkript:</strong> Der Knopf rechts neben den Chips schaltet minimiert, normal, Vollbild (Esc schaltet Vollbild). Im Transkript scrollt das Mausrad, außerhalb zoomt es den Kringel.</p>' +
+        '<p>Agent-CLI: <code>uvx voicehook-agent join &lt;url&gt; --name &lt;Name&gt; --model &lt;model&gt;</code> · Skill-Doku: <a href="/agent/SKILL.md" target="_blank" rel="noopener">/agent/SKILL.md</a></p>',
+      'modal.aria': 'KI-Call starten', 'modal.close': 'schließen',
+      'modal.title': 'Sprachcall starten', 'modal.sub': 'Wähle dein Setup.',
+      'modal.model': 'Mit einem Modell sprechen', 'modal.modelMeta': 'Stimme und Modell wählen, die KI kommt sofort dazu',
+      'modal.invite': 'Agent einladen', 'modal.inviteMeta': 'Einladungslink kopieren · du trittst zuerst bei · dann kommt dein Agent',
+      'modal.modelSub': 'Wähle Stimme und Sprachmodell, dann verbinde.',
+      'modal.voice': 'Stimme', 'modal.llm': 'Sprachmodell',
+      'modal.langDe': 'Deutsch', 'modal.langEn': 'Englisch',
+      'modal.lite': 'Gemini 2.5 Flash Lite (schneller, schwächer)',
+      'modal.back': '← zurück', 'modal.connect': 'Verbinden',
+      'modal.inviteSub': 'Kopier den Link, lass deinen Agent beitreten. <strong>Du trittst zuerst bei</strong> und wartest auf ihn.',
+      'modal.waitPeer': 'Warte auf zweiten Teilnehmer im Raum …',
+      'modal.join': 'Raum jetzt betreten',
+      'pres.user': 'Du', 'pres.voice': 'Delta Agent (Stimme)', 'pres.agent': 'Agent',
+      'pres.userDesc': 'Du, der Mensch im Raum',
+      'pres.voiceDesc': 'Delta Agent (Stimme): voicehook-interne Sprachpipeline. Moderiert das Gespräch zwischen dir und deinem Agent.',
+      'pres.agentDesc': 'Agent: das externe Sprachmodell (z. B. Claude Code), eingeklinkt über die voicehook-agent CLI',
+      'pres.identity': 'Kennung',
+      'tr.min': 'minimiert', 'tr.normal': 'normal', 'tr.full': 'Vollbild',
+      'tr.title': 'Transkript: {cur} · Klick: {next}', 'tr.esc': ' (Esc schließt)',
+      'tr.aria': 'Transkript-Ansicht wechseln',
+      'tr.empty': 'Transkript: starte einen Call, dann erscheinen die Gesprächszüge hier.',
+      'tr.music': 'Musikmodus: wechsle zu Sprache, um mit der KI zu reden.',
+      'mode.aria': 'Sprachmodus für den nächsten Call',
+      'mode.normalTitle': 'Normal: Standard-Sprachpipeline',
+      'mode.liveTitle': 'Live: Gemini Live, gilt für den nächsten neuen Call',
+      'sys.roomReady': 'Raum {room} bereit, du bist drin, warte auf deinen Agent …',
+      'sys.voiceReady': 'Voice-AI bereit · warte auf deinen Agent …',
+      'sys.micMuted': 'Mikro stumm', 'sys.micUnmuted': 'Mikro wieder an',
+      'sys.reconnecting': 'Verbindung wird wiederhergestellt …', 'sys.reconnected': 'wieder verbunden',
+      'sys.agentJoined': 'Agent beigetreten: {label} ({id})',
+      'sys.peerJoined': 'Teilnehmer beigetreten: {id}', 'sys.peerLeft': 'Teilnehmer gegangen: {id}',
+      'sys.disconnected': 'getrennt',
+      'sys.idle': '30 min ohne Aktivität: Sparmodus (Call bleibt offen)',
+      'sys.active': 'Aktivität erkannt: volle Darstellung wieder an',
+      'live.402': 'Live-Budget für diesen Monat aufgebraucht',
+      'live.404': 'Live-Modus ist gerade aus',
+      'live.503': 'Live-Modus ist gerade nicht verfügbar',
+      'live.429': 'Zu viele Starts, bitte kurz warten',
+      'live.failed': 'Live-Start fehlgeschlagen ({status})',
+      'live.tag': 'live', 'live.title': 'Live-Modus (Gemini Live)',
+      'err.sdk': 'LiveKit SDK konnte nicht geladen werden, bitte Seite neu laden.',
+      'err.connecting': 'verbinde …',
+      'err.connFailed': 'Verbindung fehlgeschlagen: {msg}',
+      'err.inviteFailed': 'Einladung fehlgeschlagen: {msg}',
+      'err.prepFailed': 'Fehlgeschlagen: {msg}',
+      'err.mic': 'Mikrofon verweigert',
+      'err.tabAudio': 'Tab-Audio nicht geteilt, bitte "Audio teilen" anhaken',
+      'err.rec': 'Aufnahme verweigert',
+      'sound.gate': 'Tippen, um den Ton einzuschalten',
+      'join.gate': 'Tippen zum Beitreten', 'join.aria': 'Dem Call beitreten',
+      'invite.clipOk': 'In der Zwischenablage. Schick das deinem Agent:',
+      'invite.clipFail': 'Kopier diese Zeile für deinen Agent (Zwischenablage blockiert):',
+      'invite.copy': 'kopieren', 'invite.copied': 'kopiert',
+      'invite.wait': 'Warte auf Agent …',
+      'invite.agentIn': 'Agent ist da · leg los! (Banner bleibt zum erneuten Teilen)',
+      'invite.msg': 'Kannst du bitte meinem Voice-Call auf voicehook.ai beitreten? {url}\nSkill: {skill}',
+      'invite.preparing': 'Raum wird vorbereitet …',
+      'invite.snippet': 'voicehook.ai Call · als Agent beitreten (einfügen und ausführen):\n\n  {cmd}\n\nErstes Mal als Agent? Lies ZUERST den Skill: {skill}\n(--name und --model sind Pflicht: dein Anzeigename und dein genaues Modell, im Call sichtbar · --json ist Pflicht zum Steuern · senior.say/persona über stdin schicken · §0 im Skill: wie eine Voice-AI in den Raum kommt)',
+      'inviteBtn.title': 'Klick: Agent-Snippet kopieren (in KI einfügen) · Shift+Klick: Link teilen',
+      'inviteBtn.aria': 'Einladen: Snippet kopieren oder mit Shift+Klick teilen',
+      'inviteBtn.label': 'Einladen', 'inviteBtn.shared': 'geteilt',
+      'inviteBtn.copied': 'Snippet kopiert', 'inviteBtn.console': 'siehe Konsole',
+      'menu.aria': 'Menü',
+      'menu.topup': 'Aufladen', 'menu.setup': 'Setup', 'menu.privacy': 'Datenschutz',
+      'menu.imprint': 'Impressum', 'menu.security': 'Sicherheit', 'menu.github': 'GitHub ↗',
+      'menu.mic': 'Mikrofon', 'menu.style': 'Style',
+      'style.ice': 'Eis', 'style.earth': 'Erde', 'style.fire': 'Feuer', 'style.water': 'Wasser',
+      'style.air': 'Luft', 'style.forest': 'Wald', 'style.zebra': 'Zebra', 'style.giraffe': 'Giraffe',
+      'style.leopard': 'Leopard', 'style.tiger': 'Tiger',
+      'hd.title': 'Kringel in voller Auflösung (HD) oder sparsam (SD: einfache Pixeldichte, 30 Bilder pro Sekunde)',
+      'mic.default': 'System-Standard', 'mic.show': 'Mikros anzeigen …',
+      'mic.showTitle': 'Einmal Mikro-Zugriff erlauben, dann erscheinen alle Geräte',
+      'build.title': 'Klick kopiert die Build-Version',
+      'cost.perMin': '{v} ¢/min',
+      'pay.free': 'Gratisminuten für heute aufgebraucht',
+      'pay.empty': 'Dein Guthaben ist aufgebraucht',
+      'pay.missing': 'Für diesen Modus brauchst du Guthaben',
+      'pay.topup': 'Aufladen',
+      'free.left': 'noch {n} min gratis heute',
+      'free.lt1': 'noch unter 1 min gratis heute',
+      'bal.label': 'Guthaben {v}',
+      'login.link': 'Anmelden', 'login.have': 'Schon Guthaben? Anmelden', 'login.title': 'Anmelden mit E-Mail-Link',
+      'login.ph': 'deine@email.de', 'login.send': 'Link senden',
+      'login.hint': 'Die E-Mail, die du bei Stripe angegeben hast.',
+      'login.sent': 'Link gesendet. Öffne ihn aus deinem Postfach.',
+      'login.bad': 'Bitte eine gültige E-Mail eingeben',
+      'login.unavail': 'Anmelden bald verfügbar',
+      'login.rate': 'Zu viele Versuche. Bitte warte ein paar Minuten.',
+      'login.mailfail': 'Die E-Mail ließ sich nicht senden. Bitte versuch es später noch einmal.',
+      'login.err': 'Das hat nicht geklappt. Bitte versuch es noch einmal.',
+      'login.as': 'angemeldet: {e}',
+      'topup.title': 'Guthaben aufladen', 'topup.amount': 'Betrag', 'topup.close': 'Schließen',
+      'topup.go': 'Weiter zu Stripe · {a}', 'topup.busy': 'Verbinde mit Stripe …',
+      'topup.soon': 'Aufladen bald verfügbar', 'topup.err': 'Das hat nicht geklappt. Bitte versuch es noch einmal.',
+      'topup.opened': 'Stripe ist in einem neuen Tab offen. Nach der Zahlung bist du hier automatisch angemeldet.',
+      'topup.fine': 'Zahlung über Stripe, kein Abo. Mit deiner E-Mail aus Stripe wird dein Konto angelegt.',
+      'topup.done': 'Guthaben aufgeladen: {v}',
+      'low.notice': 'Noch etwa {n} min, dann endet der Call',
+      'pay.ended': 'Call beendet: Gratisminuten und Guthaben aufgebraucht',
+      'price.approx': 'ca. {p} pro Stunde inkl. MwSt',
+      'adv.live1': 'natürlichere Stimme', 'adv.live2': 'schneller', 'adv.live3': 'hört den Tonfall',
+      'adv.normal1': 'günstiger', 'adv.normal2': 'kostet nichts bei Stille',
+      'adv.normal3': 'filtert fremde Stimmen und Nebengeräusche',
+      'adv.normal4': 'Sätze deines Agents kommen wörtlich',
+      'delta.label': 'Mit Delta sprechen',
+      'delta.title': 'Startet einen Call mit Delta. Delta erklärt dir, was voicehook kann.'
+    },
+    en: {
+      'title': 'voicehook · Talk with your agents',
+      'tagline': 'Talk with your agents',
+      'info.title': 'voicehook info', 'info.aria': 'info',
+      'music.tip': 'Music mode: mic on, effects up', 'music.aria': 'music mode',
+      'mute.title': 'Microphone (mute / unmute)', 'mute.aria': 'mute microphone',
+      'mute.muted': 'Mic is muted (call running), click to talk',
+      'mute.live': 'Mute mic (call keeps running)',
+      'call.label': 'Invite your agent', 'call.aria': 'invite your agent',
+      'call.title': 'Copies the invite link and connects you as host',
+      'call.hangup': 'Hang up', 'call.end': 'End call',
+      'call.start': 'Start AI call (mic turns on)',
+      'call.inCall': 'In call{live} · invite link copied: {url}',
+      'call.failed': 'Failed: {msg}',
+      'speaker.title': 'Speaker (mute / unmute)', 'speaker.aria': 'mute speaker',
+      'speaker.muted': 'Speaker muted, click to listen',
+      'speaker.live': 'Mute speaker (call keeps running)',
+      'theme.title': 'Light / dark',
+      'infoPop.html':
+        '<h3>voicehook.ai · what is happening here?</h3>' +
+        '<p><strong>Talk to AI:</strong> Live voice call with our voice agent (speech to text, language model, text to speech over wss://rtc.voicehook.ai). Start the call and just talk. Each turn lands in the transcript below.</p>' +
+        '<p><strong>Speech / Music mode:</strong> Speech is the AI call. Music turns the dome into a visualizer that reacts to your mic (or whatever is playing in the tab).</p>' +
+        '<p><strong>Invite an agent:</strong> You get an invite text. Paste it into another AI session (Claude Code, Cursor, ZeroClaw, Hermes). The external agent joins as a second brain and can have replies spoken into your call.</p>' +
+        '<p><strong>Presence chips:</strong> grey = not in room · colored ∆ = joined · glowing = speaking right now. Every speaker has its own color from the chosen style; chip, transcript and dome glow always match.</p>' +
+        '<p><strong>Transcript:</strong> The button right of the chips cycles minimized, normal, fullscreen (Esc toggles fullscreen). Wheel-scroll works inside the transcript; outside it zooms the dome.</p>' +
+        '<p>Agent CLI: <code>uvx voicehook-agent join &lt;url&gt; --name &lt;Name&gt; --model &lt;model&gt;</code> · Skill doc: <a href="/agent/SKILL.md" target="_blank" rel="noopener">/agent/SKILL.md</a></p>',
+      'modal.aria': 'Start AI call', 'modal.close': 'close',
+      'modal.title': 'Start voice call', 'modal.sub': 'Choose your setup.',
+      'modal.model': 'Talk to a model', 'modal.modelMeta': 'Pick voice and model, the AI joins right away',
+      'modal.invite': 'Invite an agent', 'modal.inviteMeta': 'Copy the invite link · you join first · then your agent arrives',
+      'modal.modelSub': 'Pick a voice and a language model, then connect.',
+      'modal.voice': 'Voice', 'modal.llm': 'Language model',
+      'modal.langDe': 'German', 'modal.langEn': 'English',
+      'modal.lite': 'Gemini 2.5 Flash Lite (faster, weaker)',
+      'modal.back': '← back', 'modal.connect': 'Connect',
+      'modal.inviteSub': 'Copy the link and let your agent join. <strong>You join first</strong> and wait for it.',
+      'modal.waitPeer': 'Waiting for a second participant in the room …',
+      'modal.join': 'Join the room now',
+      'pres.user': 'User', 'pres.voice': 'Delta Agent (voice)', 'pres.agent': 'Agent',
+      'pres.userDesc': 'You, the human in the room',
+      'pres.voiceDesc': 'Delta Agent (voice): voicehook\'s built-in speech pipeline. Moderates the conversation between you and your agent.',
+      'pres.agentDesc': 'Agent: the external language model (e.g. Claude Code) connected through the voicehook-agent CLI',
+      'pres.identity': 'identity',
+      'tr.min': 'minimized', 'tr.normal': 'normal', 'tr.full': 'fullscreen',
+      'tr.title': 'Transcript: {cur} · click: {next}', 'tr.esc': ' (Esc closes)',
+      'tr.aria': 'Switch transcript view',
+      'tr.empty': 'Transcript: start a call to see live turns.',
+      'tr.music': 'Music listen mode: switch to Speech to talk with the AI.',
+      'mode.aria': 'Voice mode for the next call',
+      'mode.normalTitle': 'Normal: standard voice pipeline',
+      'mode.liveTitle': 'Live: Gemini Live, applies to the next new call',
+      'sys.roomReady': 'Room {room} ready, you are in, waiting for your agent …',
+      'sys.voiceReady': 'Voice AI ready · waiting for your agent …',
+      'sys.micMuted': 'mic muted', 'sys.micUnmuted': 'mic unmuted',
+      'sys.reconnecting': 'reconnecting …', 'sys.reconnected': 'reconnected',
+      'sys.agentJoined': 'Agent joined: {label} ({id})',
+      'sys.peerJoined': 'peer joined: {id}', 'sys.peerLeft': 'peer left: {id}',
+      'sys.disconnected': 'disconnected',
+      'sys.idle': '30 min idle: low-activity mode (call stays open)',
+      'sys.active': 'activity resumed: full render back on',
+      'live.402': 'Live budget for this month is used up',
+      'live.404': 'Live mode is currently off',
+      'live.503': 'Live mode is currently unavailable',
+      'live.429': 'Too many starts, please wait a moment',
+      'live.failed': 'Live start failed ({status})',
+      'live.tag': 'live', 'live.title': 'Live mode (Gemini Live)',
+      'err.sdk': 'LiveKit SDK failed to load, please reload the page.',
+      'err.connecting': 'connecting …',
+      'err.connFailed': 'Connection failed: {msg}',
+      'err.inviteFailed': 'Invite failed: {msg}',
+      'err.prepFailed': 'Failed: {msg}',
+      'err.mic': 'microphone denied',
+      'err.tabAudio': 'tab audio not shared, tick "share audio"',
+      'err.rec': 'recording denied',
+      'sound.gate': 'Tap to enable sound',
+      'join.gate': 'Tap to join', 'join.aria': 'Join the call',
+      'invite.clipOk': 'Copied. Send this to your agent:',
+      'invite.clipFail': 'Copy this line for your agent (clipboard blocked):',
+      'invite.copy': 'copy', 'invite.copied': 'copied',
+      'invite.wait': 'Waiting for agent …',
+      'invite.agentIn': 'Agent is here · go ahead! (banner stays for re-sharing)',
+      'invite.msg': 'Could you please join my voice call on voicehook.ai? {url}\nSkill: {skill}',
+      'invite.preparing': 'preparing room …',
+      'invite.snippet': 'voicehook.ai call · join as agent (paste and run):\n\n  {cmd}\n\nFirst-time agent? Read the skill FIRST: {skill}\n(--name and --model are required: your display name and exact model, shown in the call · --json is required for driving · push senior.say/persona via stdin · §0 of the skill: how a voice AI gets into the room)',
+      'inviteBtn.title': 'Click: copy agent snippet (paste into an AI) · Shift+click: share the link',
+      'inviteBtn.aria': 'invite: copy snippet or shift-click to share',
+      'inviteBtn.label': 'Invite', 'inviteBtn.shared': 'shared',
+      'inviteBtn.copied': 'snippet copied', 'inviteBtn.console': 'see console',
+      'menu.aria': 'menu',
+      'menu.topup': 'Top up', 'menu.setup': 'Setup', 'menu.privacy': 'Privacy',
+      'menu.imprint': 'Imprint', 'menu.security': 'Security', 'menu.github': 'GitHub ↗',
+      'menu.mic': 'Microphone', 'menu.style': 'Style',
+      'style.ice': 'Ice', 'style.earth': 'Earth', 'style.fire': 'Fire', 'style.water': 'Water',
+      'style.air': 'Air', 'style.forest': 'Forest', 'style.zebra': 'Zebra', 'style.giraffe': 'Giraffe',
+      'style.leopard': 'Leopard', 'style.tiger': 'Tiger',
+      'hd.title': 'Dome in full resolution (HD) or light (SD: single pixel density, 30 frames per second)',
+      'mic.default': 'System default', 'mic.show': 'Show microphones …',
+      'mic.showTitle': 'Allow mic access once, then all devices appear',
+      'build.title': 'Click to copy build sha',
+      'cost.perMin': '{v} ¢/min',
+      'pay.free': 'Free minutes for today are used up',
+      'pay.empty': 'Your credit is used up',
+      'pay.missing': 'This mode needs credit',
+      'pay.topup': 'Top up',
+      'free.left': '{n} min free left today',
+      'free.lt1': 'under 1 min free left today',
+      'bal.label': 'credit {v}',
+      'login.link': 'Log in', 'login.have': 'Already have credit? Log in', 'login.title': 'Log in with an email link',
+      'login.ph': 'you@example.com', 'login.send': 'Send link',
+      'login.hint': 'The email you entered at Stripe.',
+      'login.sent': 'Link sent. Open it from your inbox.',
+      'login.bad': 'Please enter a valid email',
+      'login.unavail': 'Login coming soon',
+      'login.rate': 'Too many attempts. Please wait a few minutes.',
+      'login.mailfail': 'The email could not be sent. Please try again later.',
+      'login.err': 'That did not work. Please try again.',
+      'login.as': 'logged in: {e}',
+      'topup.title': 'Top up credit', 'topup.amount': 'Amount', 'topup.close': 'Close',
+      'topup.go': 'Continue to Stripe · {a}', 'topup.busy': 'Connecting to Stripe …',
+      'topup.soon': 'Top-up coming soon', 'topup.err': 'That did not work. Please try again.',
+      'topup.opened': 'Stripe is open in a new tab. After paying you are logged in here automatically.',
+      'topup.fine': 'Payment via Stripe, no subscription. Your account is created with the email you give Stripe.',
+      'topup.done': 'Credit topped up: {v}',
+      'low.notice': 'About {n} min left, then the call ends',
+      'pay.ended': 'Call ended: free minutes and credit used up',
+      'price.approx': 'approx. {p} per hour incl. VAT',
+      'adv.live1': 'more natural voice', 'adv.live2': 'faster', 'adv.live3': 'hears your tone of voice',
+      'adv.normal1': 'cheaper', 'adv.normal2': 'costs nothing during silence',
+      'adv.normal3': 'filters out other voices and background noise',
+      'adv.normal4': 'your agent\'s sentences come through word for word',
+      'delta.label': 'Talk to Delta',
+      'delta.title': 'Starts a call with Delta. Delta explains what voicehook can do.'
+    }
+  };
+  window.VH_LANG = lang;
+  window.VH_I18N = D;
+  window.vhT = function (key, vars) {
+    var s = (D[lang] && D[lang][key] != null) ? D[lang][key] : (D.en[key] != null ? D.en[key] : key);
+    if (vars) s = s.replace(/\{(\w+)\}/g, function (m, k) { return vars[k] != null ? String(vars[k]) : ''; });
+    return s;
+  };
+  window.vhApplyI18n = function (root) {
+    root = root || document;
+    var map = [['data-i18n', 'text'], ['data-i18n-html', 'html'], ['data-i18n-title', 'title'],
+               ['data-i18n-aria', 'aria-label'], ['data-i18n-tip', 'data-tip'], ['data-i18n-label', 'label']];
+    map.forEach(function (m) {
+      root.querySelectorAll('[' + m[0] + ']').forEach(function (el) {
+        var v = window.vhT(el.getAttribute(m[0]));
+        if (m[1] === 'text') el.textContent = v;
+        else if (m[1] === 'html') el.innerHTML = v;
+        else if (m[1] === 'title') el.title = v;
+        else el.setAttribute(m[1], v);
+      });
+    });
+    try { document.documentElement.lang = lang; document.title = window.vhT('title'); } catch (_) {}
+  };
+})();
 </script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -34,6 +334,16 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
   --vh-btn-blur:       blur(8px);
   /* Transkript-Farbe Delta (role agent, Olli 30.09.): blau. Operator = Agent-Chip-Farbe. */
   --vh-tr-blue:        #6fa8ff;
+  /* Sprecherfarben (Olli 01.10.): je Style eine Palette, je Sprecher eine eigene
+     Variation (User / Delta / externer Agent). JS setzt die drei --vh-*-color aus
+     PALETTES[style].spk; Chip, Transkript und Kringel-Leuchten lesen dieselbe
+     Quelle. Die *-ink-Varianten sind das, was gezeichnet wird (Light: abgedunkelt). */
+  --vh-user-color:     #5fd6e8;
+  --vh-delta-color:    #7aa7ff;
+  --vh-senior-color:   #e4d79a;
+  --vh-user-ink:       var(--vh-user-color);
+  --vh-delta-ink:      var(--vh-delta-color);
+  --vh-senior-ink:     var(--vh-senior-color);
 }
 body.theme-light {
   --vh-btn-bg:         rgba(255, 255, 255, 0.55);
@@ -43,6 +353,10 @@ body.theme-light {
   --vh-btn-fg:         rgba(0, 0, 0, 0.78);
   --vh-btn-fg-hov:     rgba(0, 0, 0, 1.00);
   --vh-tr-blue:        #1f5fd1;
+  /* Light: Sprecherfarben abdunkeln wie bisher (62 % + Schwarz), damit lesbar. */
+  --vh-user-ink:       color-mix(in srgb, var(--vh-user-color) 62%, #000);
+  --vh-delta-ink:      color-mix(in srgb, var(--vh-delta-color) 62%, #000);
+  --vh-senior-ink:     color-mix(in srgb, var(--vh-senior-color) 62%, #000);
 }
 body { background: var(--vh-bg-0); overflow: hidden; font-family: var(--vh-mono); color: var(--vh-fg-0); }
 
@@ -53,9 +367,13 @@ body { background: var(--vh-bg-0); overflow: hidden; font-family: var(--vh-mono)
   font-family: var(--vh-mono); font-size: 13px; letter-spacing: 0.02em;
   color: var(--vh-fg-0); font-weight: 500;
 }
+/* ∆ als Inline-SVG statt Glyph (Oliver 01.10.): Tinte exakt mittig in der Box, auf jedem System gleich. */
+.vh-dlt{display:block;width:.75em;height:.75em;fill:none;stroke:currentColor;stroke-width:3.5;stroke-linejoin:round;overflow:visible;}
+/* padding-top: Text bleibt exakt, wo er mit dem höheren Glyph-Zeilenkasten stand. */
+#label { display: flex; align-items: center; padding-top: 3px; }
 #label .dlt {
   color: var(--vh-teal); font-size: 18px; font-weight: 400;
-  line-height: 1; position: relative; top: -1px;
+  line-height: 1; display: inline-flex;
   margin-right: 6px;
 }
 #label .tld { color: var(--vh-fg-3); font-weight: 400; }
@@ -266,12 +584,16 @@ body.vh-transcript-min #vh-tr-ticker { display: block; }
   border: 1px solid var(--vh-btn-border);
   color: var(--vh-btn-fg); letter-spacing: 0.01em; }
 /* presence marker = ∆ glyph (not a dot), colored per state */
-.vh-pres-chip .vh-pres-dot { font-size: 11px; line-height: 1; flex-shrink: 0;
-  color: rgba(255,255,255,0.18); transition: color .25s, text-shadow .25s; }
+.vh-pres-chip .vh-pres-dot { font-size: 11px; line-height: 1; flex-shrink: 0; display: inline-flex;
+  color: rgba(255,255,255,0.18); transition: color .25s, filter .25s; }
 .vh-pres-chip.in           { color: rgba(255,255,255,0.9); }
-.vh-pres-chip.in .vh-pres-dot   { color: #6dc9d9; }
-.vh-pres-chip.speak              { color: #fff; border-color: rgba(109,201,217,0.4); }
-.vh-pres-chip.speak .vh-pres-dot { color: #9ddb6d; text-shadow: 0 0 6px #9ddb6d; }
+/* Sprecherfarbe je Slot (gleiche Quelle wie Transkript + Kringel-Leuchten) */
+.vh-pres-chip[data-slot="user"]     { --vh-spk: var(--vh-user-ink); }
+.vh-pres-chip[data-slot="voice-ai"] { --vh-spk: var(--vh-delta-ink); }
+.vh-pres-chip[data-slot="agent"]    { --vh-spk: var(--vh-senior-ink); }
+.vh-pres-chip.in .vh-pres-dot   { color: var(--vh-spk, #6dc9d9); }
+.vh-pres-chip.speak              { color: #fff; border-color: color-mix(in srgb, var(--vh-spk, #6dc9d9) 60%, transparent); }
+.vh-pres-chip.speak .vh-pres-dot { color: var(--vh-spk, #6dc9d9); filter: drop-shadow(0 0 3px var(--vh-spk, #6dc9d9)); }
 /* Agent chip (Olli 30.09.): erst sichtbar, wenn wirklich ein externer Agent-
    Teilnehmer joint. Ladekreis (.joining) nur zwischen ParticipantConnected und
    erstem Track bzw. Selbstauskunft (vh.name); ersetzt den ∆ an Ort und Stelle.
@@ -295,7 +617,7 @@ body.theme-light .vh-pres-chip.in { color: var(--vh-btn-fg); }  /* alle Chips (U
    changes to that chip's role only. Default target is 'user'. */
 .vh-pres-chip { cursor: pointer; }
 .vh-pres-chip.selected {
-  outline: 2px solid var(--vh-chip-outline, currentColor);
+  outline: 2px solid var(--vh-spk, currentColor);
   outline-offset: 1px;
 }
 /* tiny hint that color-mode is active for one of the chips */
@@ -396,6 +718,31 @@ body.settings-collapsed #hue-ctl { display: none; }
 #btn-vh-call.on:hover { border-color: #ff7a7a; background: rgba(255,122,122,0.18); }
 #btn-vh-call svg { width: 15px; height: 15px; display: block; }
 #btn-vh-call .lbl { white-space: nowrap; }
+/* Erstbesucher (UI-Runde 3): "Mit Delta sprechen" links neben "Agent einladen",
+   gleiche Pill, aber hervorgehoben (Hover-Look des Call-Knopfs als Ruhezustand). */
+#btn-vh-delta {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 18px;
+  background: rgba(109,201,217,0.12);
+  border: 1px solid var(--vh-teal, #6dc9d9);
+  color: var(--vh-teal, #6dc9d9);
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--vh-mono, ui-monospace, Menlo, monospace);
+  font-size: 12px; letter-spacing: 0.04em;
+  backdrop-filter: var(--vh-btn-blur); -webkit-backdrop-filter: var(--vh-btn-blur);
+  transition: color .25s, border-color .25s, background .25s, transform .15s;
+}
+#btn-vh-delta[hidden] { display: none; }
+#btn-vh-delta:hover { background: rgba(109,201,217,0.2); }
+#btn-vh-delta:active { transform: scale(0.97); }
+#btn-vh-delta[disabled] { opacity: 0.55; cursor: progress; }
+#btn-vh-delta .vh-delta-ico { font-size: 14px; line-height: 1; display: inline-flex; }
+#btn-vh-delta .lbl { white-space: nowrap; }
+@media (max-width: 360px) {
+  body.vh-first-visit #btn-vh-call, body.vh-first-visit #btn-vh-delta { padding: 9px 10px; font-size: 10.5px; letter-spacing: 0; }
+  body.vh-first-visit #btn-vh-call svg, body.vh-first-visit #btn-vh-delta .vh-delta-ico { display: none; }
+}
 
 .vh-bottom-icon {
   width: 38px; height: 38px; padding: 0;
@@ -479,7 +826,7 @@ body.theme-light #hue-shift::-moz-range-thumb,
 body.theme-light #fx-ctl input[type="range"]::-moz-range-thumb    { background: rgba(0,0,0,0.92); }
 body.theme-light #tagline { color: rgba(0,0,0,0.30); }
 /* Kostenanzeige im Call: gut lesbar (Olli 30.09.: "zu unsichtbar") */
-#tagline.vh-cost-on { color: rgba(255,255,255,0.88); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; }
+#tagline.vh-cost-on { color: rgba(255,255,255,0.88); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; line-height: 1; }  /* line-height: Zeile berührt die Call-Leiste nicht (Mobile) */
 body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
 
 /* ── Mobile: kompaktes Layout — alle 4 Buttons in EINER Reihe + alle Slider sichtbar ─ */
@@ -495,6 +842,11 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
   #btn-theme svg, #btn-vh-music svg { width: 17px; height: 17px; }
   #vh-bottom-bar { bottom: 18px; gap: 8px; }
   #btn-vh-call   { padding: 9px 16px; font-size: 11.5px; }
+  #btn-vh-delta  { padding: 9px 16px; font-size: 11.5px; }
+  /* Erstbesucher: zwei Pills in einer Reihe, bündig mit dem Transkript-Panel
+     (links 12 px), damit rechts das Menü frei bleibt. */
+  body.vh-first-visit #vh-bottom-bar { left: 12px; transform: none; gap: 6px; }
+  body.vh-first-visit #btn-vh-call, body.vh-first-visit #btn-vh-delta { padding: 9px 11px; gap: 6px; letter-spacing: 0.01em; }
   .vh-bottom-icon { width: 36px; height: 36px; }
   .vh-bottom-icon svg { width: 15px; height: 15px; }
 
@@ -524,8 +876,14 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
   /* ∆ by voicehook.ai oben mittig — auf Mobile etwas kompakter */
   #label { top: 16px; font-size: 11px; }
   #label .dlt { font-size: 15px; }
+  #label { padding-top: 2px; }
   #label .by { margin: 0 5px; }
   #tagline { bottom: 4px; }
+}
+/* Schmale Phones (320/390): mittig kollidiert das Logo mit dem Musik-Knopf
+   (rechts 106 px + 38 px). Logo links oben, auf Höhe der Knopfreihe. */
+@media (max-width: 440px) {
+  #label { left: 16px; transform: none; top: 24px; max-width: calc(100vw - 168px); }
 }
 
 #tagline {
@@ -641,6 +999,74 @@ body.theme-light .vh-invite-status.warn{color:#b8641a;}
 #vh-mode-row{display:flex;gap:8px;justify-content:center;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;margin-bottom:6px;flex-shrink:0;}
 #vh-mode-row[hidden],#vh-presence.vh-in-call + #vh-mode-row{display:none;}
 #vh-mode-row .vh-pres-chip{font:inherit;padding:3px 9px;border-radius:12px;letter-spacing:0.01em;}
+/* Unter dem Schalter (UI-Runde 3): übrige Gratisminuten (dezent) und nach Klick
+   auf einen Modus dessen ungefährer Preis + Vorteile. Nur vor dem Call. */
+#vh-mode-info{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;line-height:1.5;text-align:center;color:var(--vh-btn-fg);margin:-2px 0 6px;flex-shrink:0;}
+#vh-mode-info[hidden],#vh-mode-info [hidden],#vh-presence.vh-in-call ~ #vh-mode-info{display:none;}
+#vh-mode-info .vh-free-left{opacity:0.6;letter-spacing:0.01em;}
+#vh-mode-info .vh-mode-detail{margin-top:2px;}
+#vh-mode-info .vh-md-price{color:var(--vh-teal,#6dc9d9);}
+body.theme-light #vh-mode-info .vh-md-price{color:#1f7f90;}
+#vh-mode-info .vh-md-adv{opacity:0.75;}
+#vh-mode-info a,.vh-pay-link{color:var(--vh-teal,#6dc9d9);text-decoration:underline;text-underline-offset:2px;}
+body.theme-light #vh-mode-info a,body.theme-light .vh-pay-link{color:#1f7f90;}
+/* Billing-Runde 4: Gratis + Guthaben + Aufladen/Anmelden als Link-Knöpfe in der
+   Gratis-Zeile; Aufladen öffnet INLINE #vh-topup (Chips + Drehregler aus
+   aufladen.html), Anmelden #vh-login (E-Mail-Link). Beide auch im Call sichtbar. */
+.vh-linkbtn{appearance:none;background:none;border:0;padding:0;margin:0;font:inherit;cursor:pointer;color:var(--vh-teal,#6dc9d9);text-decoration:underline;text-underline-offset:2px;}
+body.theme-light .vh-linkbtn{color:#1f7f90;}
+.vh-linkbtn.vh-quiet{color:inherit;opacity:0.85;}
+#vh-mode-info .vh-free-left{opacity:1;}
+#vh-mode-info .vh-me-txt{opacity:0.6;}
+#vh-mode-info .vh-sep{opacity:0.45;}
+#vh-topup,#vh-login,#vh-low-bal{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--vh-btn-fg);flex-shrink:0;
+  border:1px solid var(--vh-btn-border);background:var(--vh-btn-bg);border-radius:8px;padding:8px 10px;margin:0 0 6px;}
+#vh-topup[hidden],#vh-login[hidden],#vh-low-bal[hidden]{display:none;}
+/* Panel oder Modus-Details offen: Glas-Panel wächst nach oben, statt Inhalt unter
+   die Call-Leiste zu schieben oder das Transkript zu zerquetschen (Review-Altlast 320 px). */
+body.vh-wrap-grow:not(.vh-transcript-expanded):not(.vh-transcript-min) #vh-transcript-wrap{height:auto;min-height:var(--vh-wrap-h,140px);}
+body.vh-wrap-grow:not(.vh-transcript-expanded):not(.vh-transcript-min) #vh-transcript{min-height:56px;}
+/* Sehr schmal: "Anmelden" steht im Aufladen-Panel, die Gratis-Zeile bleibt einzeilig. */
+@media (max-width:360px){#vh-mode-info .vh-login-wrap{display:none;}}
+#vh-tu-login{align-self:flex-start;text-align:left;font-size:10px;}
+.vh-tu-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;letter-spacing:0.06em;text-transform:uppercase;opacity:0.75;}
+.vh-tu-x{appearance:none;background:none;border:0;color:inherit;font:inherit;font-size:14px;line-height:1;cursor:pointer;padding:2px 4px;opacity:0.8;}
+.vh-tu-x:hover{opacity:1;}
+.vh-tu-body{display:flex;gap:12px;align-items:center;}
+.vh-tu-dial{position:relative;width:112px;height:112px;flex:0 0 112px;touch-action:none;cursor:grab;outline:none;border-radius:50%;}
+.vh-tu-dial:focus-visible{box-shadow:0 0 0 2px var(--vh-teal,#6dc9d9);}
+.vh-tu-dial.dragging{cursor:grabbing;}
+.vh-tu-dial svg{width:100%;height:100%;transform:rotate(-90deg);display:block;}
+.vh-tu-dial .track{fill:none;stroke:var(--vh-btn-border);stroke-width:16;}
+.vh-tu-dial .fill{fill:none;stroke:var(--vh-teal,#6dc9d9);stroke-width:16;stroke-linecap:round;transition:stroke-dashoffset .08s linear;}
+.vh-tu-dial .knob{fill:var(--vh-teal,#6dc9d9);stroke:var(--vh-bg-0,#000);stroke-width:4;}
+body.theme-light .vh-tu-dial .fill,body.theme-light .vh-tu-dial .knob{stroke:#1f8fa3;}
+body.theme-light .vh-tu-dial .knob{fill:#1f8fa3;stroke:#f4f4f7;}
+.vh-tu-amt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600;pointer-events:none;color:var(--vh-btn-fg-hov);}
+.vh-tu-side{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:7px;}
+.vh-tu-chips{display:flex;gap:6px;flex-wrap:wrap;}
+.vh-tu-chip{appearance:none;font:inherit;padding:5px 9px;border-radius:12px;cursor:pointer;background:transparent;color:var(--vh-btn-fg);border:1px solid var(--vh-btn-border);min-height:28px;}
+.vh-tu-chip:hover{border-color:var(--vh-btn-border-hov);}
+.vh-tu-chip.on{border-color:var(--vh-teal,#6dc9d9);color:var(--vh-teal,#6dc9d9);}
+body.theme-light .vh-tu-chip.on{border-color:#1f7f90;color:#1f7f90;}
+.vh-tu-go{appearance:none;border:0;cursor:pointer;font:inherit;font-size:11px;font-weight:600;min-height:34px;padding:8px 10px;border-radius:8px;background:var(--vh-teal,#6dc9d9);color:#000;letter-spacing:0.02em;}
+body.theme-light .vh-tu-go{background:#1f8fa3;color:#fff;}
+.vh-tu-go:disabled{opacity:0.45;cursor:not-allowed;}
+.vh-tu-msg{line-height:1.45;opacity:0.85;}
+.vh-tu-msg.warn{color:#f2a65a;opacity:1;}
+body.theme-light .vh-tu-msg.warn{color:#b8641a;}
+.vh-tu-fine{opacity:0.5;line-height:1.45;font-size:9.5px;}
+#vh-login form{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+#vh-login form[hidden]{display:none;}
+#vh-login input{flex:1 1 150px;min-width:0;font:inherit;font-size:16px;padding:5px 8px;border-radius:6px;border:1px solid var(--vh-btn-border-hov);background:transparent;color:var(--vh-btn-fg-hov);}
+@media (min-width:641px){#vh-login input{font-size:11px;}}
+#vh-login .vh-tu-go{min-height:30px;padding:6px 10px;}
+#vh-login .vh-lg-hint{opacity:0.55;margin-top:5px;line-height:1.45;}
+#vh-low-bal{border-color:rgba(242,166,90,0.55);color:#f2a65a;text-align:center;line-height:1.5;padding:5px 10px;}
+body.theme-light #vh-low-bal{color:#b8641a;border-color:rgba(184,100,26,0.5);}
+/* Review-Altlast: Vorteile-Text quetscht bei 320 px das Transkript. Schmal: eine
+   Zeile mit Auslassung, voller Text im title. */
+.vh-invite-status.vh-pay-err{white-space:normal;}
 #vh-invite-banner{margin:6px 0;width:100%;max-width:560px;align-self:center;flex-shrink:0;}
 /* Punkt A: sobald ein externer Agent im Raum ist, Snippet + Copy ausblenden;
    verlässt er den Raum, erscheint es wieder (Klasse aus vhSyncInviteBtnVisibility). */
@@ -649,15 +1075,15 @@ body.theme-light .vh-invite-status.warn{color:#b8641a;}
 #vh-transcript .vh-tr-row{display:flex;gap:6px;align-items:flex-start;padding:2px 4px;border-radius:3px;max-width:92%;}
 #vh-transcript .vh-tr-ts{color:#444;font-size:9px;flex-shrink:0;font-variant-numeric:tabular-nums;padding-top:1px;}
 #vh-transcript .vh-tr-txt{flex:1;word-break:break-word;}
-#vh-transcript .vh-tr-row.user{color:var(--vh-user-color,#6dc9d9);align-self:flex-start;}
-#vh-transcript .vh-tr-row.agent{color:var(--vh-tr-blue);align-self:flex-end;flex-direction:row-reverse;text-align:right;}
+#vh-transcript .vh-tr-row.user{color:var(--vh-user-ink);align-self:flex-start;}
+#vh-transcript .vh-tr-row.agent{color:var(--vh-delta-ink);align-self:flex-end;flex-direction:row-reverse;text-align:right;}
 /* `senior` = external LLM-agent (`Agent`-chip) pushing via senior.say — distinct color + boxed for clear separation from voice-ai turns */
 /* Punkt L: Operator-Text ([SAY]/senior und role operator) in der Farbe des
    Agent-Chips (--vh-senior-color, dynamisch aus vhApplySpeakerColorsToTranscript);
    Light-Theme abgedunkelt, damit lesbar. */
 #vh-transcript .vh-tr-row.senior,
 #vh-transcript .vh-tr-row.operator{
-  --vh-op-color:var(--vh-senior-color,#e88bff);
+  --vh-op-color:var(--vh-senior-ink);
   color:var(--vh-op-color);align-self:flex-end;
   flex-direction:row-reverse;text-align:right;font-weight:500;
   border:1px solid color-mix(in srgb, var(--vh-op-color) 38%, transparent);
@@ -668,10 +1094,6 @@ body.theme-light .vh-invite-status.warn{color:#b8641a;}
    transcript but voice-ai never speaks it. Muted, italic, left-bordered as a
    "quiet note" so the user can clearly distinguish a silent status/code/URL
    ping from a spoken senior.say turn. */
-body.theme-light #vh-transcript .vh-tr-row.senior,
-body.theme-light #vh-transcript .vh-tr-row.operator{
-  --vh-op-color:color-mix(in srgb, var(--vh-senior-color,#e88bff) 62%, #000);
-}
 #vh-transcript .vh-tr-row.senior_text{
   color:color-mix(in srgb, var(--vh-senior-color,#e88bff) 55%, #aaa);
   align-self:flex-end;flex-direction:row-reverse;text-align:right;
@@ -699,36 +1121,32 @@ body.theme-light #vh-transcript .vh-tr-row.operator{
   })();
 </script>
 
-<button id="btn-info" title="voicehook info" aria-label="info">i</button>
-<button id="btn-vh-music" title="" data-tip="Music mode — mic an, Effekte hoch" aria-label="music mode">
+<button id="btn-info" title="voicehook info" aria-label="info" data-i18n-title="info.title" data-i18n-aria="info.aria">i</button>
+<button id="btn-vh-music" title="" data-tip="Music mode: mic on, effects up" aria-label="music mode" data-i18n-tip="music.tip" data-i18n-aria="music.aria">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
 </button>
 <div id="vh-bottom-bar">
-  <button id="btn-mute" class="vh-bottom-icon" hidden title="microphone (mute / unmute)" aria-label="microphone mute">
+  <button id="btn-mute" class="vh-bottom-icon" hidden title="microphone (mute / unmute)" aria-label="microphone mute" data-i18n-title="mute.title" data-i18n-aria="mute.aria">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
   </button>
-  <button id="btn-vh-call" title="copies invite URL to clipboard + connects you as host" aria-label="invite your agent">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-    <span class="lbl">Invite your agent</span>
+  <button id="btn-vh-delta" type="button" hidden title="Starts a call with Delta" data-i18n-title="delta.title">
+    <span class="vh-delta-ico" aria-hidden="true"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span>
+    <span class="lbl" data-i18n="delta.label">Talk to Delta</span>
   </button>
-  <button id="btn-speaker" class="vh-bottom-icon" hidden title="speaker (mute / unmute tab audio)" aria-label="speaker mute">
+  <button id="btn-vh-call" title="copies invite URL to clipboard + connects you as host" aria-label="invite your agent" data-i18n-title="call.title" data-i18n-aria="call.aria">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+    <span class="lbl" data-i18n="call.label">Invite your agent</span>
+  </button>
+  <button id="btn-speaker" class="vh-bottom-icon" hidden title="speaker (mute / unmute tab audio)" aria-label="speaker mute" data-i18n-title="speaker.title" data-i18n-aria="speaker.aria">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
   </button>
 </div>
-<div id="vh-info-pop" hidden>
-  <h3>voicehook.ai — what's happening here?</h3>
-  <p><strong>Talk to AI:</strong> Live voice call with our voice agent (STT → LLM → TTS over wss://rtc.voicehook.ai). Hit the phone icon and start talking. Each turn lands in the transcript below.</p>
-  <p><strong>Speech / Music mode:</strong> Speech is the AI-call mode. Music turns the dome into a visualizer that reacts to your mic (or whatever is playing in the tab).</p>
-  <p><strong>Invite an agent:</strong> You get an invite snippet — paste it into another LLM session (Claude Code, Cursor, ZeroClaw, Hermes). The external agent joins as a second brain and can push TTS replies through your call.</p>
-  <p><strong>Presence chips (top):</strong> grey = not in room · teal = joined · green pulse = speaking right now.</p>
-  <p><strong>Transcript:</strong> The button right of the presence chips cycles minimized → normal → fullscreen (Esc toggles fullscreen). Wheel-scroll works inside the transcript; outside it zooms the dome.</p>
-  <p>Agent CLI: <code>uvx voicehook-agent join &lt;url&gt; --name &lt;Name&gt; --model &lt;model&gt;</code> · Skill doc: <a href="/agent/SKILL.md" target="_blank" rel="noopener">/agent/SKILL.md</a></p>
-</div>
-<button id="btn-theme" title="theme" aria-label="theme"></button>
+<div id="vh-info-pop" hidden data-i18n-html="infoPop.html"></div>
+<button id="btn-theme" title="theme" aria-label="theme" data-i18n-title="theme.title" data-i18n-aria="theme.title"></button>
 <div id="label">
-  <span class="dlt">∆</span><span class="by">by</span><span>voicehook<span class="tld">.ai</span></span>
+  <span class="dlt"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="by">by</span><span>voicehook<span class="tld">.ai</span></span>
 </div>
-<div id="tagline">talk to any AI</div>
+<div id="tagline" data-i18n="tagline">Talk with your agents</div>
 <script>
   // (spotify-iframe removed 2026-05-18 per Olli)
   if (false) {
@@ -741,40 +1159,40 @@ body.theme-light #vh-transcript .vh-tr-row.operator{
      Neue Call-Entry/Exit-UI folgt in nächstem Schritt. -->
 
 <!-- Call-Mode Choice Modal -->
-<div id="vh-call-modal" hidden role="dialog" aria-modal="true" aria-label="Start AI Call">
+<div id="vh-call-modal" hidden role="dialog" aria-modal="true" aria-label="Start AI Call" data-i18n-aria="modal.aria">
   <div class="vh-modal-backdrop"></div>
   <div class="vh-modal-card">
-    <button class="vh-modal-close" id="vh-modal-close" aria-label="close">×</button>
+    <button class="vh-modal-close" id="vh-modal-close" aria-label="close" data-i18n-aria="modal.close">×</button>
 
     <!-- STEP 1: Choice between Talk-to-Model and Invite-Agent -->
     <section class="vh-step" id="vh-step-choice">
-      <h2>Start Voice Call</h2>
-      <p class="vh-modal-sub">Wähle dein Setup.</p>
+      <h2 data-i18n="modal.title">Start Voice Call</h2>
+      <p class="vh-modal-sub" data-i18n="modal.sub">Wähle dein Setup.</p>
       <button class="vh-modal-opt" id="vh-modal-standard">
-        <span class="vh-modal-opt-title">Talk to a Model</span>
-        <span class="vh-modal-opt-meta">Voice + Model auswählen, AI dispatcht sofort</span>
+        <span class="vh-modal-opt-title" data-i18n="modal.model">Talk to a Model</span>
+        <span class="vh-modal-opt-meta" data-i18n="modal.modelMeta">Voice + Model auswählen, AI dispatcht sofort</span>
       </button>
       <button class="vh-modal-opt vh-modal-opt-alt" id="vh-modal-invite">
-        <span class="vh-modal-opt-title">Agent einladen</span>
-        <span class="vh-modal-opt-meta">Discovery-Link kopieren · du joinst zuerst · dann kommt dein Agent</span>
+        <span class="vh-modal-opt-title" data-i18n="modal.invite">Agent einladen</span>
+        <span class="vh-modal-opt-meta" data-i18n="modal.inviteMeta">Discovery-Link kopieren · du joinst zuerst · dann kommt dein Agent</span>
       </button>
     </section>
 
     <!-- STEP 2a: Talk-to-Model — voice + model picker inside the modal -->
     <section class="vh-step" id="vh-step-model" hidden>
-      <h2>Talk to a Model</h2>
-      <p class="vh-modal-sub">Wähle Stimme und Sprachmodell, dann verbinde.</p>
+      <h2 data-i18n="modal.model">Talk to a Model</h2>
+      <p class="vh-modal-sub" data-i18n="modal.modelSub">Wähle Stimme und Sprachmodell, dann verbinde.</p>
       <label class="vh-field">
-        <span>Stimme</span>
+        <span data-i18n="modal.voice">Stimme</span>
         <select id="vh-pick-voice">
-          <optgroup label="Deutsch">
+          <optgroup label="Deutsch" data-i18n-label="modal.langDe">
             <option value="de-DE-Chirp3-HD-Charon" selected>Charon ♂</option>
             <option value="de-DE-Chirp3-HD-Puck">Puck ♂</option>
             <option value="de-DE-Chirp3-HD-Kore">Kore ♀</option>
             <option value="de-DE-Chirp3-HD-Aoede">Aoede ♀</option>
             <option value="de-DE-Chirp3-HD-Leda">Leda ♀</option>
           </optgroup>
-          <optgroup label="English">
+          <optgroup label="English" data-i18n-label="modal.langEn">
             <option value="en-US-Chirp3-HD-Charon">Charon ♂</option>
             <option value="en-US-Chirp3-HD-Fenrir">Fenrir ♂</option>
             <option value="en-US-Chirp3-HD-Kore">Kore ♀</option>
@@ -784,30 +1202,30 @@ body.theme-light #vh-transcript .vh-tr-row.operator{
         </select>
       </label>
       <label class="vh-field">
-        <span>Sprachmodell</span>
+        <span data-i18n="modal.llm">Sprachmodell</span>
         <select id="vh-pick-model">
           <option value="google/gemini-2.5-flash" selected>Gemini 2.5 Flash</option>
-          <option value="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (faster, weaker)</option>
+          <option value="google/gemini-2.5-flash-lite" data-i18n="modal.lite">Gemini 2.5 Flash Lite (faster, weaker)</option>
         </select>
       </label>
       <div class="vh-modal-row">
-        <button class="vh-modal-btn-back" data-back-to="choice">← zurück</button>
-        <button class="vh-modal-btn-go" id="vh-go-model">Verbinden</button>
+        <button class="vh-modal-btn-back" data-back-to="choice" data-i18n="modal.back">← zurück</button>
+        <button class="vh-modal-btn-go" id="vh-go-model" data-i18n="modal.connect">Verbinden</button>
       </div>
     </section>
 
     <!-- STEP 2b: Invite-Agent — show snippet, wait state, then connect -->
     <section class="vh-step" id="vh-step-invite" hidden>
-      <h2>Agent einladen</h2>
-      <p class="vh-modal-sub">Kopier den Link, lass deinen Agent joinen. <strong>Du joinst zuerst</strong> und wartest auf ihn.</p>
+      <h2 data-i18n="modal.invite">Agent einladen</h2>
+      <p class="vh-modal-sub" data-i18n-html="modal.inviteSub">Kopier den Link, lass deinen Agent joinen. <strong>Du joinst zuerst</strong> und wartest auf ihn.</p>
       <div class="vh-snippet-box">
         <pre id="vh-invite-snippet">…</pre>
-        <button class="vh-snippet-copy" id="vh-copy-snippet">copy</button>
+        <button class="vh-snippet-copy" id="vh-copy-snippet" data-i18n="invite.copy">copy</button>
       </div>
-      <p id="vh-invite-status" class="vh-modal-status">Warte auf zweiten Teilnehmer im Raum…</p>
+      <p id="vh-invite-status" class="vh-modal-status" data-i18n="modal.waitPeer">Warte auf zweiten Teilnehmer im Raum…</p>
       <div class="vh-modal-row">
-        <button class="vh-modal-btn-back" data-back-to="choice">← zurück</button>
-        <button class="vh-modal-btn-go" id="vh-go-invite">Raum jetzt joinen</button>
+        <button class="vh-modal-btn-back" data-back-to="choice" data-i18n="modal.back">← zurück</button>
+        <button class="vh-modal-btn-go" id="vh-go-invite" data-i18n="modal.join">Raum jetzt joinen</button>
       </div>
     </section>
   </div>
@@ -816,18 +1234,51 @@ body.theme-light #vh-transcript .vh-tr-row.operator{
 <!-- Transcript log — block in body flow, under the kringel -->
 <div id="vh-transcript-wrap">
   <div id="vh-presence">
-    <span class="vh-pres-chip" data-slot="user" title="Du — der Mensch im Raum"><span class="vh-pres-dot">∆</span><span class="vh-pres-label">User</span></span>
-    <span class="vh-pres-chip" data-slot="voice-ai" title="Delta Agent (voice) — voicehook-interne STT+LLM+TTS pipeline. Moderiert das Gespräch zwischen User und Agent."><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Delta Agent (voice)</span></span>
-    <span class="vh-pres-chip" data-slot="agent" title="Agent — der externe LLM (z.B. Claude Code) der via voicehook-agent CLI eingeklinkt ist"><span class="vh-pres-spin" aria-hidden="true"></span><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Agent</span></span>
-    <button type="button" id="vh-tr-mode" aria-label="Transkript-Ansicht wechseln" title="Transkript: minimiert / normal / Vollbild (Esc)"></button>
+    <span class="vh-pres-chip" data-slot="user" title="You, the human in the room" data-i18n-title="pres.userDesc"><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label" data-i18n="pres.user">User</span></span>
+    <span class="vh-pres-chip" data-slot="voice-ai" title="Delta Agent (voice)" data-i18n-title="pres.voiceDesc"><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label" data-i18n="pres.voice">Delta Agent (voice)</span></span>
+    <span class="vh-pres-chip" data-slot="agent" title="Agent" data-i18n-title="pres.agentDesc"><span class="vh-pres-spin" aria-hidden="true"></span><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label" data-i18n="pres.agent">Agent</span></span>
+    <button type="button" id="vh-tr-mode" aria-label="Transkript-Ansicht wechseln" title="Transkript" data-i18n-aria="tr.aria"></button>
   </div>
-  <div id="vh-mode-row" role="group" aria-label="Sprachmodus für den nächsten Call" hidden>
-    <button type="button" class="vh-pres-chip in" data-mode="normal" aria-pressed="true" title="Normal: Standard-Sprachpipeline"><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Normal</span></button>
-    <button type="button" class="vh-pres-chip" data-mode="live" aria-pressed="false" title="Live: Gemini Live, gilt für den nächsten neuen Call"><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Live</span></button>
+  <div id="vh-mode-row" role="group" aria-label="Sprachmodus für den nächsten Call" data-i18n-aria="mode.aria" hidden>
+    <button type="button" class="vh-pres-chip in" data-mode="normal" aria-pressed="true" title="Normal: Standard-Sprachpipeline" data-i18n-title="mode.normalTitle"><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label">Normal</span></button>
+    <button type="button" class="vh-pres-chip" data-mode="live" aria-pressed="false" title="Live: Gemini Live, gilt für den nächsten neuen Call" data-i18n-title="mode.liveTitle"><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label">Live</span></button>
+  </div>
+  <div id="vh-mode-info" hidden>
+    <div class="vh-free-left" aria-live="polite" hidden></div>
+    <div class="vh-mode-detail" hidden></div>
+  </div>
+  <div id="vh-low-bal" role="alert" hidden></div>
+  <div id="vh-topup" role="group" hidden>
+    <div class="vh-tu-head"><span data-i18n="topup.title">Top up credit</span><button type="button" class="vh-tu-x" id="vh-topup-x" aria-label="Close" data-i18n-aria="topup.close">&times;</button></div>
+    <div class="vh-tu-body">
+      <div class="vh-tu-dial" id="vh-tu-dial" tabindex="0" role="slider" aria-valuemin="10" aria-valuemax="200" aria-valuenow="20" aria-label="Amount" data-i18n-aria="topup.amount">
+        <svg viewBox="0 0 300 300" aria-hidden="true">
+          <circle class="track" cx="150" cy="150" r="120"/>
+          <circle class="fill" id="vh-tu-fill" cx="150" cy="150" r="120" stroke-dasharray="753.98" stroke-dashoffset="753.98"/>
+          <circle class="knob" id="vh-tu-knob" cx="150" cy="30" r="15"/>
+        </svg>
+        <div class="vh-tu-amt" id="vh-tu-amt"></div>
+      </div>
+      <div class="vh-tu-side">
+        <div class="vh-tu-chips" id="vh-tu-chips"></div>
+        <button type="button" class="vh-tu-go" id="vh-tu-go"></button>
+        <div class="vh-tu-msg" id="vh-tu-msg" aria-live="polite" hidden></div>
+        <div class="vh-tu-fine" data-i18n="topup.fine"></div>
+        <button type="button" class="vh-linkbtn vh-quiet" id="vh-tu-login" data-i18n="login.have">Already have credit? Log in</button>
+      </div>
+    </div>
+  </div>
+  <div id="vh-login" role="group" hidden>
+    <div class="vh-tu-head"><span data-i18n="login.title">Log in with an email link</span><button type="button" class="vh-tu-x" id="vh-login-x" aria-label="Close" data-i18n-aria="topup.close">&times;</button></div>
+    <form id="vh-login-form" novalidate>
+      <input type="email" id="vh-login-email" autocomplete="email" inputmode="email" required data-i18n-aria="login.ph">
+      <button type="submit" class="vh-tu-go" id="vh-login-go" data-i18n="login.send">Send link</button>
+    </form>
+    <div class="vh-lg-hint" id="vh-login-msg" aria-live="polite" data-i18n="login.hint"></div>
   </div>
   <div id="vh-tr-ticker" aria-live="polite"></div>
   <div id="vh-invite-banner" hidden></div>
-  <div id="vh-transcript"><div id="vh-transcript-empty">Transcript — start a call to see live turns.</div></div>
+  <div id="vh-transcript"><div id="vh-transcript-empty" data-i18n="tr.empty">Transcript: start a call to see live turns.</div></div>
 </div>
 <div id="fx-ctl">
   <!-- AI Voice + AI Model pickers removed from sidebar 2026-05-18:
@@ -894,9 +1345,13 @@ function applyThemeBg() {
   const light = document.body.classList.contains('theme-light');
   renderer.setClearColor(light ? 0xf4f4f7 : 0x000000, 1);
   // mat ist evtl. noch nicht init'd beim ersten Call — try/catch schluckt TDZ.
+  // Giraffe/Leopard auch im Dark-Theme mit NormalBlending: additiv summieren
+  // sich die vielen Partikel im Röhrenvolumen zu Weiß, Flecken und Rosetten
+  // gehen unter. Normal deckt jedes Partikel seine Farbe, das Fell bleibt lesbar.
   try {
-    mat.blending = light ? THREE.NormalBlending : THREE.AdditiveBlending;
-    mat.needsUpdate = true;
+    const fur = spatialMode === 'voronoi' || spatialMode === 'spots';
+    const want = (light || fur) ? THREE.NormalBlending : THREE.AdditiveBlending;
+    if (mat.blending !== want) { mat.blending = want; mat.needsUpdate = true; }
   } catch {}
 }
 applyThemeBg();
@@ -1048,7 +1503,9 @@ mat.onBeforeCompile = (shader) => {
   shader.uniforms.uMajorR = { value: R_MAJOR };
   shader.uniforms.uClock  = { value: 0.0 };
   shader.uniforms.uBeat   = { value: 0.0 };
+  shader.uniforms.uSizeMul = { value: 1.0 };
   shader.vertexShader = `
+    uniform float uSizeMul;
     uniform float uTube;
     uniform float uMajorR;
     uniform float uClock;
@@ -1083,6 +1540,8 @@ mat.onBeforeCompile = (shader) => {
       }
     `
   );
+  // Punktgröße skalierbar (Fell bei wenigen Partikeln, siehe vhSimStep).
+  shader.vertexShader = shader.vertexShader.replace('gl_PointSize = size;', 'gl_PointSize = size * uSizeMul;');
   mat.userData.shader = shader;
 };
 
@@ -1194,6 +1653,7 @@ let intensity   = 1.0;     // FX-Slider: globaler Effekt-Multiplikator (0..2)
 let satFraction = 0.05;    // Satellite-Slider: Anteil sichtbarer Satelliten (0..1)
 let activeN     = N * 0.2; // Partikel-Slider: aktive Partikel-Anzahl
 let zoom        = 1.0;     // Zoom-Slider: höher = näher (Donut größer)
+let vhZoomTarget = 1.0;    // Ziel des Mausrad-Zooms; zoom folgt weich (vhSimStep)
 let islandStrength = 0.6;  // Insel-Slider: spatial-Noise vs random im freqBin
 let ringFx      = 1.0;     // Ring-FX-Slider: skaliert Tube-Inflate + xy-Atmen
 let lastIslandT = -1;      // letzter Insel-Rebuild-Zeitpunkt (für Drift-Animation)
@@ -1232,11 +1692,47 @@ let subBassPrev = 0;     // Vorheriger Wert für Attack-Detection
 let ultraDeepEnv = 0;    // Edge-getriggert: nur Sub-Bass-FLANKE pulsiert, kein Sustain
 let ultraDeep   = 0;     // Quadratisch geformt + gecapt → kurzer extremer Push
 
+// Kringel-Leuchten beim Sprechen (Farbregel 01.10.): Farbe = Style-Variation des
+// sprechenden Slots, gesetzt über vhSetSpeaker(); vhGlowK folgt weich dem Ziel.
+const vhSpeakerRgb = { user: null, 'voice-ai': null, agent: null };
+let vhGlowR = 0, vhGlowG = 0, vhGlowB = 0, vhGlowTarget = 0, vhGlowK = 0;
 let vhLayoutTick = 0;
-function animate() {
+// Render-Loop-Steuerung (Olli 01.10.):
+//  - Transkript-Vollbild oder Tab unsichtbar (document.hidden): Loop STOPPT ganz,
+//    kein requestAnimationFrame mehr; vhLoopKick() startet ihn beim Verlassen neu.
+//  - SD: Zeichnen auf 30 fps gedrosselt (Zeichnen dominiert die Last). Pro
+//    gezeichnetem Frame laufen zwei Simulationsschritte, damit Bewegung und
+//    Uhr gleich schnell bleiben wie in HD; Partikelzahl unverändert.
+let vhSdMode    = false;   // gesetzt von applyHd()
+let vhLoopOn    = false;   // true, solange ein rAF/Timeout für animate() geplant ist
+let vhLoopTimer = null;
+const VH_SD_FRAME_MS = 1000 / 30;
+function vhLoopShouldRun() {
+  return !document.hidden && !document.body.classList.contains('vh-transcript-expanded');
+}
+function vhLoopKick() {
+  if (vhLoopOn || !vhLoopShouldRun()) return;
+  vhLoopOn = true;
   requestAnimationFrame(animate);
-  // Transkript-Vollbild: Kringel ist ausgeblendet -> Render-Loop pausieren.
-  if (document.body.classList.contains('vh-transcript-expanded')) return;
+}
+document.addEventListener('visibilitychange', vhLoopKick);
+function animate() {
+  if (!vhLoopShouldRun()) { vhLoopOn = false; return; }   // Loop endet, nichts mehr geplant
+  // Echte Eintrittszeit (der rAF-Zeitstempel kann bei voller Hauptschleife alt sein).
+  const now = performance.now();
+  if (vhSdMode) {
+    // SD: nächsten Frame erst kurz vor Ablauf von 33 ms anfordern, dann per rAF
+    // auf den nächsten vsync legen -> ca. 30 Callbacks pro Sekunde.
+    const wait = Math.max(0, VH_SD_FRAME_MS - (performance.now() - now) - 4);
+    vhLoopTimer = setTimeout(() => { vhLoopTimer = null; requestAnimationFrame(animate); }, wait);
+  } else {
+    requestAnimationFrame(animate);
+  }
+  const steps = vhSdMode ? 2 : 1;
+  for (let s = 0; s < steps; s++) vhSimStep();
+  renderer.render(scene, camera);
+}
+function vhSimStep() {
   // Alle ~0.5 s prüfen, ob Zoom/Profil/Panelhöhe die Ring-Unterkante verschoben hat.
   if ((++vhLayoutTick % 30) === 0) { try { vhRingLayout(false); } catch (_) {} }
   clock += 0.016;
@@ -1306,6 +1802,32 @@ function animate() {
   const sigAttack = bassAttack > 0.06 ? bassAttack : 0;
   beatEnv = Math.max(sigAttack * 5, beatEnv * 0.91);
 
+  // Giraffe/Leopard (Fell mit Flecken/Rosetten): siehe applyThemeBg, beide
+  // Themes mit NormalBlending. Tiger/Zebra unberührt.
+  const furSpots = spatialMode === 'voronoi' || spatialMode === 'spots';
+  const VH_FUR_REF_N = 16000;   // Partikelzahl, ab der das Fell ohne Vergrößerung deckt
+
+  // Sprecher-Leuchten: weich ein-/ausblenden, Stärke folgt der Lautstärke.
+  // Gemischt wird helligkeitserhaltend (dunkle Fellflecken bleiben dunkel),
+  // max. 60 %, damit Style und Muster beim Sprechen erkennbar bleiben.
+  vhGlowK += (vhGlowTarget - vhGlowK) * 0.12;
+  const glowMix = vhGlowK > 0.003 ? vhGlowK * Math.min(0.6, 0.3 + amp * 0.9) : 0;
+  // Tönung mit gleicher Helligkeit wie das Partikel (Kontrast des Musters
+  // bleibt), plus Aufhellen proportional zur Lautstärke (= Leuchten).
+  const glowGain = (1.1 + amp * 0.6) / Math.max(0.08, (vhGlowR + vhGlowG + vhGlowB) * 0.3333);
+  // Fell (Giraffe/Leopard): Leuchten nur als gleicher Faktor je Farbkanal für
+  // ALLE Partikel (Helligkeit + leichte Tönung in Sprecherfarbe). Verhältnis
+  // Fleck/Linie bzw. Rosette/Grund bleibt dadurch exakt erhalten.
+  let furGlowR = 1, furGlowG = 1, furGlowB = 1;
+  if (furSpots && glowMix > 0) {
+    const gAvg = Math.max(0.08, (vhGlowR + vhGlowG + vhGlowB) * 0.3333);
+    const furLift = 1 + glowMix * (0.35 + amp * 0.5);
+    const tint = glowMix * 0.45;
+    furGlowR = furLift * (1 + (vhGlowR / gAvg - 1) * tint);
+    furGlowG = furLift * (1 + (vhGlowG / gAvg - 1) * tint);
+    furGlowB = furLift * (1 + (vhGlowB / gAvg - 1) * tint);
+  }
+
   // Earth-Maus-Spezialfall: smooth zwischen braun und grün wechseln
   if (mouseEarth) {
     const t = Math.sin(clock * 1.3) * 0.5 + 0.5;       // 0..1
@@ -1320,6 +1842,11 @@ function animate() {
     u.uTube.value  = Math.min(0.22, beatEnv * 0.025 * ringFx);
     u.uClock.value = clock;
     u.uBeat.value  = Math.min(0.15, beatEnv * 0.035 * ringFx);
+    // Fell: im Call laufen deutlich weniger Partikel (Profil/Mobile) als im
+    // Ruhebild. Damit Flecken und Rosetten geschlossen bleiben statt in lose
+    // Punkte zu zerfallen, wachsen die Punkte mit sinkender Partikelzahl
+    // (gleiche Deckung, max. 1.8x). Andere Styles unverändert.
+    u.uSizeMul.value = furSpots ? Math.min(1.8, Math.max(1, Math.sqrt(VH_FUR_REF_N / Math.max(1, activeN)))) : 1;
   }
   // Atem-Effekt entfernt — sah verzerrt aus. Tube-Inflate über Shader bleibt.
   if (points) { points.scale.set(1, 1, 1); }
@@ -1574,7 +2101,15 @@ function animate() {
         hue = (discreteHues[bucket] + hueShift + 100) % 1;
         sat = Math.min(1, discreteSats[bucket] + localAmp * 0.10);
         const furJ = spatialLitJitter ? spatialLitJitter[i] : 1;
-        lit = Math.min(0.62, discreteLits[bucket] + localAmp * 0.20 + bassAttack * 0.10) * litMul * furJ;
+        if (furSpots) {
+          // Giraffe/Leopard: Helligkeit multiplikativ und für alle Partikel
+          // gleich (Gesamtlautstärke statt Band je Cluster) modulieren ->
+          // Hell/Dunkel-Verhältnis und Lage der Flecken bleiben beim Sprechen.
+          sat = discreteSats[bucket];
+          lit = Math.min(0.85, discreteLits[bucket] * (1 + amp * 0.30 + bassAttack * 0.15)) * litMul * furJ;
+        } else {
+          lit = Math.min(0.62, discreteLits[bucket] + localAmp * 0.20 + bassAttack * 0.10) * litMul * furJ;
+        }
       } else {
         const baseHue = hueStart + fNorm * hueRange;
         hue = (baseHue + hueShift + (hueOff[i] - 0.5) * 0.04 + 100) % 1;
@@ -1615,6 +2150,17 @@ function animate() {
       // Insel-Slider wirkt dadurch auch ohne aktives Mikrofon sichtbar.
       const fbn = freqBin[i] / VISUAL_CLUSTERS;
       setRestingColor(i3, speed, amp, fbn);
+    }
+
+    // ── Sprecher-Leuchten (Farbe des sprechenden Slots) ─────────────────────
+    if (glowMix > 0 && !isSat && furSpots) {
+      col[i3] *= furGlowR; col[i3+1] *= furGlowG; col[i3+2] *= furGlowB;
+    } else if (glowMix > 0 && !isSat) {
+      const L  = (col[i3] + col[i3+1] + col[i3+2]) * 0.3333;
+      const sc = L * glowGain;
+      col[i3]   += (vhGlowR * sc - col[i3])   * glowMix;
+      col[i3+1] += (vhGlowG * sc - col[i3+1]) * glowMix;
+      col[i3+2] += (vhGlowB * sc - col[i3+2]) * glowMix;
     }
 
     // ── Maus-Glow: theme-spezifischer Farb-Push, voll dominant in der Mitte ─
@@ -1660,21 +2206,23 @@ function animate() {
   // Sehr langsame Eigenrotation des ganzen Rings um die Donut-Achse
   points.rotation.z = clock * 0.02;     // ~1.15°/s, voller Umlauf in ~5.2 min
 
-  // Gentle camera drift, modifiziert durch Zoom-Slider (höher = näher)
-  const distMul = 1 / zoom;
+  // Gentle camera drift. Zoom (Mausrad) gleitet weich zum Ziel und fährt die
+  // Kamera bei gleicher Blickrichtung auf die Ringmitte zu (Dolly) -> Mitte
+  // bleibt an ihrem Platz, der Ring wächst gleichmäßig in alle Richtungen.
+  zoom += (vhZoomTarget - zoom) * 0.14;
+  if (Math.abs(vhZoomTarget - zoom) < 0.0005) zoom = vhZoomTarget;
   camera.position.x =          Math.sin(clock * 0.04)  * 0.44;
-  camera.position.y = (-1.65 + Math.cos(clock * 0.030) * 0.22) * distMul;
-  camera.position.z = ( 8.25 + Math.sin(clock * 0.025) * 0.22) * distMul;
+  camera.position.y = (-1.65 + Math.cos(clock * 0.030) * 0.22);
+  camera.position.z = ( 8.25 + Math.sin(clock * 0.025) * 0.22);
   // Ring leicht höher im Frame — lookAt unter Origin schiebt Donut nach oben
   camera.lookAt(0, -0.32, 0);
-
-  renderer.render(scene, camera);
+  camera.position.multiplyScalar(1 / zoom);
 
   // Amp bar (Element entfernt 2026-05-28 — null-safe)
   const _ampFill = document.getElementById('amp-fill');
   if (_ampFill) _ampFill.style.width = (amp * 100) + '%';
 }
-animate();
+vhLoopKick();
 
 // ── Resize ────────────────────────────────────────────────────────────────────
 window.addEventListener('resize', () => {
@@ -1751,7 +2299,7 @@ async function startMic() {
     btnMic.classList.add('on');
     err.textContent = '';
   } catch {
-    err.textContent = 'microphone denied';
+    err.textContent = vhT('err.mic');
   }
 }
 
@@ -1765,6 +2313,7 @@ const btnHd = document.getElementById('btn-hd');
 let hdOn = (() => { try { return localStorage.getItem(HD_KEY) !== '0'; } catch { return true; } })();
 function applyHd() {
   const ratio = hdOn ? Math.min(2, devicePixelRatio) : 1;
+  vhSdMode = !hdOn;   // SD: zusätzlich Render-Loop auf 30 fps (siehe animate)
   renderer.setPixelRatio(ratio);
   renderer.setSize(innerWidth, innerHeight);
   try { vhRingLayout(true); } catch (_) {}  // TDZ beim ersten Aufruf, danach aktiv
@@ -1822,7 +2371,7 @@ const VH_TR_ICONS = {
   // Vollbild aktiv: Pfeile nach innen (= schließen)
   expanded: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
 };
-const VH_TR_NAMES = { min: 'minimiert', bottom: 'normal', expanded: 'Vollbild' };
+const VH_TR_NAMES = { min: vhT('tr.min'), bottom: vhT('tr.normal'), expanded: vhT('tr.full') };
 let vhTrPrev = 'bottom';
 function vhTranscriptState() {
   if (document.body.classList.contains('vh-transcript-expanded')) return 'expanded';
@@ -1842,12 +2391,13 @@ function vhTranscriptSet(state) {
     const next = VH_TR_STATES[(VH_TR_STATES.indexOf(state) + 1) % VH_TR_STATES.length];
     btnTrMode.innerHTML = VH_TR_ICONS[state];
     btnTrMode.dataset.mode = state;
-    btnTrMode.title = 'Transkript: ' + VH_TR_NAMES[state] + ' · Klick: ' + VH_TR_NAMES[next] + (state === 'expanded' ? ' (Esc schließt)' : '');
+    btnTrMode.title = vhT('tr.title', { cur: VH_TR_NAMES[state], next: VH_TR_NAMES[next] }) + (state === 'expanded' ? vhT('tr.esc') : '');
     btnTrMode.setAttribute('aria-label', btnTrMode.title);
   }
   const el = document.getElementById('vh-transcript');
   if (el && state !== 'min') el.scrollTop = el.scrollHeight;
   try { vhRingLayout(true); } catch (_) {}
+  vhLoopKick();   // Vollbild verlassen: gestoppten Render-Loop sauber neu starten
 }
 function vhTranscriptCycle() {
   const cur = vhTranscriptState();
@@ -1864,6 +2414,10 @@ document.addEventListener('keydown', (e) => {
   if (_infoPop && !_infoPop.hasAttribute('hidden')) return;
   const _modal = document.getElementById('vh-call-modal');
   if (_modal && !_modal.hidden) return;
+  // Offenes Burger-Menü: Esc schließt nur das Menü (eigener Handler weiter
+  // unten), Transkript-Vollbild bleibt unverändert.
+  const _menu = document.getElementById('vh-foot-menu');
+  if (_menu && !_menu.hasAttribute('hidden')) return;
   if (vhTranscriptState() === 'expanded') vhTranscriptSet(vhTrPrev);
   else vhTranscriptSet('expanded');
 });
@@ -1874,27 +2428,49 @@ document.addEventListener('keydown', (e) => {
 // verkürzt, dass die Ring-Unterkante über der Panel-Oberkante endet. Der Ring
 // skaliert dabei proportional mit (vertikales FOV). Vollbild: Canvas aus.
 let vhRingCanvasH = 0;
-function vhRingBottomFrac() {
-  // Projektion der Donut-Außenkante (R_MAJOR+R_MINOR, Tube ±R_MINOR) mit der
-  // Ruhe-Kamera inkl. aktuellem Zoom; Rückgabe = Unterkante als Anteil der Höhe.
+let vhZoomMax = 2.0;     // größter Zoom, bei dem der Kringel ganz im Fenster bleibt
+// Ruhe-Kamera für Layout-Rechnungen: Blickrichtung wie bei Zoom 1, Abstand zur
+// Ringmitte 1/z (Zoom = Dolly entlang des Strahls Kamera -> Ringmitte, siehe
+// vhSimStep). Die Ringmitte bleibt dadurch beim Zoomen an derselben Stelle.
+function vhRestCam(z) {
   const cam = camera.clone();
-  const distMul = 1 / (zoom || 1);
-  cam.position.set(0, -1.65 * distMul, 8.25 * distMul);
+  cam.clearViewOffset();
+  cam.position.set(0, -1.65, 8.25);
   cam.lookAt(0, -0.32, 0);
+  cam.position.multiplyScalar(1 / (z || 1));
   cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+  return cam;
+}
+// Projizierte Außenkante des Donuts (R_MAJOR+R, Röhre ±R_MINOR) in NDC.
+function vhRingExtent(z, rOut) {
+  const cam = vhRestCam(z);
   const v = new THREE.Vector3();
-  let minY = 1;
+  let minX = 1, maxX = -1, minY = 1, maxY = -1;
   for (let a = 0; a < 48; a++) {
-    const ang = -Math.PI / 2 + (a - 24) / 24 * 0.9;  // untere Hälfte reicht
+    const ang = a / 48 * Math.PI * 2;
     for (let t = 0; t < 12; t++) {
       const ph = t / 12 * Math.PI * 2;
-      const r = R_MAJOR + R_MINOR * Math.cos(ph);
-      v.set(r * Math.cos(ang), r * Math.sin(ang), R_MINOR * Math.sin(ph)).project(cam);
-      if (v.y < minY) minY = v.y;
+      const r = R_MAJOR + rOut * Math.cos(ph);
+      v.set(r * Math.cos(ang), r * Math.sin(ang), rOut * Math.sin(ph)).project(cam);
+      if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
+      if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
     }
   }
-  return (1 - minY) / 2;
+  return { minX, maxX, minY, maxY };
 }
+function vhRingBottomFrac() {
+  // Unterkante des Rings bei Zoom 1 als Anteil der (Basis-)Canvas-Höhe.
+  return (1 - vhRingExtent(1, R_MINOR).minY) / 2;
+}
+// Kringel-Platz (Punkt B) + Zoom (Olli 01.10.):
+//  - Basis-Höhe h: so gewählt, dass die Ring-Unterkante bei Zoom 1 über der
+//    Panel-Oberkante endet (wie bisher). h hängt NICHT mehr vom Zoom ab, sonst
+//    springt der Ring beim Zoomen nach oben und schrumpft.
+//  - Die Canvas selbst ist fensterhoch; per setViewOffset zeigt sie oben genau
+//    das Basis-Bild und setzt es nach unten fort. Beim Hineinzoomen wird der
+//    Ring daher nicht an einer verkürzten Canvas-Kante abgeschnitten.
+//  - vhZoomMax: größter Zoom, bei dem der Ring (inkl. Satelliten-Saum) ganz
+//    im Fenster bleibt.
 function vhRingLayout(force) {
   const full = document.body.classList.contains('vh-transcript-expanded');
   const wrap = document.getElementById('vh-transcript-wrap');
@@ -1914,9 +2490,31 @@ function vhRingLayout(force) {
   if (!force && Math.abs(h - vhRingCanvasH) < 2) return;
   vhRingCanvasH = h;
   camera.aspect = innerWidth / h;
+  camera.setViewOffset(innerWidth, h, 0, 0, innerWidth, innerHeight);
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, h);
-  try { document.documentElement.style.setProperty('--vh-ring-bottom', Math.round(h * vhRingBottomFrac()) + 'px'); } catch (_) {}
+  renderer.setSize(innerWidth, innerHeight);
+  // Zoom-Grenze: Außenkante mit Satelliten-Saum (R_MINOR + 0.15) muss oben
+  // und unten im Fenster bleiben, seitlich ebenfalls, sofern der Ring bei
+  // Zoom 1 schon seitlich hineinpasst (Phone hochkant: Ring ist bewusst
+  // breiter als der Bildschirm, dort zählt nur oben/unten).
+  const m = 10, rOut = R_MINOR + 0.15;
+  const ext = (z) => {
+    const e = vhRingExtent(z, rOut);
+    return { x0: (e.minX + 1) / 2 * innerWidth, x1: (e.maxX + 1) / 2 * innerWidth,
+             yTop: (1 - e.maxY) / 2 * h, yBot: (1 - e.minY) / 2 * h };
+  };
+  const e1 = ext(1);
+  const sides = e1.x0 >= m && e1.x1 <= innerWidth - m;
+  const fits = (z) => {
+    const e = ext(z);
+    return e.yTop >= m && e.yBot <= innerHeight - m && (!sides || (e.x0 >= m && e.x1 <= innerWidth - m));
+  };
+  let lo = 1, hi = 2.0;
+  if (!fits(lo)) lo = 0.5;
+  if (fits(hi)) lo = hi;
+  else for (let k = 0; k < 14; k++) { const mid = (lo + hi) / 2; if (fits(mid)) lo = mid; else hi = mid; }
+  vhZoomMax = Math.max(1, lo * 0.97);   // 3 % Reserve für Drift + Atmen
+  if (typeof vhZoomTarget === 'number' && vhZoomTarget > vhZoomMax) vhZoomTarget = vhZoomMax;
 }
 vhRingLayout(true);
 
@@ -1960,7 +2558,7 @@ async function startRecording() {
     const audioTracks = recDisplayStream.getAudioTracks();
     if (audioTracks.length === 0) {
       recDisplayStream.getTracks().forEach(t => t.stop());
-      err.textContent = 'tab audio not shared — tick "share audio"';
+      err.textContent = vhT('err.tabAudio');
       return;
     }
     // Video aus dem getDisplayMedia-Stream verwerfen (wir nehmen Canvas direkt)
@@ -2033,7 +2631,7 @@ async function startRecording() {
     btnRec.classList.add('on');
     err.textContent = '';
   } catch {
-    err.textContent = 'recording denied';
+    err.textContent = vhT('err.rec');
   }
 }
 
@@ -2170,6 +2768,24 @@ const PALETTES = {
   forest: { hueStart: 0.32, hueRange:  0.16, satFloor: 0.78, litMul: 0.30,
             satH: 0.10, satS: 0.95, satL: 0.55,
             mR: 1.00, mG: 0.55, mB: 0.10 },
+};
+// Sprecher-Variationen je Style (Olli 01.10.): User, Delta (voice-ai) und
+// externer Agent (Operator) bekommen je eine eigene, klar unterscheidbare
+// Variation DERSELBEN Palette. Chip-∆, Transkript-Text und Kringel-Leuchten
+// lesen nur diese Tabelle (über vhApplySpeakerColorsToTranscript), deshalb
+// wechseln alle drei beim Style-Wechsel gemeinsam. Werte = Dark-Theme; Light
+// dunkelt per CSS (--vh-*-ink) ab.
+const VH_SPEAKER_COLORS = {
+  ice:     { user: '#5fd6e8', delta: '#7aa7ff', agent: '#e4d79a' },  // Cyan · Eisblau · Sand-Akzent
+  earth:   { user: '#58b86e', delta: '#4a8fe0', agent: '#d9b26a' },  // Grün · Ozean · Sand
+  fire:    { user: '#ff6a3d', delta: '#ffc93c', agent: '#c86bff' },  // Glut · Flamme · Violett
+  water:   { user: '#4c8dff', delta: '#2fd4c8', agent: '#a98cff' },  // Tiefblau · Schaum · Indigo
+  air:     { user: '#e3eaf0', delta: '#5d93e0', agent: '#9fdcff' },  // Wolke · Azur · Himmel
+  forest:  { user: '#6cc46c', delta: '#2fb3a0', agent: '#ffaf3a' },  // Laub · Türkis · Orange
+  zebra:   { user: '#ffffff', delta: '#9a9a9a', agent: '#e8d6b0' },  // Weiß · Grau · Elfenbein
+  giraffe: { user: '#f2dcb4', delta: '#c8682e', agent: '#e8b04a' },  // Creme · Rotbraun · Bernstein
+  leopard: { user: '#e6b428', delta: '#c4762e', agent: '#f2e2b0' },  // Gold · Ocker · Sand
+  tiger:   { user: '#ff8c1a', delta: '#ffd08a', agent: '#e0502a' },  // Orange · Hellorange · Rost
 };
 // FX-Intensity Slider — quadratisches Mapping: feiner unten, Max bei 3
 const fxInput = document.getElementById('fx-intensity');
@@ -2326,7 +2942,7 @@ zoom = 1.0;
 window.addEventListener('wheel', (e) => {
   if (e.target && e.target.closest && e.target.closest('#vh-transcript-wrap')) return;
   e.preventDefault();
-  zoom = Math.max(0.5, Math.min(2.0, zoom - e.deltaY * 0.0015));
+  vhZoomTarget = Math.max(0.5, Math.min(vhZoomMax, vhZoomTarget - e.deltaY * 0.0015));
 }, { passive: false });
 
 // ── Spatial-Pattern-Builder ─────────────────────────────────────────────────
@@ -2337,6 +2953,66 @@ window.addEventListener('wheel', (e) => {
 //
 // Bucket-Index mapped weiterhin in discreteHues/Sats/Lits — also bleibt das
 // Farbschema von p.discrete erhalten, nur die SPATIAL VERTEILUNG ist neu.
+// Deterministischer Hash -> [0,1) (stabile Fellmuster, kein Math.random).
+function vhHash01(n) {
+  let x = (n | 0) ^ 0x9e3779b9;
+  x = Math.imul(x ^ (x >>> 16), 0x85ebca6b);
+  x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35);
+  x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+}
+// Gejitterte Zellstruktur auf der RINGFLÄCHE (xy-Ebene, Welteinheiten). Die
+// Kamera blickt fast entlang z auf den Ring und die Partikel füllen das ganze
+// Röhrenvolumen: ein Bildpunkt sammelt Partikel aller Röhrenwinkel. Muster,
+// die vom Röhrenwinkel phi abhängen, mischen sich deshalb zu Brei; Muster in
+// xy bleiben entlang des Sehstrahls gleich und damit sichtbar (Tiger/Zebra
+// hängen nur von theta ab und funktionieren deshalb schon).
+// gt Zellen um den Ring, gr Zellreihen quer (radial). nearest2(i) liefert für
+// Partikel i den Abstand zum nächsten / zweitnächsten Saatpunkt, die Zell-ID
+// und den Winkel des Partikels um den nächsten Saatpunkt.
+const VH_FUR_CAM_D = 8.4;   // Ruhe-Kameraabstand zur Ringebene (|(0, -1.65, 8.25)|)
+function vhRingCells(gt, gr, jit) {
+  const TWO_PI = Math.PI * 2;
+  const RH = 1.25;                       // radiale Halbbreite (Röhre + Satelliten)
+  const n = gt * gr;
+  const sx = new Float32Array(n), sy = new Float32Array(n);
+  for (let a = 0; a < gt; a++) for (let b = 0; b < gr; b++) {
+    const id = a * gr + b;
+    // versetzte Reihen (wie Fellzeichnung), Jitter deterministisch
+    const ju = jit + vhHash01(id * 2 + 11) * (1 - 2 * jit) + (b % 2) * 0.5;
+    const jv = jit + vhHash01(id * 2 + 12) * (1 - 2 * jit);
+    const th = (a + ju) / gt * TWO_PI;
+    const rr = R_MAJOR - RH + (b + jv) / gr * 2 * RH;
+    sx[id] = rr * Math.cos(th); sy[id] = rr * Math.sin(th);
+  }
+  const out = { d1: 0, d2: 0, cell: 0, ang: 0 };
+  return {
+    cellSize: Math.sqrt((TWO_PI * R_MAJOR / gt) * (2 * RH / gr)),
+    nearest2(i) {
+      // Perspektive: ein Partikel tiefer in der Röhre (z < 0) erscheint näher
+      // an der Ringmitte als eines oben. Muster daher an der Stelle auswerten,
+      // an der das Partikel aus Kamerasicht (Abstand VH_FUR_CAM_D) die
+      // Ringebene trifft; sonst verwischen Rosetten/Linien radial zu Klumpen.
+      const zk = VH_FUR_CAM_D / (VH_FUR_CAM_D - orig[i * 3 + 2]);
+      const px = orig[i * 3] * zk, py = orig[i * 3 + 1] * zk;
+      const r = Math.sqrt(px * px + py * py);
+      let th = Math.atan2(py, px); if (th < 0) th += TWO_PI;
+      const ca = Math.floor(th / TWO_PI * gt);
+      const cb = Math.max(0, Math.min(gr - 1, Math.floor((r - (R_MAJOR - RH)) / (2 * RH) * gr)));
+      let b1 = Infinity, b2 = Infinity, bi = 0;
+      for (let da = -2; da <= 2; da++) for (let db = -1; db <= 1; db++) {
+        const bb = cb + db; if (bb < 0 || bb >= gr) continue;
+        const id = (((ca + da) % gt + gt) % gt) * gr + bb;
+        const dx = px - sx[id], dy = py - sy[id];
+        const dd = dx * dx + dy * dy;
+        if (dd < b1) { b2 = b1; b1 = dd; bi = id; } else if (dd < b2) { b2 = dd; }
+      }
+      out.d1 = Math.sqrt(b1); out.d2 = Math.sqrt(b2); out.cell = bi;
+      out.ang = Math.atan2(py - sy[bi], px - sx[bi]);
+      return out;
+    },
+  };
+}
 function vhBuildSpatialLUT() {
   if (!spatialMode || !discreteHues) { spatialBucketLUT = null; spatialLitJitter = null; return; }
   if (!spatialBucketLUT || spatialBucketLUT.length !== N) {
@@ -2369,83 +3045,73 @@ function vhBuildSpatialLUT() {
       spatialBucketLUT[i] = v > 0 ? 0 : 1;
     }
   } else if (spatialMode === 'voronoi') {
-    // Giraffe: irregular patches via Voronoi-Distance auf Torus-Oberfläche.
-    // density 0..1 → 8..60 seeds. Jeder seed bekommt einen gewichteten bucket.
-    const seedCount = Math.floor(8 + d * 52);
-    // PRNG via Math.random — ok für ein-malige Initialisierung.
-    const seeds = new Float32Array(seedCount * 3); // [theta, phi, bucket]
-    const weights = (PALETTES[lastPaletteForSpatial] && PALETTES[lastPaletteForSpatial].discrete.weights)
-                    || discreteHues.map(() => 1 / buckets);
-    // Cumulative weights für gewichtete bucket-zuweisung pro seed
-    let cum = 0; const cumW = weights.map(w => (cum += w));
-    for (let s = 0; s < seedCount; s++) {
-      seeds[s*3]   = (Math.random() - 0.5) * Math.PI * 2;  // theta
-      seeds[s*3+1] = (Math.random() - 0.5) * Math.PI * 2;  // phi
-      const r = Math.random();
-      let b = buckets - 1;
-      for (let k = 0; k < cumW.length; k++) { if (r < cumW[k]) { b = k; break; } }
-      seeds[s*3+2] = b;
-    }
-    spatialVoronoiSeeds = seeds;
-    // Pro Partikel: nearest + 2nd-nearest seed. Wenn (d2-d1)/d2 < rimFrac, dann
-    // sind wir nahe an einer Patch-Grenze → Bucket 1 (cream/tan-rim). Damit
-    // entsteht die helle Jigsaw-Linie zwischen den russet-Patches einer Giraffe.
-    const rimFrac = 0.08;
+    // Giraffe (Olli 01.10.): große polygonale Flecken mit hellen Trennlinien
+    // (Netzgiraffe). Voronoi über einer gejitterten Zellstruktur auf der
+    // Ringfläche in Weltkoordinaten (siehe vhRingCells). Deterministischer Hash
+    // statt Math.random -> stabil über die Zeit und über Rebuilds.
+    // Linie = Abstand zur Voronoi-Kante (d2 - d1) klein.
+    // Buckets: 0 Creme (Linie) · 1 Hellbraun · 2 Rotbraun · 3 Dunkelbraun.
+    const f = vhRingCells(Math.floor(11 + d * 6), 2, 0.2);
+    const LINE = 0.22;   // Linienbreite in Welteinheiten (> Partikelgröße + Parallaxe)
     for (let i = 0; i < N; i++) {
-      const th = thetaArr[i], ph = phiArr[i];
-      let bestD = Infinity, secondD = Infinity, bestB = 0;
-      for (let s = 0; s < seedCount; s++) {
-        let dth = th - seeds[s*3];
-        let dph = ph - seeds[s*3+1];
-        if (dth >  Math.PI) dth -= Math.PI * 2;
-        if (dth < -Math.PI) dth += Math.PI * 2;
-        if (dph >  Math.PI) dph -= Math.PI * 2;
-        if (dph < -Math.PI) dph += Math.PI * 2;
-        const dd = dth*dth + dph*dph;
-        if (dd < bestD)      { secondD = bestD; bestD = dd; bestB = seeds[s*3+2]; }
-        else if (dd < secondD) { secondD = dd; }
+      const nn = f.nearest2(i);
+      let b;
+      if (nn.d2 - nn.d1 < LINE) b = 0;
+      else {
+        const h = vhHash01(nn.cell * 7 + 3);
+        b = h < 0.5 ? 3 : 2;   // Flecken dunkel- oder rotbraun, Linien creme
       }
-      // Edge band: sqrt-Differenz relativ zur zweit-nähesten Distanz.
-      // Wenn dieser Partikel quasi gleich nahe an zwei Seeds liegt (Voronoi-Kante),
-      // override bucket → 1 (rim). Nur wenn ≥2 buckets existieren.
-      let outB = bestB;
-      if (buckets >= 3 && bestB !== 1) {
-        const d1 = Math.sqrt(bestD), d2 = Math.sqrt(secondD);
-        if (d2 > 0 && (d2 - d1) / d2 < rimFrac) outB = 1;
-      }
-      spatialBucketLUT[i] = outB;
+      if (b >= buckets) b = buckets - 1;
+      spatialBucketLUT[i] = b;
     }
   } else if (spatialMode === 'spots') {
-    // Leopard: periodische Spots mit Rand + Kern. density 0..1 → spot-grid 4..16.
-    // Pro Partikel: Distanz zum nächsten grid-center → 4 buckets (gold/ocker/rim/core).
-    const gridTheta = Math.floor(6 + d * 14);   // 6..20 spots um den ring
-    const gridPhi   = Math.floor(3 + d * 7);    // 3..10 spots um die tube
+    // Leopard (Olli 01.10.): Rosetten = dunkler, unterbrochener Ring um eine
+    // hellere Mitte; Grund goldgelb. Eine Reihe großer Rosetten entlang der
+    // Röhrenmitte (dort ist das Fell am breitesten sichtbar), an den Flanken
+    // kleine volle Tupfen. Deterministisch (Hash), stabil über Rebuilds.
+    // Buckets: 0 Grund · 1 dunkleres Tan · 2 Bernstein · 3 Braun-Saum · 4 fast Schwarz.
+    // Mitte Tan (heller als der Ring), Ringkern fast schwarz mit braunem Saum,
+    // Lücken zeigen den Grund -> liest sich als Ring statt als Klumpen.
     const TWO_PI = Math.PI * 2;
+    const gt = Math.floor(10 + d * 4);               // Rosetten um den Ring
+    const step = TWO_PI / gt;
+    const rho = Math.min(0.70, R_MAJOR * step * 0.50); // Rosettenradius (Welt)
     for (let i = 0; i < N; i++) {
-      // Normalize to [0,1] grid coords
-      const u = ((thetaArr[i] / TWO_PI) + 0.5) * gridTheta;
-      const v = ((phiArr[i]   / TWO_PI) + 0.5) * gridPhi;
-      // Distance from nearest grid center, with offset to break alignment per row
-      const cu = Math.floor(u) + 0.5;
-      const cv = Math.floor(v) + 0.5;
-      // Jitter per spot via deterministic hash so spots aren't on a perfect grid
-      const seedJ = ((Math.floor(u) * 73856093) ^ (Math.floor(v) * 19349663)) >>> 0;
-      const jit = ((seedJ % 1000) / 1000 - 0.5) * 0.35;
-      const du = (u - cu - jit);
-      const dv = (v - cv - jit);
-      const dist = Math.sqrt(du*du + dv*dv);
-      // 5-tier rosette falloff (Leopard 5-bucket): core → rim → amber-mid →
-      // darker-tan → sandy-fur-base. Thresholds gestaffelt so dass die Mitte
-      // (amber) am breitesten ist und Kern + Rim dünn bleiben — wie echte
-      // Leoparden-Rosette mit dunklem Außenring um warmen Innenkreis.
-      // bucket mapping: 0=base, 1=darker-tan, 2=amber-mid, 3=brown-rim, 4=core
-      let b;
-      if      (dist < 0.07) b = 4;   // near-black core dot
-      else if (dist < 0.13) b = 3;   // dark brown rosette rim
-      else if (dist < 0.22) b = 2;   // amber rosette mid
-      else if (dist < 0.30) b = 1;   // slightly darker tan
-      else                  b = 0;   // warm sandy fur base
-      // 4-bucket fallback (alte Paletten): clamp
+      const zk = VH_FUR_CAM_D / (VH_FUR_CAM_D - orig[i * 3 + 2]);
+      const px = orig[i * 3] * zk, py = orig[i * 3 + 1] * zk;
+      const pr = Math.sqrt(px * px + py * py);
+      let th = Math.atan2(py, px); if (th < 0) th += TWO_PI;
+      const ca = Math.floor(th / step);
+      let best = Infinity, bc = 0, bdx = 0, bdy = 0;
+      for (let da = -1; da <= 1; da++) {
+        const c = ((ca + da) % gt + gt) % gt;
+        const ct = (c + 0.5 + (vhHash01(c * 3 + 1) - 0.5) * 0.25) * step;
+        const cr = R_MAJOR + (vhHash01(c * 3 + 2) - 0.5) * 0.30;
+        const dx = px - cr * Math.cos(ct), dy = py - cr * Math.sin(ct);
+        const dd = dx * dx + dy * dy;
+        if (dd < best) { best = dd; bc = c; bdx = dx; bdy = dy; }
+      }
+      const rr = Math.sqrt(best) / (rho * (0.92 + vhHash01(bc * 3 + 3) * 0.12));
+      let b = 0;
+      if (rr < 1.0) {
+        if (rr < 0.38) b = 1;                        // Mitte: Tan
+        else if (rr < 0.47) b = 2;                   // Bernstein-Saum innen
+        else {
+          const k = 4 + Math.floor(vhHash01(bc * 29 + 7) * 2);
+          const gap = Math.sin(Math.atan2(bdy, bdx) * k + vhHash01(bc * 13 + 5) * 40);
+          if (gap > 0.78) b = 0;                     // Lücke im Ring zeigt den Grund
+          else b = (rr > 0.55 && rr < 0.93) ? 4 : 3;  // Ringkern fast schwarz, Saum braun
+        }
+      } else {
+        // Flanken: kleine volle Tupfen zwischen und neben den Rosetten
+        const side = pr > R_MAJOR ? 1 : -1;
+        const sc = ((Math.floor(th / step * 2 + 0.5)) % (gt * 2) + gt * 2) % (gt * 2);
+        const st = (sc + (vhHash01(sc * 5 + 9 + side) - 0.5) * 0.5) * step * 0.5;
+        const sr = R_MAJOR + side * (rho + 0.18 + vhHash01(sc * 5 + 11 + side) * 0.12);
+        const sx = px - sr * Math.cos(st), sy = py - sr * Math.sin(st);
+        const sd = Math.sqrt(sx * sx + sy * sy) / (0.13 + vhHash01(sc * 7 + side) * 0.06);
+        if (sd < 0.75) b = 4; else if (sd < 1.0) b = 3;
+      }
       if (b >= buckets) b = buckets - 1;
       spatialBucketLUT[i] = b;
     }
@@ -2530,6 +3196,9 @@ function applyPalette(pal) {
   // Cluster-Verteilung neu bauen — discrete-Mode nutzt tiefere Frequenzen für
   // Kontinent-große Patches (fS=0.45), normale Themes wieder fS=1.0.
   if (typeof rebuildFreqBins === 'function') rebuildFreqBins();
+  // Farbregel: Style-Wechsel zieht Chip, Transkript und Kringel-Leuchten mit.
+  vhApplySpeakerColorsToTranscript();
+  applyThemeBg();   // Blending folgt dem Style (Fell: NormalBlending)
 }
 // Issue #1: when user explicitly picks a palette via swatch click, pin it so
 // auto-paths (vhActivateCallPalette / vhRestorePalette / vhSetSpeaker / applyProfile)
@@ -2538,50 +3207,20 @@ let vhUserPalettePinned = false;
 // Hoisted (Olli 2026-05-19) — declared up here so chip-click handlers + the
 // startup vhMarkChipSelected('user') call below can touch them without TDZ.
 // The "call-color" comment block further down keeps the operational notes.
-let vhUserHue = 0.5;
-let vhAgentHue = 0.0;
-let vhSeniorHue = null;
 let vhActiveColorTarget = 'user';
-// Per-chip color dispatch (Olli 2026-05-19). Reads vhActiveColorTarget; updates
-// only that chip's hue + transcript color, and does NOT touch the animation base
-// hueStart (so the donut stays put while chips swap colors).
+// Farbregel (Olli 01.10.): Sprecherfarben kommen IMMER aus dem Style
+// (VH_SPEAKER_COLORS), keine Einzelfarbe pro Chip mehr. Ein Paletten-Klick ist
+// deshalb ein Style-Wechsel für Kringel + alle drei Sprecher zugleich.
 function vhApplyPaletteToTarget(pal) {
-  const p = PALETTES[pal];
-  if (!p) return false;
-  const h = p.hueStart;
-  if (vhActiveColorTarget === 'user')          { vhUserHue   = h; }
-  else if (vhActiveColorTarget === 'voice-ai') { vhAgentHue  = h; }
-  else if (vhActiveColorTarget === 'agent')    { vhSeniorHue = h; }
+  if (!PALETTES[pal]) return false;
   vhUserPalettePinned = true;   // keep auto-paths off the user's choices
-  // user-chip is the "master" target — the kringel/donut also follows the
-  // palette pick. voice-ai and senior targets only repaint their chip+text.
-  if (vhActiveColorTarget === 'user') {
-    try { applyPalette(pal); } catch (_) {}
-  }
-  try { vhApplySpeakerColorsToTranscript(); } catch (_) {}
+  try { applyPalette(pal); } catch (_) {}
   return true;
 }
-function vhApplyHueShiftToTarget(delta) {
-  // delta is the raw slider value (±0.30). We treat it as a hue-offset relative
-  // to whatever the target's *current* hue is — so the slider behaves like a
-  // fine-tune knob next to the palette swatches. We snapshot a base on first
-  // touch via vhHueBase[<target>], reset when a palette is clicked.
-  const base = vhHueBase[vhActiveColorTarget];
-  if (base == null) return;
-  const newH = (base + delta + 1) % 1;
-  if (vhActiveColorTarget === 'user')          { vhUserHue   = newH; }
-  else if (vhActiveColorTarget === 'voice-ai') { vhAgentHue  = newH; }
-  else if (vhActiveColorTarget === 'agent')    { vhSeniorHue = newH; }
-  try { vhApplySpeakerColorsToTranscript(); } catch (_) {}
-}
-// Snapshot of each target's hue at the moment the slider is touched, so the
-// slider becomes a relative ±0.30 fine-tune around that snapshot.
-const vhHueBase = { user: null, 'voice-ai': null, agent: null };
-function vhSnapshotHueBases() {
-  vhHueBase.user      = vhUserHue;
-  vhHueBase['voice-ai'] = vhAgentHue;
-  vhHueBase.agent     = (vhSeniorHue == null) ? (vhUserHue + 0.66) % 1 : vhSeniorHue;
-}
+// Hue-Slider (nur im ausgeblendeten Panel): Feinjustage des Kringels, die
+// Sprecherfarben bleiben an den Style gebunden.
+function vhApplyHueShiftToTarget(delta) { hueShift = delta; }
+function vhSnapshotHueBases() {}
 function vhClearChipSelection() {
   document.body.classList.remove('vh-color-targeted');
   document.querySelectorAll('#vh-presence .vh-pres-chip').forEach(el => {
@@ -2594,8 +3233,8 @@ function vhMarkChipSelected(slot) {
   });
   document.body.classList.add('vh-color-targeted');
 }
-// Chip click → set active color-target. Right-click → reset that target to
-// derived default (clear vhSeniorHue / re-randomise user/agent within call).
+// Chip click → markiert den Chip (Umriss in Sprecherfarbe). Farben selbst
+// kommen immer aus dem Style (Farbregel 01.10.).
 document.querySelectorAll('#vh-presence .vh-pres-chip').forEach(chip => {
   const slot = chip.getAttribute('data-slot');
   chip.addEventListener('click', () => {
@@ -2604,18 +3243,6 @@ document.querySelectorAll('#vh-presence .vh-pres-chip').forEach(chip => {
     vhSnapshotHueBases();
     // reset the slider to 0 (it represents ±delta around the snapshot)
     try { hueInput.value = '0'; } catch (_) {}
-    try { vhApplySpeakerColorsToTranscript(); } catch (_) {}
-  });
-  chip.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    if (slot === 'agent') { vhSeniorHue = null; }
-    else if (slot === 'user' || slot === 'voice-ai') {
-      // re-derive a fresh hue for this role (call-time random, stays distinct)
-      const h = Math.random();
-      if (slot === 'user')     vhUserHue  = h;
-      if (slot === 'voice-ai') vhAgentHue = (h + 0.33 + Math.random() * 0.34) % 1;
-    }
-    vhSnapshotHueBases();
     try { vhApplySpeakerColorsToTranscript(); } catch (_) {}
   });
 });
@@ -2667,7 +3294,7 @@ function loadState() {
   if (s.fx)     { fxInput.value = s.fx;         intensity = fxToIntensity(parseFloat(s.fx)); }
   if (s.ring)   { ringFxInput.value = s.ring;   ringFx = parseFloat(s.ring); }
   if (s.sat)    { satInput.value = s.sat;       satFraction = parseFloat(s.sat); }
-  if (s.pc)     { particleInput.value = s.pc;   activeN = Math.floor(N * parseFloat(s.pc)); }
+  if (s.pc)     { particleInput.value = s.pc;   activeN = Math.floor(N * parseFloat(s.pc)); geo.setDrawRange(0, activeN); }
   if (s.island) { islandInput.value = s.island; islandStrength = parseFloat(s.island); rebuildFreqBins(); }
   if (s.hue !== undefined) { hueInput.value = s.hue; hueShift = parseFloat(s.hue); }
   if (s.bright) { brightnessInput.value = s.bright; colorBoost = parseFloat(s.bright); }
@@ -2714,8 +3341,11 @@ function applyProfile(mode) {
   ringFxInput.value = ringVal;      ringFx = ringVal;
   satInput.value = p.sat;           satFraction = p.sat;
   particleInput.value = pcVal;      activeN = Math.floor(N * pcVal);
+  // Draw-Range mitziehen: sonst werden die inaktiven Partikel weiter gezeichnet
+  // (in Hintergrundfarbe) und decken im Light-Theme das Fellmuster mit hellen Punkten zu.
+  geo.setDrawRange(0, activeN);
   islandInput.value = p.island;     islandStrength = p.island; rebuildFreqBins();
-  zoom = p.zoom;
+  vhZoomTarget = Math.min(vhZoomMax, p.zoom);
   hueInput.value = p.hue;           hueShift = p.hue;
   if (p.bright !== undefined) { brightnessInput.value = p.bright; colorBoost = p.bright; }
   if (p.size   !== undefined) { sizeInput.value = p.size;         mat.size  = p.size; }
@@ -2741,9 +3371,7 @@ function applyProfile(mode) {
   // Transcript-Hinweis: Music-Mode hat keinen Call-Button → Hinweis im Transcript
   try {
     const e = document.getElementById('vh-transcript-empty');
-    if (e) e.textContent = mode === 'music'
-      ? '🎵 Music listen mode — switch to Speech to talk with the AI.'
-      : 'Transcript — start a call to see live turns.';
+    if (e) e.textContent = mode === 'music' ? vhT('tr.music') : vhT('tr.empty');
   } catch (_) {}
   btnModeMusic.classList.toggle('on',  mode === 'music');
   btnModeSpeech.classList.toggle('on', mode === 'speech');
@@ -2806,90 +3434,54 @@ let lkRoom = null, lkConnected = false, lkAudioEl = null, lkAudioCtx = null;
 // ── Call-Color: random hue once per call, distinct from current palette ─────
 let vhSavedPalette = null;
 let vhSavedDiscrete = null;
-// Speaker hues: user hue (current call-palette) vs agent hue (random, fixed
-// per-call so each agent gets a stable "voice color"). vhSetSpeaker(role)
-// switches hueStart based on who is currently speaking.
-// NOTE: vhUserHue / vhAgentHue / vhSeniorHue / vhActiveColorTarget are
-// hoisted above (near vhUserPalettePinned) so chip-handlers can read them.
-function vhSetSpeaker(role) {
-  // role: 'user' | 'agent' | 'idle'
-  // Issue #1: if user has pinned a palette via swatch click, don't override hueStart
-  if (vhUserPalettePinned) return;
-  const target = (role === 'agent') ? vhAgentHue : vhUserHue;
-  hueStart = target - 0.05;
+// Kringel-Leuchten beim Sprechen: sprechender Slot -> dessen Style-Variation.
+// Priorität: externer Agent (spricht über Delta) > User (Barge-in) > Delta.
+function vhSetSpeaker(slot) {
+  const c = (slot && vhSpeakerRgb[slot]) || null;
+  if (!c) { vhGlowTarget = 0; return; }
+  vhGlowR = c[0]; vhGlowG = c[1]; vhGlowB = c[2];
+  vhGlowTarget = 1;
 }
-// Apply user+agent+senior hue to transcript CSS-vars so each speaker's lines
-// match the corresponding chip color. Called after vhActivateCallPalette().
-// 3 distinct hues: user (call-base), voice-agent (+0.33), senior (+0.66).
-function vhApplySpeakerColorsToTranscript() {
-  const r = document.documentElement;
-  const hsl = (h) => `hsl(${Math.round(((h%1+1)%1)*360)},95%,62%)`;
-  // Senior: explicit override (chip-targeted palette/hue) else derived from user hue
-  const seniorHue = (vhSeniorHue == null) ? (vhUserHue + 0.66) % 1 : vhSeniorHue;
-  r.style.setProperty('--vh-user-color', hsl(vhUserHue));
-  r.style.setProperty('--vh-agent-color', hsl(vhAgentHue));
-  r.style.setProperty('--vh-senior-color', hsl(seniorHue));
-  // mirror onto chip dots so user can see WHICH chip belongs to WHICH transcript color
-  const chips = {
-    user: hsl(vhUserHue),
-    'voice-ai': hsl(vhAgentHue),
-    agent: hsl(seniorHue),
+function vhGlowSync() {
+  const speaking = (slot) => {
+    const el = document.querySelector(`#vh-presence .vh-pres-chip[data-slot="${slot}"]`);
+    return !!(el && el.classList.contains('speak'));
   };
-  Object.entries(chips).forEach(([slot, color]) => {
-    const el = document.querySelector(`#vh-presence .vh-pres-chip[data-slot="${slot}"] .vh-pres-dot`);
-    // ∆ glyph (not a dot): tint the text color, not the background
-    if (el && el.parentElement.classList.contains('in')) { el.style.color = color; el.style.background = 'transparent'; }
-  });
-  // refresh selected-chip outline — paint via per-element CSS var, leave the
-  // chip text-color rule (.in/.speak) untouched:
-  document.querySelectorAll('#vh-presence .vh-pres-chip').forEach(el => {
-    const slot = el.getAttribute('data-slot');
-    const c = chips[slot];
-    if (c) el.style.setProperty('--vh-chip-outline', c);
-  });
+  vhSetSpeaker(['agent', 'user', 'voice-ai'].find(speaking) || null);
+}
+function vhHexRgb(hex) {
+  const n = parseInt(String(hex).replace('#', ''), 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+// Farbregel: EINE Quelle für Chip-∆, Transkript-Text und Kringel-Leuchten.
+// Setzt die drei CSS-Variablen aus dem aktuellen Style; Chips und Transkript
+// lesen sie per CSS (--vh-*-ink), das Leuchten liest vhSpeakerRgb.
+function vhApplySpeakerColorsToTranscript() {
+  const pal = (typeof lastPaletteForSpatial === 'string' && VH_SPEAKER_COLORS[lastPaletteForSpatial])
+    ? lastPaletteForSpatial : 'ice';
+  const c = VH_SPEAKER_COLORS[pal];
+  const r = document.documentElement;
+  r.style.setProperty('--vh-user-color', c.user);
+  r.style.setProperty('--vh-delta-color', c.delta);
+  r.style.setProperty('--vh-senior-color', c.agent);
+  vhSpeakerRgb.user = vhHexRgb(c.user);
+  vhSpeakerRgb['voice-ai'] = vhHexRgb(c.delta);
+  vhSpeakerRgb.agent = vhHexRgb(c.agent);
+  vhGlowSync();
 }
 function vhActivateCallPalette() {
   // Issue #1: clear pin on call-start so the new call gets fresh auto-recolor
   vhUserPalettePinned = false;
-  // Per-chip color selection: reset on each new call. Default target is the user.
-  vhSeniorHue = null;
   vhActiveColorTarget = 'user';
   try { vhClearChipSelection(); } catch (_) {}
-  // remember
-  vhSavedPalette  = lastPalette;
-  vhSavedDiscrete = discreteHues;
-  // user hue: at least 0.18 away from current background hue
-  let h = Math.random();
-  for (let tries = 0; tries < 6 && Math.abs(h - (hueStart || 0)) < 0.18 && Math.abs(h - (hueStart || 0)) > 0.82; tries++) {
-    h = Math.random();
-  }
-  vhUserHue = h;
-  // agent hue: at least 0.33 away from user (so they look distinct)
-  let ah = (h + 0.33 + Math.random() * 0.34) % 1;
-  vhAgentHue = ah;
+  // Farbregel: der Call behält den gewählten Style (kein Zufallston mehr);
+  // Sprecherfarben = Variationen dieses Styles.
   vhApplySpeakerColorsToTranscript();
-  // start in user hue
-  hueStart = h - 0.05; hueRange = 0.10;
-  satFloor = 0.95;     litMul   = 0.62;
-  // contrasting satellite
-  satColorH = (h + 0.5) % 1; satColorS = 0.95; satColorL = 0.55;
-  discreteHues = null; discreteSats = null; discreteLits = null; discreteBucketLUT = null;
-  spatialMode = null; spatialBucketLUT = null;
 }
 function vhRestorePalette() {
-  // Issue #1: if user pinned a palette during the call, keep it instead of restoring.
-  // Always clear the pin on call-end so the next call starts fresh.
-  if (vhUserPalettePinned) {
-    vhUserPalettePinned = false;
-    vhSavedPalette = null;
-    vhSavedDiscrete = null;
-    return;
-  }
-  if (vhSavedPalette) {
-    try { applyPalette(vhSavedPalette); } catch (_) {}
-    vhSavedPalette = null;
-  }
-  // applyPalette rebuilds discrete-mode if needed; vhSavedDiscrete is just bookkeeping
+  // Call-Ende: Style bleibt wie gewählt, nur den Pin zurücksetzen.
+  vhUserPalettePinned = false;
+  vhSavedPalette = null;
   vhSavedDiscrete = null;
 }
 
@@ -2917,17 +3509,468 @@ function vhStableIdentity(room, prefix) {
 // seinen Agent (nie zwei Agents im Raum). Wahl in localStorage, Standard Normal.
 const VH_LIVE_KEY = 'vh-live-mode-v1';
 const VH_LIVE_ERR = {
-  402: 'Live-Budget für diesen Monat aufgebraucht',
-  404: 'Live-Modus ist gerade aus',
-  503: 'Live-Modus ist gerade nicht verfügbar',
-  429: 'Zu viele Starts, bitte kurz warten',
+  402: vhT('live.402'),
+  404: vhT('live.404'),
+  503: vhT('live.503'),
+  429: vhT('live.429'),
 };
 const vhModeRow = document.getElementById('vh-mode-row');
 let vhLiveAvailable = false;
+
+// ── Aufladen-Verdrahtung (UI-Runde 3, PR #88) ────────────────────────────────
+// X-Anon-Id: zufällige ID dieses Browsers (localStorage), zählt die Gratisminuten.
+// X-Wallet-Token: kommt aus dem /aufladen-Flow (localStorage 'vh-wallet-v1').
+// Beide gehen NUR an /api/host-call und /api/live-room (wer den Raum anlegt,
+// zahlt), X-Anon-Id zusätzlich an /api/free/remaining. NIE an /api/token:
+// ein Gast, der per Einladung beitritt, zahlt nie für fremde Räume.
+const VH_ANON_KEY = 'vh-anon-v1';
+const VH_WALLET_KEY = 'vh-wallet-v1';
+let vhAnonMem = '';
+function vhAnonId() {
+  try { const v = localStorage.getItem(VH_ANON_KEY); if (v && /^[A-Za-z0-9_-]{8,128}$/.test(v)) return v; } catch (_) {}
+  if (!vhAnonMem) {
+    const b = new Uint8Array(16);
+    try { crypto.getRandomValues(b); } catch (_) { for (let i = 0; i < b.length; i++) b[i] = Math.floor(Math.random() * 256); }
+    vhAnonMem = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  }
+  try { localStorage.setItem(VH_ANON_KEY, vhAnonMem); } catch (_) {}
+  return vhAnonMem;
+}
+function vhWalletToken() { try { return localStorage.getItem(VH_WALLET_KEY) || ''; } catch (_) { return ''; } }
+function vhPayHeaders() {
+  const h = { 'content-type': 'application/json', 'X-Anon-Id': vhAnonId() };
+  const w = vhWalletToken();
+  if (w) h['X-Wallet-Token'] = w;
+  return h;
+}
+// 402 von host-call / live-room -> Hinweistext, oder null (anderer Grund,
+// z. B. Live-Monatsbudget: dafür gibt es live.402).
+async function vhPayErrMsg(r) {
+  if (!r || r.status !== 402) return null;
+  let d = null;
+  try { d = (await r.clone().json()).detail; } catch (_) {}
+  if (!d || typeof d !== 'object') return null;
+  if (d.error === 'free_limit') { try { vhFreeMarkSeen(vhLiveOn() ? 'live' : 'normal'); } catch (_) {} return vhT('pay.free'); }
+  if (d.error === 'credits_required') return vhT(d.wallet === 'empty' ? 'pay.empty' : 'pay.missing');
+  return null;
+}
+// Fehler aus erwartetem 402 (Gratis/Guthaben leer): kein console.error, die
+// Seite zeigt Hinweis + Aufladen-Panel (Review-Altlast UI-Runde 3).
+function vhPayError(msg) { const e = new Error(msg); e.vhPay = true; return e; }
+function vhSep() { const s = document.createElement('span'); s.className = 'vh-sep'; s.textContent = ' · '; return s; }
+// "Aufladen" öffnet INLINE das Panel #vh-topup (kein Seitenwechsel, Call läuft weiter).
+function vhTopupBtn() {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'vh-linkbtn vh-pay-link vh-topup-open';
+  b.textContent = vhT('pay.topup');
+  b.addEventListener('click', () => vhTopupToggle());
+  return b;
+}
+// Hinweis mit Aufladen-Knopf in der Zeile über dem Call-Knopf, Panel geht auf.
+function vhPayShow(msg) {
+  err.textContent = msg || '';
+  const banner = document.getElementById('vh-invite-banner');
+  if (banner) {
+    banner.innerHTML = '<div class="vh-invite-hint"><div class="vh-invite-status warn vh-live-err vh-pay-err" role="alert"></div></div>';
+    const st = banner.querySelector('.vh-pay-err');
+    st.textContent = msg + ' · ';
+    st.appendChild(vhTopupBtn());
+    banner.hidden = false;
+  }
+  vhTopupOpen();
+}
+
+// ── Aufladen-Panel: Chips + Drehregler aus aufladen.html, ein Klick zu Stripe ──
+// Stripe öffnet in einem NEUEN Tab (ein laufender Call bricht nicht ab). Der
+// Rückweg landet auf /aufladen, das das Wallet-Token in localStorage legt; diese
+// Seite hört auf 'storage' + Fokus und lädt /api/me neu.
+const VH_TU = { min: 10, max: 200, step: 5, amounts: [10, 20, 50], amount: 20, on: false };
+const vhTu = {
+  box: document.getElementById('vh-topup'), dial: document.getElementById('vh-tu-dial'),
+  fill: document.getElementById('vh-tu-fill'), knob: document.getElementById('vh-tu-knob'),
+  amt: document.getElementById('vh-tu-amt'), chips: document.getElementById('vh-tu-chips'),
+  go: document.getElementById('vh-tu-go'), msg: document.getElementById('vh-tu-msg'),
+};
+const VH_TU_R = 120, VH_TU_C = 2 * Math.PI * VH_TU_R;
+let vhTopupPending = null;  // {before: Guthaben vor dem Checkout}
+const vhEurWhole = (() => { try { return new Intl.NumberFormat(VH_LANG === 'de' ? 'de-DE' : 'en-IE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0, minimumFractionDigits: 0 }); } catch (_) { return { format: (a) => a + ' €' }; } })();
+function vhTopupConfig(c) {
+  if (!c || typeof c !== 'object') return;
+  if (Number(c.min_eur) > 0) VH_TU.min = Number(c.min_eur);
+  if (Number(c.max_eur) > 0) VH_TU.max = Number(c.max_eur);
+  if (Array.isArray(c.amounts_eur) && c.amounts_eur.length) VH_TU.amounts = c.amounts_eur.map(Number).filter((a) => a > 0);
+  VH_TU.on = c.checkout_available === true;
+  VH_TU.amount = VH_TU.amounts.includes(20) ? 20 : VH_TU.amounts[0] || VH_TU.min;
+  if (vhTu.dial) { vhTu.dial.setAttribute('aria-valuemin', VH_TU.min); vhTu.dial.setAttribute('aria-valuemax', VH_TU.max); }
+  vhTuChips(); vhTuRender();
+}
+function vhTuChips() {
+  if (!vhTu.chips) return;
+  vhTu.chips.innerHTML = '';
+  VH_TU.amounts.forEach((a) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'vh-tu-chip'; b.dataset.eur = a; b.textContent = vhEurWhole.format(a);
+    vhTu.chips.appendChild(b);
+  });
+}
+function vhTuRender() {
+  if (!vhTu.dial) return;
+  const frac = VH_TU.amount / VH_TU.max, ang = frac * 2 * Math.PI;
+  vhTu.fill.setAttribute('stroke-dashoffset', VH_TU_C * (1 - frac));
+  vhTu.knob.setAttribute('cx', 150 + VH_TU_R * Math.cos(ang));
+  vhTu.knob.setAttribute('cy', 150 + VH_TU_R * Math.sin(ang));
+  vhTu.amt.textContent = vhEurWhole.format(VH_TU.amount);
+  vhTu.dial.setAttribute('aria-valuenow', VH_TU.amount); vhTu.dial.setAttribute('aria-valuetext', vhEurWhole.format(VH_TU.amount));
+  if (!vhTu.go.dataset.busy) {
+    vhTu.go.disabled = !VH_TU.on;
+    vhTu.go.textContent = VH_TU.on ? vhT('topup.go', { a: vhEurWhole.format(VH_TU.amount) }) : vhT('topup.soon');
+  }
+  [...vhTu.chips.children].forEach((c) => c.classList.toggle('on', +c.dataset.eur === VH_TU.amount));
+}
+function vhTuSet(v) {
+  v = Math.round(v / VH_TU.step) * VH_TU.step;
+  VH_TU.amount = Math.max(VH_TU.min, Math.min(VH_TU.max, v));
+  vhTuRender();
+}
+function vhTuMsg(text, warn) {
+  if (!vhTu.msg) return;
+  vhTu.msg.textContent = text || ''; vhTu.msg.className = 'vh-tu-msg' + (warn ? ' warn' : ''); vhTu.msg.hidden = !text;
+}
+function vhPanelSync() {
+  const lg = document.getElementById('vh-login'), det = vhModeInfo && vhModeInfo.querySelector('.vh-mode-detail');
+  const low = document.getElementById('vh-low-bal');
+  const open = (vhTu.box && !vhTu.box.hidden) || (lg && !lg.hidden) || (det && !det.hidden && !vhModeInfo.hidden) || (low && !low.hidden);
+  document.body.classList.toggle('vh-wrap-grow', !!open);
+}
+function vhTopupOpen() {
+  if (!vhTu.box) return;
+  const lg = document.getElementById('vh-login'); if (lg) lg.hidden = true;
+  if (vhTu.box.hidden) { vhTuChips(); vhTuRender(); vhTuMsg(''); vhTu.box.hidden = false; }
+  vhPanelSync();
+}
+function vhTopupClose() { if (vhTu.box) vhTu.box.hidden = true; vhPanelSync(); }
+function vhTopupToggle() { if (vhTu.box && !vhTu.box.hidden) vhTopupClose(); else vhTopupOpen(); }
+if (vhTu.dial) {
+  let drag = false;
+  const angOf = (e) => {
+    const rc = vhTu.dial.getBoundingClientRect(), pt = e.touches ? e.touches[0] : e;
+    let a = Math.atan2(pt.clientY - (rc.top + rc.height / 2), pt.clientX - (rc.left + rc.width / 2)) + Math.PI / 2;
+    if (a < 0) a += 2 * Math.PI;
+    return a / (2 * Math.PI);
+  };
+  const move = (e) => { if (drag) { vhTuSet(angOf(e) * VH_TU.max); if (e.cancelable) e.preventDefault(); } };
+  const down = (e) => { drag = true; vhTu.dial.classList.add('dragging'); move(e); };
+  const up = () => { drag = false; vhTu.dial.classList.remove('dragging'); };
+  vhTu.dial.addEventListener('mousedown', down);
+  vhTu.dial.addEventListener('touchstart', down, { passive: false });
+  window.addEventListener('mousemove', move);
+  window.addEventListener('touchmove', move, { passive: false });
+  window.addEventListener('mouseup', up);
+  window.addEventListener('touchend', up);
+  vhTu.dial.addEventListener('wheel', (e) => { e.preventDefault(); vhTuSet(VH_TU.amount + (e.deltaY < 0 ? VH_TU.step : -VH_TU.step)); }, { passive: false });
+  vhTu.dial.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { vhTuSet(VH_TU.amount + VH_TU.step); e.preventDefault(); }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { vhTuSet(VH_TU.amount - VH_TU.step); e.preventDefault(); }
+  });
+}
+if (vhTu.chips) vhTu.chips.addEventListener('click', (e) => { const b = e.target.closest('.vh-tu-chip'); if (b) vhTuSet(+b.dataset.eur); });
+const vhTopupX = document.getElementById('vh-topup-x');
+if (vhTopupX) vhTopupX.addEventListener('click', vhTopupClose);
+if (vhTu.go) vhTu.go.addEventListener('click', async () => {
+  if (!VH_TU.on || vhTu.go.dataset.busy) return;
+  // Tab synchron im Klick öffnen (sonst blockt der Popup-Blocker nach dem await).
+  let w = null;
+  try { w = window.open('', '_blank'); } catch (_) {}
+  vhTu.go.dataset.busy = '1'; vhTu.go.disabled = true; vhTu.go.textContent = vhT('topup.busy'); vhTuMsg('');
+  try {
+    const r = await fetch('/api/checkout', { method: 'POST', headers: vhPayHeaders(), body: JSON.stringify({ amount_eur: VH_TU.amount }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.url || !/^https:\/\//.test(d.url)) throw new Error('checkout ' + r.status);
+    vhTopupPending = { before: vhMe && typeof vhMe.balance_eur === 'number' ? vhMe.balance_eur : 0 };
+    if (w && !w.closed) {
+      try { w.opener = null; } catch (_) {}
+      w.location.href = d.url;
+      vhTuMsg(vhT('topup.opened'));
+    } else {
+      // Popup blockiert: Link im Panel, nie die Seite selbst wegnavigieren (Call).
+      vhTuMsg(vhT('topup.opened'));
+      const a = document.createElement('a');
+      a.href = d.url; a.target = '_blank'; a.rel = 'noopener'; a.className = 'vh-pay-link';
+      a.textContent = vhT('topup.go', { a: vhEurWhole.format(VH_TU.amount) });
+      vhTu.msg.appendChild(document.createTextNode(' ')); vhTu.msg.appendChild(a);
+    }
+  } catch (_) {
+    try { if (w) w.close(); } catch (_) {}
+    vhTuMsg(vhT('topup.err'), true);
+  } finally {
+    delete vhTu.go.dataset.busy; vhTuRender();
+  }
+});
+// Rückkehr aus Stripe: anderer Tab legt das Token ab (storage) oder der Nutzer
+// kommt zurück (focus / sichtbar) -> /api/me neu.
+window.addEventListener('storage', (e) => { if (e.key === VH_WALLET_KEY) vhFreeRefresh(); });
+function vhReturnCheck() { if (vhTopupPending && !document.hidden) vhFreeRefresh(); }
+window.addEventListener('focus', vhReturnCheck);
+document.addEventListener('visibilitychange', vhReturnCheck);
+
+// ── Anmelden per E-Mail-Link (Vertrag PR #93) ─────────────────────────────────
+// POST /api/login {email} MIT X-Wallet-Token (falls vorhanden) -> login_nonce
+// (localStorage vh_login_nonce). Die Mail führt auf /aufladen#login=<token>,
+// dort wird der Link über GET /api/login/verify?token=&nonce= eingelöst. Diese Seite nimmt NIE ein Token aus der URL (Login-Fixation).
+// 503 login_unavailable: Anmelden-Links weg, Panel sagt "bald verfügbar".
+let vhLoginUnavail = false;
+const vhLg = {
+  box: document.getElementById('vh-login'), form: document.getElementById('vh-login-form'),
+  email: document.getElementById('vh-login-email'), go: document.getElementById('vh-login-go'),
+  msg: document.getElementById('vh-login-msg'),
+};
+if (vhLg.email) vhLg.email.placeholder = vhT('login.ph');
+const vhTuLogin = document.getElementById('vh-tu-login');
+if (vhTuLogin) vhTuLogin.addEventListener('click', () => vhLoginToggle());
+function vhLoginToggle() {
+  if (!vhLg.box) return;
+  const open = vhLg.box.hidden;
+  if (open) { vhTopupClose(); vhLg.box.hidden = false; vhPanelSync(); try { vhLg.email.focus(); } catch (_) {} }
+  else { vhLg.box.hidden = true; vhPanelSync(); }
+}
+const vhLoginX = document.getElementById('vh-login-x');
+if (vhLoginX) vhLoginX.addEventListener('click', () => { if (vhLg.box) vhLg.box.hidden = true; vhPanelSync(); });
+function vhLoginMsg(text, warn) {
+  if (!vhLg.msg) return;
+  vhLg.msg.textContent = text; vhLg.msg.classList.toggle('vh-tu-msg', !!warn); vhLg.msg.classList.toggle('warn', !!warn);
+}
+if (vhLg.form) vhLg.form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = (vhLg.email.value || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) { vhLoginMsg(vhT('login.bad'), true); return; }
+  vhLg.go.disabled = true;
+  try {
+    const r = await fetch('/api/login', { method: 'POST', headers: vhPayHeaders(), body: JSON.stringify({ email }) });
+    if (r.ok) {
+      // login_nonce bindet den Link an diesen Browser; /aufladen schickt ihn bei verify mit.
+      try { const d = await r.json(); if (d && typeof d.login_nonce === 'string' && d.login_nonce) localStorage.setItem('vh_login_nonce', d.login_nonce); } catch (_) {}
+      vhLoginMsg(vhT('login.sent'), false);
+      vhLg.email.disabled = true;
+      vhLg.box.classList.add('vh-sent');
+      return;
+    }
+    if (r.status === 503) {
+      vhLoginUnavail = true;
+      vhLoginMsg(vhT('login.unavail'), true);
+      if (vhLg.form) vhLg.form.hidden = true;
+      try { vhModeInfoRender(); } catch (_) {}
+      return;
+    }
+    vhLoginMsg(vhT(r.status === 400 ? 'login.bad' : r.status === 429 ? 'login.rate' : r.status === 502 ? 'login.mailfail' : 'login.err'), true);
+  } catch (_) { vhLoginMsg(vhT('login.err'), true); }
+  vhLg.go.disabled = false;
+});
+
+// ── Hinweis "bald leer" (Data-Topic operator.notice {kind:'low_balance', minutes_left})
+// Sichtbar im Call mit Aufladen-Knopf. Nach Call-Ende: waren Gratis UND Guthaben
+// leer, bleibt ein Hinweis mit Aufladen stehen.
+const vhLowEl = document.getElementById('vh-low-bal');
+let vhCallEndedCheck = false;
+function vhLowBalShow(min) {
+  if (!vhLowEl) return;
+  const n = Math.max(1, Math.ceil(Number(min) || 5));
+  vhLowEl.textContent = vhT('low.notice', { n }) + ' · ';
+  vhLowEl.appendChild(vhTopupBtn());
+  vhLowEl.hidden = false;
+  vhPanelSync();
+}
+function vhLowBalEnd(wasLive) {
+  if (vhLowEl) { vhLowEl.hidden = true; vhLowEl.textContent = ''; }
+  vhPanelSync();
+  if (wasLive) vhCallEndedCheck = true;
+}
+function vhPayAfterRefresh() {
+  if (vhTopupPending && vhMe && typeof vhMe.balance_eur === 'number' && vhMe.balance_eur > vhTopupPending.before) {
+    vhTopupPending = null;
+    vhTopupClose();
+    if (vhLowEl) vhLowEl.hidden = true;
+    vhPanelSync();
+    try { vhLiveErrShow(''); } catch (_) {}
+  }
+  if (vhCallEndedCheck) {
+    vhCallEndedCheck = false;
+    if (!vhFree && !vhMe) return;  // nichts bekannt: nichts behaupten
+    const mode = vhLiveOn() ? 'live' : 'normal';
+    const f = vhFree ? Math.max(0, Number(vhFree[mode + '_s']) || 0) : 0;
+    const b = vhMe && typeof vhMe.balance_eur === 'number' ? vhMe.balance_eur : 0;
+    if (f <= 0 && b <= 0) vhPayShow(vhT('pay.ended'));
+  }
+}
+
+// Übrige Gratisminuten (GET /api/free/remaining) und ungefährer Preis
+// (GET /api/billing/config). Kein Timer: geladen beim Seitenstart und nach
+// Call-Ende, angezeigt wird nur, was der Server meldet.
+const vhModeInfo = document.getElementById('vh-mode-info');
+let vhFree = null;          // {live_s, normal_s, enabled:{live,normal}}
+let vhPriceCfg = null;      // {normal, live} EUR pro Stunde
+let vhModeDetail = null;    // 'normal' | 'live' | null (erst nach Klick)
+const vhEur = (() => { try { return new Intl.NumberFormat(VH_LANG === 'de' ? 'de-DE' : 'en-IE', { style: 'currency', currency: 'EUR' }); } catch (_) { return null; } })();
+const VH_ADV = { live: ['adv.live1', 'adv.live2', 'adv.live3'], normal: ['adv.normal1', 'adv.normal2', 'adv.normal3', 'adv.normal4'] };
+function vhModeInfoRender() {
+  if (!vhModeInfo) return;
+  const freeEl = vhModeInfo.querySelector('.vh-free-left');
+  const detEl = vhModeInfo.querySelector('.vh-mode-detail');
+  const mode = vhLiveOn() ? 'live' : 'normal';
+  // Gratis-Zeile (Billing-Runde 4): "noch X min gratis heute · Guthaben Y € ·
+  // Aufladen · Anmelden". Gratis und Guthaben immer beide, sobald bekannt.
+  let showFree = false;
+  if (freeEl) {
+    freeEl.textContent = '';
+    const parts = [];
+    const freeOn = vhFree && (vhFree.enabled ? vhFree.enabled[mode] === true : vhFreeKnown(mode));
+    if (freeOn) {
+      const sec = Math.max(0, Number(vhFree[mode + '_s']) || 0);
+      parts.push(sec <= 0 ? vhT('pay.free') : sec < 60 ? vhT('free.lt1') : vhT('free.left', { n: Math.floor(sec / 60) }));
+    }
+    if (vhMe && typeof vhMe.balance_eur === 'number' && isFinite(vhMe.balance_eur) && vhEur) {
+      parts.push(vhT('bal.label', { v: vhEur.format(vhMe.balance_eur) }));
+    }
+    if (parts.length || vhFree || vhMe) {
+      const txt = document.createElement('span');
+      txt.className = 'vh-me-txt'; txt.textContent = parts.join(' · ');
+      if (vhMe && vhMe.email_masked) txt.title = vhT('login.as', { e: vhMe.email_masked });
+      if (parts.length) { freeEl.appendChild(txt); freeEl.appendChild(vhSep()); }
+      freeEl.appendChild(vhTopupBtn());
+      if (!vhLoggedIn() && !vhLoginUnavail) {
+        const wrap = document.createElement('span');
+        wrap.className = 'vh-login-wrap';
+        wrap.appendChild(vhSep());
+        const lg = document.createElement('button');
+        lg.type = 'button'; lg.className = 'vh-linkbtn vh-quiet vh-login-link'; lg.textContent = vhT('login.link');
+        lg.addEventListener('click', () => vhLoginToggle());
+        wrap.appendChild(lg);
+        freeEl.appendChild(wrap);
+      }
+      const tl = document.getElementById('vh-tu-login'); if (tl) tl.hidden = vhLoggedIn() || vhLoginUnavail;
+      showFree = true;
+    }
+    freeEl.hidden = !showFree;
+  }
+  // Preis + Vorteile des angeklickten Modus (Schalter muss sichtbar sein).
+  let showDet = false;
+  if (detEl) {
+    detEl.textContent = '';
+    const dm = vhLiveAvailable ? vhModeDetail : null;
+    if (dm && VH_ADV[dm]) {
+      const name = dm === 'live' ? 'Live' : 'Normal';
+      const p = vhPriceCfg && Number(vhPriceCfg[dm]);
+      const price = document.createElement('div');
+      price.className = 'vh-md-price';
+      price.textContent = name + (p > 0 && vhEur ? ' · ' + vhT('price.approx', { p: vhEur.format(p) }) : '');
+      const adv = document.createElement('div');
+      adv.className = 'vh-md-adv';
+      adv.textContent = VH_ADV[dm].map((k) => vhT(k)).join(' · ');
+      detEl.appendChild(price); detEl.appendChild(adv);
+      showDet = true;
+    }
+    detEl.hidden = !showDet;
+  }
+  vhModeInfo.hidden = !(showFree || showDet);
+  try { vhPanelSync(); } catch (_) {}
+}
+// GET /api/me -> {free:{normal_s,live_s}, balance_eur|null, email_masked|null}
+// (Billing-Runde 4). Solange das Backend /api/me noch nicht hat (404): Fallback
+// auf /api/free/remaining + /api/wallet wie bisher.
+let vhMe = null;
+// /api/me.free hat kein enabled-Feld: ein Modus ohne Gratis-Kontingent meldet 0,
+// genau wie ein aufgebrauchtes. "Aufgebraucht" zeigen wir deshalb nur, wenn wir
+// heute (UTC) schon Gratis-Rest > 0 gesehen haben oder der Server 402 free_limit
+// gemeldet hat; sonst gar keine Gratis-Angabe für diesen Modus.
+const VH_FREE_SEEN_KEY = 'vh-free-seen-v1';
+function vhUtcDay() { return new Date().toISOString().slice(0, 10); }
+function vhFreeSeen() {
+  try { const o = JSON.parse(localStorage.getItem(VH_FREE_SEEN_KEY) || 'null'); if (o && o.day === vhUtcDay()) return o; } catch (_) {}
+  return { day: vhUtcDay() };
+}
+function vhFreeMarkSeen(mode) {
+  const o = vhFreeSeen(); if (o[mode]) return;
+  o[mode] = true; try { localStorage.setItem(VH_FREE_SEEN_KEY, JSON.stringify(o)); } catch (_) {}
+}
+function vhFreeKnown(mode) {
+  const sec = vhFree ? Number(vhFree[mode + '_s']) || 0 : 0;
+  if (sec > 0) { vhFreeMarkSeen(mode); return true; }
+  return vhFreeSeen()[mode] === true;
+}
+function vhLoggedIn() { return !!vhWalletToken() || !!(vhMe && vhMe.email_masked); }
+async function vhFreeRefresh() {
+  let me = null, meOk = false;
+  try {
+    const r = await fetch('/api/me', { cache: 'no-store', headers: vhPayHeaders() });
+    if (r.ok) { me = await r.json(); meOk = !!(me && typeof me === 'object'); }
+  } catch (_) {}
+  if (meOk) {
+    vhMe = me;
+    const f = me.free && typeof me.free === 'object' ? me.free : null;
+    vhFree = f ? Object.assign({}, f) : null;
+    if (f) ['normal', 'live'].forEach((m) => { if (Number(f[m + '_s']) > 0) vhFreeMarkSeen(m); });
+  } else {
+    vhMe = null;
+    try {
+      const r = await fetch('/api/free/remaining', { cache: 'no-store', headers: { 'X-Anon-Id': vhAnonId() } });
+      const j = r.ok ? await r.json() : null;
+      vhFree = j && typeof j === 'object' && j.enabled ? j : null;
+    } catch (_) { vhFree = null; }
+    const w = vhWalletToken();
+    if (w) {
+      try {
+        const r = await fetch('/api/wallet', { cache: 'no-store', headers: { 'X-Wallet-Token': w } });
+        const j = r.ok ? await r.json() : null;
+        if (j && typeof j.balance_eur === 'number') vhMe = { free: null, balance_eur: j.balance_eur, email_masked: null };
+      } catch (_) {}
+    }
+  }
+  vhModeInfoRender();
+  vhPayAfterRefresh();
+}
+let vhFreeTimer = null;
+function vhFreeRefreshSoon() {  // nach Call-Ende einmal (vhEndCall läuft dabei mehrfach)
+  clearTimeout(vhFreeTimer);
+  vhFreeTimer = setTimeout(vhFreeRefresh, 400);
+}
+async function vhPriceLoad() {
+  try {
+    const r = await fetch('/api/billing/config', { cache: 'no-store' });
+    const j = r.ok ? await r.json() : null;
+    vhPriceCfg = j && j.approx_eur_per_hour && typeof j.approx_eur_per_hour === 'object' ? j.approx_eur_per_hour : null;
+    vhTopupConfig(j);
+  } catch (_) { vhPriceCfg = null; }
+  vhModeInfoRender();
+}
+
+// Erstbesucher (localStorage-Flag, kein Cookie, kein Banner): wer noch nie einen
+// Agent eingeladen oder einen Call gehabt hat, sieht zusätzlich "Mit Delta
+// sprechen" (normaler Call mit Delta, ohne externen Agent). Nicht auf einem
+// /r/<slug>-Einladungslink: dort würde der Knopf den fremden Raum betreten.
+const VH_SEEN_KEY = 'vh-seen-v1';
+const btnDelta = document.getElementById('btn-vh-delta');
+function vhSeen() { try { return localStorage.getItem(VH_SEEN_KEY) === '1'; } catch (_) { return true; } }
+function vhFirstVisitRender() {
+  const first = !vhSeen() && !VH_PREFILL_ROOM && !lkConnected;
+  if (btnDelta) btnDelta.hidden = !first;
+  document.body.classList.toggle('vh-first-visit', first);
+}
+function vhMarkSeen() {
+  try { localStorage.setItem(VH_SEEN_KEY, '1'); } catch (_) {}
+  vhFirstVisitRender();
+}
+if (btnDelta) btnDelta.addEventListener('click', async () => {
+  if (lkConnected || btnDelta.disabled) return;
+  btnDelta.disabled = true;
+  try {
+    await vhStartCall();
+    if (lkConnected && window.vhSetCallUi) window.vhSetCallUi('in-call');  // Knopf zeigt "Auflegen"
+  } finally { btnDelta.disabled = false; }
+});
 function vhLiveWanted() { try { return localStorage.getItem(VH_LIVE_KEY) === 'live'; } catch (_) { return false; } }
 function vhLiveOn() { return vhLiveAvailable && vhLiveWanted(); }
 function vhLiveRender() {
   if (!vhModeRow) return;
+  vhModeInfoRender();
   vhModeRow.hidden = !vhLiveAvailable;
   const live = vhLiveOn();
   vhModeRow.querySelectorAll('[data-mode]').forEach((b) => {
@@ -2965,12 +4008,14 @@ function vhLiveErrShow(msg) {
 // Neuen Live-Raum holen. Fehler: kurze Meldung; 402/404/503 -> zurück auf Normal.
 async function vhLiveRoom(identity) {
   const r = await fetch('/api/live-room', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
+    method: 'POST', headers: vhPayHeaders(),
     body: JSON.stringify({ identity }),
   });
   if (!r.ok) {
-    const msg = VH_LIVE_ERR[r.status] || ('Live-Start fehlgeschlagen (' + r.status + ')');
+    const pay = await vhPayErrMsg(r);
+    const msg = pay || VH_LIVE_ERR[r.status] || vhT('live.failed', { status: r.status });
     if (r.status !== 429) { vhLiveSet('normal'); vhLiveRefresh(); }
+    if (pay) { vhPayShow(pay); vhFreeRefresh(); throw vhPayError(pay); }
     vhLiveErrShow(msg);
     throw new Error(msg);
   }
@@ -2992,20 +4037,26 @@ function vhLiveUrlFor(room, tok) {
 function vhLiveMark() {
   const t = document.getElementById('tagline');
   if (!t) return;
-  t.textContent = 'live'; t.title = 'Live-Modus (Gemini Live)'; t.classList.add('vh-cost-on');
+  t.textContent = vhT('live.tag'); t.title = vhT('live.title'); t.classList.add('vh-cost-on');
 }
 if (vhModeRow) vhModeRow.addEventListener('click', (e) => {
   const b = e.target && e.target.closest && e.target.closest('[data-mode]');
   if (!b || vhCallLive()) return;  // laufender Raum wechselt den Modus nicht
-  vhLiveSet(b.dataset.mode);
+  const m = b.dataset.mode === 'live' ? 'live' : 'normal';
+  const wasOpen = vhModeDetail === m && vhLiveWanted() === (m === 'live');
+  vhModeDetail = wasOpen ? null : m;  // zweiter Klick auf denselben Modus klappt zu
+  vhLiveSet(m);
   vhLiveErrShow('');
 });
 vhLiveRender();
 vhLiveRefresh();
+vhFirstVisitRender();
+vhPriceLoad();
+vhFreeRefresh();
 
 async function vhStartCall() {
-  if (!window.LivekitClient) { err.textContent = 'LiveKit SDK failed to load — reload the page.'; return; }
-  btnCall.disabled = true; err.textContent = 'connecting…';
+  if (!window.LivekitClient) { err.textContent = vhT('err.sdk'); return; }
+  btnCall.disabled = true; delete err.dataset.sticky; err.textContent = vhT('err.connecting');
   try {
     const voice    = (document.getElementById('lk-voice') || {}).value || '';
     const model    = (document.getElementById('lk-model') || {}).value || VH_LK_MODEL;
@@ -3036,10 +4087,14 @@ async function vhStartCall() {
         tok.vhLive = true;
       } else {
         const r = await fetch('/api/host-call', {
-          method: 'POST', headers: { 'content-type': 'application/json' },
+          method: 'POST', headers: vhPayHeaders(),
           body: JSON.stringify({ identity }),
         });
-        if (!r.ok) throw new Error('Host-call ' + r.status);
+        if (!r.ok) {
+          const pay = await vhPayErrMsg(r);
+          if (pay) { vhPayShow(pay); vhFreeRefresh(); throw vhPayError(pay); }
+          throw new Error('Host-call ' + r.status);
+        }
         tok = await r.json();
       }
       room = tok.room;
@@ -3061,7 +4116,8 @@ async function vhStartCall() {
     // "ready"-message comes from TrackSubscribed once voice-ai's audio-track
     // arrives — at this point the user cannot actually talk yet.
     lkConnected = true; try { vhHideJoinGate(); } catch (_) {}
-    btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = 'End call';
+    try { vhMarkSeen(); } catch (_) {}
+    btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = vhT('call.end');
     try { vhMuteBtnVisibility(true); } catch (_) {}  // show mic-mute toggle next to btn-call
     err.textContent = '';  // no "connected" text — speaker-color in kringel does the talking
     // rewrite browser URL to /r/<slug> so bookmark + back-button work
@@ -3070,8 +4126,11 @@ async function vhStartCall() {
     try { history.replaceState(null, '', tok.vhLive ? vhLiveUrlFor(room, tok) : '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
     if (tok.vhLive) vhLiveMark();
   } catch (e) {
-    console.error('[voicehook] call failed', e);
-    err.textContent = 'Connection failed: ' + (e && e.message ? e.message : e);
+    if (!(e && e.vhPay)) {
+      console.error('[voicehook] call failed', e);
+      err.dataset.sticky = '1';
+      err.textContent = vhT('err.connFailed', { msg: (e && e.message ? e.message : e) });
+    }
     try { lkRoom && lkRoom.disconnect(); } catch (_) {}
     lkRoom = null; lkConnected = false;
   vhRestorePalette();
@@ -3079,6 +4138,7 @@ async function vhStartCall() {
 }
 
 function vhEndCall(fromEvent) {
+  try { vhLowBalEnd(lkConnected && !VH_INVITE); } catch (_) {}
   try { vhHideSoundGate(); } catch (_) {}
   try { vhCostStop(); } catch (_) {}
   try { window.lkRoom = null; } catch (_) {}
@@ -3090,9 +4150,14 @@ function vhEndCall(fromEvent) {
   try { document.getElementById('vh-presence').classList.remove('vh-in-call'); } catch (_) {}
   analyser = null; freqData = null; micActive = false;
   btnCall.innerHTML = ICON_CALL_START; btnCall.classList.remove('on');
-  btnCall.title = 'Start AI call (mic turns on)';
+  btnCall.title = vhT('call.start');
   try { vhMuteBtnVisibility(false); } catch (_) {}  // hide mic-mute when call ends
-  if (err.textContent && err.textContent.indexOf('failed') === -1) err.textContent = '';
+  try { vhFirstVisitRender(); vhFreeRefreshSoon(); } catch (_) {}
+  // Call endet auch ohne Klick (Gratisminuten um, Gegenseite trennt): Knopf zurück.
+  try { if (window.vhSetCallUi) window.vhSetCallUi('idle'); } catch (_) {}
+  // Verbindungs-/Einladungsfehler bleiben stehen (sprachunabhängig, Flag statt
+  // Suche nach dem englischen Wort 'failed').
+  if (err.textContent && !err.dataset.sticky) err.textContent = '';
 }
 
 
@@ -3174,7 +4239,7 @@ async function vhModalOpenInvite() {
   const statusEl  = document.getElementById('vh-invite-status');
   const goBtn     = document.getElementById('vh-go-invite');
   const copyBtn   = document.getElementById('vh-copy-snippet');
-  if (snippetEl) snippetEl.textContent = 'preparing room…';
+  if (snippetEl) snippetEl.textContent = vhT('invite.preparing');
   if (statusEl)  statusEl.textContent  = '';
   if (goBtn)     goBtn.disabled = true;
   try {
@@ -3192,40 +4257,38 @@ async function vhModalOpenInvite() {
     // Agent-onboarding snippet — paste into any LLM agent session (Claude
     // Code, Cursor, ZeroClaw, Codex, Hermes, etc). Zero-install uvx pattern
     // via git+url since voicehook-agent is on GitHub but not yet on PyPI.
-    const snippet =
-`voicehook.ai call — join as agent (paste & run):
-
-  uvx --from git+https://github.com/voicehook-ai/voicehook-agent voicehook-agent join ${inviteUrl} --name <YourName> --model <your-model-id> --json
-
-First-time agent? Read the skill FIRST: ${location.origin}/agent/SKILL.md
-(--name + --model are required: your display name + exact model, shown in the call · --json is required for driving · push senior.say/persona via stdin · §0 of the skill: how a voice-ai gets in the room)`;
+    const snippet = vhT('invite.snippet', {
+      cmd: `uvx --from git+https://github.com/voicehook-ai/voicehook-agent voicehook-agent join ${inviteUrl} --name <YourName> --model <your-model-id> --json`,
+      skill: location.origin + '/agent/SKILL.md',
+    });
 
     vhInvitePrepared = { tok, room, snippet };
+    try { vhMarkSeen(); } catch (_) {}  // Agent eingeladen -> kein Erstbesucher mehr
     vhInviteBtnShow();  // persistent invite-copy button in footer
     if (snippetEl) snippetEl.textContent = snippet;
     if (goBtn) goBtn.disabled = false;
     // Auto-copy on open; user can re-click "copy".
-    try { await navigator.clipboard.writeText(snippet); if (copyBtn) { copyBtn.textContent = 'copied'; copyBtn.classList.add('copied'); } }
+    try { await navigator.clipboard.writeText(snippet); if (copyBtn) { copyBtn.textContent = vhT('invite.copied'); copyBtn.classList.add('copied'); } }
     catch (_) {}
     if (copyBtn) copyBtn.onclick = async () => {
       try {
         await navigator.clipboard.writeText(snippet);
-        copyBtn.textContent = 'copied'; copyBtn.classList.add('copied');
-        setTimeout(() => { copyBtn.textContent = 'copy'; copyBtn.classList.remove('copied'); }, 1500);
+        copyBtn.textContent = vhT('invite.copied'); copyBtn.classList.add('copied');
+        setTimeout(() => { copyBtn.textContent = vhT('invite.copy'); copyBtn.classList.remove('copied'); }, 1500);
       } catch (_) {}
     };
     if (goBtn) goBtn.onclick = () => { vhModalHide(); vhInviteJoinAsHost(); };
   } catch (e) {
     console.error('[voicehook] invite prepare failed', e);
-    if (snippetEl) snippetEl.textContent = 'Failed: ' + (e.message || e);
+    if (snippetEl) snippetEl.textContent = vhT('err.prepFailed', { msg: (e.message || e) });
   }
 }
 
 async function vhInviteJoinAsHost() {
   if (!vhInvitePrepared) return;
-  if (!window.LivekitClient) { err.textContent = 'LiveKit SDK failed to load — reload the page.'; return; }
+  if (!window.LivekitClient) { err.textContent = vhT('err.sdk'); return; }
   const { room } = vhInvitePrepared;
-  btnCall.disabled = true; err.textContent = '';
+  btnCall.disabled = true; delete err.dataset.sticky; err.textContent = '';
   try {
     if (currentMode !== 'speech') applyProfile('speech');
     vhActivateCallPalette();
@@ -3247,21 +4310,23 @@ async function vhInviteJoinAsHost() {
     const { Room, RoomEvent, Track } = window.LivekitClient;
     await vhMicRefreshPref(); lkRoom = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: vhMicCaptureDefaults() });
     vhWireRoomEvents(lkRoom, RoomEvent, Track);
-    vhTrLog('system', `Raum ${room} bereit — du bist drin, warte auf deinen Agent…`);
+    vhTrLog('system', vhT('sys.roomReady', { room }));
 
     await lkRoom.connect(tok.url, tok.token);
     await lkRoom.localParticipant.setMicrophoneEnabled(true);
     // Unblock remote-audio playback inside this user gesture (autoplay policy).
     await vhStartRoomAudio(lkRoom);
     lkConnected = true; try { vhHideJoinGate(); } catch (_) {}
-    btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = 'End call';
+    try { vhMarkSeen(); } catch (_) {}
+    btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = vhT('call.end');
     try { vhMuteBtnVisibility(true); } catch (_) {}  // show mic-mute + speaker-mute toggles (parity with vhStartCall)
     // Preserve query string (esp. ?go=1) so a refresh re-triggers autostart
     // instead of dumping the user back to the modal mid-call.
     try { history.replaceState(null, '', '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
   } catch (e) {
     console.error('[voicehook] invite call failed', e);
-    err.textContent = 'Invite failed: ' + (e && e.message ? e.message : e);
+    err.dataset.sticky = '1';
+    err.textContent = vhT('err.inviteFailed', { msg: (e && e.message ? e.message : e) });
     try { lkRoom && lkRoom.disconnect(); } catch (_) {}
     lkRoom = null; lkConnected = false;
     vhRestorePalette();
@@ -3292,8 +4357,9 @@ function vhTrTick(role, text) {
   if (!vhTrTicker) return;
   vhTrTicker.textContent = String(text || '');
   vhTrTicker.dataset.role = role;
-  vhTrTicker.style.color = (role === 'agent') ? 'var(--vh-tr-blue)'
-    : (role === 'operator' || role === 'senior') ? 'var(--vh-senior-color, #e88bff)' : '';
+  vhTrTicker.style.color = (role === 'agent') ? 'var(--vh-delta-ink)'
+    : (role === 'operator' || role === 'senior') ? 'var(--vh-senior-ink)'
+    : (role === 'user') ? 'var(--vh-user-ink)' : '';
   vhTrTicker.classList.add('show');
   if (vhTrTickTimer) clearTimeout(vhTrTickTimer);
   vhTrTickTimer = setTimeout(() => vhTrTicker.classList.remove('show'), 5000);
@@ -3356,11 +4422,11 @@ function vhAgentJoiningSet(on) {
   // Sicherheitsnetz: Agent ohne Track und ohne Namen -> nach 10 s ∆ statt Ladekreis.
   if (on) vhAgentJoinTimer = setTimeout(() => el.classList.remove('joining'), 10000);
 }
-const VH_SLOT_LABELS = { user: 'User', 'voice-ai': 'Delta Agent (voice)', agent: 'Agent' };
+const VH_SLOT_LABELS = { user: vhT('pres.user'), 'voice-ai': vhT('pres.voice'), agent: vhT('pres.agent') };
 const VH_SLOT_DESCS  = {
-  user: 'Du — der Mensch im Raum',
-  'voice-ai': 'Delta Agent (voice) — voicehook-interne STT+LLM+TTS pipeline. Moderiert das Gespräch zwischen User und Agent.',
-  agent: 'Agent — der externe LLM (z.B. Claude Code) der via voicehook-agent CLI eingeklinkt ist',
+  user: vhT('pres.userDesc'),
+  'voice-ai': vhT('pres.voiceDesc'),
+  agent: vhT('pres.agentDesc'),
 };
 // Issue #3: track which identity currently owns each slot so we can ignore
 // stale ParticipantDisconnected events for old identities (e.g. when a fresh
@@ -3386,10 +4452,11 @@ function vhPresenceSet(slot, state, id) {
     if (lbl) lbl.textContent = VH_SLOT_LABELS[slot] || slot;
     el.title = VH_SLOT_DESCS[slot] || slot;
     vhSyncInviteBtnVisibility();
+    vhGlowSync();
     return;
   }
   if (id) {
-    el.title = `${VH_SLOT_DESCS[slot] || slot}  ·  identity: ${id}`;
+    el.title = `${VH_SLOT_DESCS[slot] || slot}  ·  ${vhT('pres.identity')}: ${id}`;
     // For the agent slot, derive a human-readable brand from identity (Claude / Hermes / Cursor / …)
     // so the user sees WHICH external LLM joined, not just generic "Agent".
     if (slot === 'agent') {
@@ -3398,6 +4465,7 @@ function vhPresenceSet(slot, state, id) {
     }
   }
   vhSyncInviteBtnVisibility();
+  vhGlowSync();
 }
 // Issue #5: invite-btn auto-hide when room is full (all 3 chips 'in'), auto-show otherwise (only if prepared)
 function vhSyncInviteBtnVisibility() {
@@ -3431,6 +4499,7 @@ function vhPresenceReset() {
   });
   try { document.getElementById('vh-transcript-wrap').classList.remove('vh-agent-in'); } catch (_) {}
   try { vhAgentJoiningSet(false); } catch (_) {}
+  vhGlowSync();
 }
 
 // Hook an audio MediaStreamTrack into the shared analyser. Both local (user
@@ -3482,8 +4551,8 @@ function vhShowSoundGate(room) {
   const b = document.createElement('button');
   b.id = 'vh-sound-gate';
   b.type = 'button';
-  b.textContent = 'Tap to enable sound';
-  b.setAttribute('aria-label', 'Tap to enable sound');
+  b.textContent = vhT('sound.gate');
+  b.setAttribute('aria-label', vhT('sound.gate'));
   b.style.cssText = 'position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:9999;' +
     'padding:10px 18px;border-radius:999px;border:1px solid rgba(109,201,217,0.6);' +
     'background:rgba(109,201,217,0.12);color:#cfeef4;font:600 0.85rem/1 inherit;cursor:pointer;';
@@ -3510,21 +4579,31 @@ async function vhStartRoomAudio(room) {
 // Preis). Untertitel zeigt "0.012 $" (+ " · live"), title = basis. KEINE Uhr,
 // kein Timer, kein "≈" (Olli 30.09.: eine hochzählende Uhr wirkte wie laufende
 // Kosten): Anzeige erscheint erst mit dem ersten echten Payload und ändert sich
-// nur bei neuen Payloads. Ohne Payload bleibt "talk to any AI"; nach Call-Ende zurück.
+// nur bei neuen Payloads. Ohne Payload bleibt "Talk with your agents"; nach Call-Ende zurück.
+// Schnitt pro Minute (Olli 01.10.): Summe aus dem letzten echten Payload geteilt
+// durch die Call-Minuten seit Connect, erst ab 1 Minute Calldauer, nur bei
+// eintreffenden Payloads neu gerechnet (kein Timer, der Kosten erfindet).
+// Payload-Währung ist USD, daher Cent: "0.290 $ · 1.8 ¢/min".
 const vhTagline = document.getElementById('tagline');
 const VH_TAGLINE_TEXT = vhTagline ? vhTagline.textContent : '';
+let vhCallT0 = 0;   // Date.now() beim Connect des laufenden Calls
 function vhCostShow(c) {
   if (!vhTagline) return;
-  vhTagline.textContent = c.usd.toFixed(3) + ' $' + (c.mode === 'live' ? ' · live' : '');
+  if (!vhCallT0) vhCallT0 = Date.now();
+  const mins = (Date.now() - vhCallT0) / 60000;
+  const rate = mins >= 1 ? ' · ' + vhT('cost.perMin', { v: (c.usd * 100 / mins).toFixed(1) }) : '';
+  vhTagline.textContent = c.usd.toFixed(3) + ' $' + rate + (c.mode === 'live' ? ' · ' + vhT('live.tag') : '');
   vhTagline.title = String(c.basis || '');
   vhTagline.classList.add('vh-cost-on');
 }
 function vhCostStop() {
+  vhCallT0 = 0;
   if (vhTagline) { vhTagline.textContent = VH_TAGLINE_TEXT; vhTagline.title = ''; vhTagline.classList.remove('vh-cost-on'); }
 }
 
 function vhWireRoomEvents(room, RoomEvent, Track) {
-  room.on(RoomEvent.Connected, () => { try { vhHideJoinGate(); } catch (_) {} });
+  vhCallT0 = 0;
+  room.on(RoomEvent.Connected, () => { vhCallT0 = Date.now(); try { vhHideJoinGate(); } catch (_) {} });
 
   // Expose the room so the playback gate (and tests) can observe canPlaybackAudio.
   try { window.lkRoom = room; } catch (_) {}
@@ -3554,12 +4633,12 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
       try { vhApplySpeakerColorsToTranscript(); } catch (_) {}
       // voice-ai is strict relay — joining doesn't mean a brain is in the
       // room. Tell the user voice-ai is up but we still wait for their agent.
-      vhTrLog('system', 'Voice-AI bereit · warte auf deinen Agent…');
+      vhTrLog('system', vhT('sys.voiceReady'));
       // Mirror status in the persistent invite-banner (überlebt vhTrLog).
       try {
         const st = document.getElementById('vh-invite-status');
         if (st && !st.classList.contains('ok')) {
-          st.textContent = 'Voice-AI bereit · warte auf deinen Agent…';
+          st.textContent = vhT('sys.voiceReady');
         }
       } catch (_) {}
     }
@@ -3573,16 +4652,16 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
   });
   room.on(RoomEvent.TrackUnsubscribed, () => { /* keep analyser alive — local mic still feeds it */ });
   room.on(RoomEvent.LocalTrackMuted, (pub) => {
-    if (pub?.kind === Track.Kind.Audio) vhTrLog('system', '⏸ mic muted');
+    if (pub?.kind === Track.Kind.Audio) vhTrLog('system', vhT('sys.micMuted'));
   });
   room.on(RoomEvent.LocalTrackUnmuted, (pub) => {
-    if (pub?.kind === Track.Kind.Audio) vhTrLog('system', '▶ mic unmuted');
+    if (pub?.kind === Track.Kind.Audio) vhTrLog('system', vhT('sys.micUnmuted'));
   });
   // Connection-state transitions are implementation noise — only surface
   // re-connects (genuine signal that something went wrong + recovered).
   room.on(RoomEvent.ConnectionStateChanged, () => { /* silent */ });
-  room.on(RoomEvent.Reconnecting, () => vhTrLog('system', '⟳ reconnecting…'));
-  room.on(RoomEvent.Reconnected,  () => vhTrLog('system', '✓ reconnected'));
+  room.on(RoomEvent.Reconnecting, () => vhTrLog('system', vhT('sys.reconnecting')));
+  room.on(RoomEvent.Reconnected,  () => vhTrLog('system', vhT('sys.reconnected')));
   // Initial user slot — local participant is already connected when wireup runs
   try { vhPresenceSet('user', 'in', room.localParticipant?.identity); } catch (_) {}
   // In-call marker: agent chip shows its loading ring until an external agent joins.
@@ -3611,7 +4690,7 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
       return; // chip + "Voice Agent joined" message deferred
     }
     // Senior agents + other peers: announce immediately, audio-pipeline irrelevant.
-    const tag = slot === 'agent' ? `Agent joined: ${vhAgentLabelById[id] || id} (${id})` : `peer joined: ${id}`;
+    const tag = slot === 'agent' ? vhT('sys.agentJoined', { label: vhAgentLabelById[id] || id, id }) : vhT('sys.peerJoined', { id });
     vhTrLog('system', tag);
     if (slot) vhPresenceSet(slot, 'in', id);
     try { vhApplySpeakerColorsToTranscript(); } catch (_) {}
@@ -3621,11 +4700,11 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
     // damit User jederzeit den copy-Button für Re-Share nochmal hat).
     try {
       const st = document.getElementById('vh-invite-status');
-      if (st) { st.textContent = 'Agent ist da · reden! (Banner offen für Re-Share)'; st.classList.add('ok'); }
+      if (st) { st.textContent = vhT('invite.agentIn'); st.classList.add('ok'); }
     } catch (_) {}
   });
   room.on(RoomEvent.ParticipantDisconnected, (p) => {
-    vhTrLog('system', `peer left: ${p.identity}`);
+    vhTrLog('system', vhT('sys.peerLeft', { id: p.identity }));
     const slot = vhPresenceSlotForP(p);
     // Issue #3: pass identity so vhPresenceSet can ignore stale events for an
     // identity that has already been replaced by a fresh peer in the same slot.
@@ -3633,7 +4712,7 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
     // Last peer left → show invite button again (still waiting)
     if (vhInvitePrepared && room.numParticipants <= 1) vhInviteBtnShow();
   });
-  room.on(RoomEvent.Disconnected, () => { vhTrLog('system', 'disconnected'); vhPresenceReset(); vhEndCall(true); });
+  room.on(RoomEvent.Disconnected, () => { vhTrLog('system', vhT('sys.disconnected')); vhPresenceReset(); vhEndCall(true); });
   // Self-report may also arrive/change at runtime (name/attributes update) →
   // refresh the agent chip label if that identity currently owns the slot.
   const vhRefreshAgentLabel = (p) => {
@@ -3652,12 +4731,12 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
   function vhBumpActivity() {
     if (window.vhIdleLowActivity) {
       window.vhIdleLowActivity = false;
-      vhTrLog('system', '↑ activity resumed — full-render back on');
+      vhTrLog('system', vhT('sys.active'));
     }
     if (vhIdleTimer) clearTimeout(vhIdleTimer);
     vhIdleTimer = setTimeout(() => {
       window.vhIdleLowActivity = true;
-      vhTrLog('system', '⏬ 30 min idle — low-activity mode (call stays open)');
+      vhTrLog('system', vhT('sys.idle'));
     }, VH_IDLE_MS);
   }
   vhBumpActivity();  // initial timer start
@@ -3670,16 +4749,15 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
       const el = document.querySelector(`#vh-presence .vh-pres-chip[data-slot="${s}"]`);
       if (el && el.classList.contains('in')) el.classList.remove('speak');
     });
-    if (!speakers || !speakers.length) { vhSetSpeaker('idle'); return; }
+    if (!speakers || !speakers.length) { vhGlowSync(); return; }
     const local = room.localParticipant;
-    const localSpeaks = speakers.some(p => p === local || p.identity === local.identity);
-    vhSetSpeaker(localSpeaks ? 'user' : 'agent');
     // mark each speaking participant in presence
     speakers.forEach(p => {
-      const slot = vhPresenceSlotForP(p);
+      const slot = (p === local || (local && p.identity === local.identity)) ? 'user' : vhPresenceSlotForP(p);
       // Issue #3: pass identity so the slot-ownership tracker stays in sync
       if (slot) vhPresenceSet(slot, 'speak', p.identity);
     });
+    vhGlowSync();
   });
   // NOTE: TranscriptionReceived listener REMOVED — voicehook-v2 echoes
   // transcripts on data-channel topic="transcript" after the LiveKit refactor,
@@ -3715,6 +4793,14 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
       return;
     }
     if (!topic) return;
+    // Billing-Runde 4: Server meldet "in ca. 5 min leer" -> Hinweis + Aufladen.
+    if (topic === 'operator.notice') {
+      try {
+        const n = JSON.parse(new TextDecoder().decode(payload));
+        if (n && n.kind === 'low_balance' && vhCallLive()) vhLowBalShow(n.minutes_left);
+      } catch (_) {}
+      return;
+    }
     // Nur Operator-Themen lösen etwas aus (Chip-Puls); alles andere (cost,
     // agent.heartbeat, künftige Themen) wird ignoriert.
     if (!/^(operator|senior)\./.test(topic)) return;
@@ -3727,6 +4813,7 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
       setTimeout(() => {
         const el = document.querySelector('#vh-presence .vh-pres-chip[data-slot="agent"]');
         if (el && el.classList.contains('speak')) el.classList.remove('speak');
+        vhGlowSync();
       }, 2000);
     } catch (_) {}
   });
@@ -3745,7 +4832,7 @@ async function vhMuteToggle() {
     await lkRoom.localParticipant.setMicrophoneEnabled(wasMuted);  // true = unmute, false = mute
     if (btnMute) {
       btnMute.classList.toggle('muted', !wasMuted);
-      btnMute.title = !wasMuted ? 'Mic ist stumm (call läuft) — klick um wieder zu sprechen' : 'Mic stumm (call läuft weiter)';
+      btnMute.title = !wasMuted ? vhT('mute.muted') : vhT('mute.live');
     }
   } catch (e) {
     console.warn('[voicehook] mute toggle failed:', e);
@@ -3763,9 +4850,7 @@ function vhSpeakerToggle() {
   lkAudioEl.muted = next;
   if (btnSpeaker) {
     btnSpeaker.classList.toggle('muted', next);
-    btnSpeaker.title = next
-      ? 'Speaker stumm — klick um wieder zu hören'
-      : 'Speaker stumm (tab-audio mute, call läuft weiter)';
+    btnSpeaker.title = next ? vhT('speaker.muted') : vhT('speaker.live');
   }
   // Tell voice-ai LLM about the mute state via senior.persona so it can
   // adapt: when muted → reply fast+many turns (no TTS prosody concern);
@@ -3825,8 +4910,8 @@ function vhShowJoinGate() {
   const b = document.createElement('button');
   b.id = 'vh-join-gate';
   b.type = 'button';
-  b.textContent = 'Tippen zum Beitreten';
-  b.setAttribute('aria-label', 'Dem Call beitreten');
+  b.textContent = vhT('join.gate');
+  b.setAttribute('aria-label', vhT('join.aria'));
   b.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9999;' +
     'padding:16px 32px;border-radius:999px;border:1px solid rgba(109,201,217,0.6);' +
     'background:rgba(109,201,217,0.14);color:#cfeef4;font:600 1rem/1 inherit;cursor:pointer;' +
@@ -3947,13 +5032,13 @@ async function vhMicRender() {
     b.addEventListener('click', (e) => { e.stopPropagation(); vhMicSelect(id, label); });
     vhMicList.appendChild(b);
   };
-  add('', 'System-Standard');
+  add('', vhT('mic.default'));
   const labeled = devs.filter(d => d.label);
   if (!labeled.length) {
     // Browser zeigt Gerätenamen erst nach Mikro-Freigabe
     const b = document.createElement('button');
-    b.type = 'button'; b.className = 'vh-foot-style vh-foot-mic'; b.textContent = 'Mikros anzeigen …';
-    b.title = 'Einmal Mikro-Zugriff erlauben, dann erscheinen alle Geräte';
+    b.type = 'button'; b.className = 'vh-foot-style vh-foot-mic'; b.textContent = vhT('mic.show');
+    b.title = vhT('mic.showTitle');
     b.addEventListener('click', async (e) => {
       e.stopPropagation();
       try { const st = await navigator.mediaDevices.getUserMedia({ audio: true }); st.getTracks().forEach(t => t.stop()); } catch (_) {}
@@ -3986,14 +5071,14 @@ if (vhInviteBtn) vhInviteBtn.addEventListener('click', async (e) => {
     if (vhInviteBtnLabel) vhInviteBtnLabel.textContent = label;
     setTimeout(() => {
       vhInviteBtn.classList.remove('copied');
-      if (vhInviteBtnLabel) vhInviteBtnLabel.textContent = 'Invite';
+      if (vhInviteBtnLabel) vhInviteBtnLabel.textContent = vhT('inviteBtn.label');
     }, 1500);
   };
   // SHIFT+click = native share (human-friendly, URL-only — no double-paste)
   if (e.shiftKey && navigator.share) {
     try {
       await navigator.share({ title: 'voicehook.ai call', url: shareUrl });
-      flash('shared');
+      flash(vhT('inviteBtn.shared'));
       return;
     } catch (err) {
       if (err?.name === 'AbortError') return;
@@ -4003,10 +5088,10 @@ if (vhInviteBtn) vhInviteBtn.addEventListener('click', async (e) => {
   // — designed to be pasted into another LLM agent session for skill discovery
   try {
     await navigator.clipboard.writeText(vhInvitePrepared.snippet);
-    flash('snippet copied');
+    flash(vhT('inviteBtn.copied'));
   } catch (_) {
     console.log('[voicehook] invite snippet:\n' + vhInvitePrepared.snippet);
-    flash('see console');
+    flash(vhT('inviteBtn.console'));
   }
 });
 document.addEventListener('click', (e) => {
@@ -4116,16 +5201,17 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
     if (!callBtn) return;
     if (state === 'in-call') {
       callBtn.classList.add('on');
-      if (callLbl) callLbl.textContent = 'Auflegen';
-      callBtn.title = msg || 'End call';
+      if (callLbl) callLbl.textContent = vhT('call.hangup');
+      callBtn.title = msg || vhT('call.end');
       try { vhMuteBtnVisibility(true); } catch (_) {}
     } else {
       callBtn.classList.remove('on');
-      if (callLbl) callLbl.textContent = 'Invite your agent';
-      callBtn.title = msg || 'copies invite URL to clipboard + connects you as host';
+      if (callLbl) callLbl.textContent = vhT('call.label');
+      callBtn.title = msg || vhT('call.title');
       try { vhMuteBtnVisibility(false); } catch (_) {}
     }
   };
+  window.vhSetCallUi = _setCallUi;  // Delta-Einstieg + Call-Ende nutzen denselben Knopfzustand
 
   if (callBtn) callBtn.addEventListener('click', async () => {
     if (callBtn.disabled) return;
@@ -4157,20 +5243,27 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
         room = tok && tok.room;
         try { localStorage.setItem(VH_ID_PREFIX + room, identity); } catch (_) {}
       } else {
-        room = vhRandSlug();
-        const identity = vhStableIdentity(room, 'host');
-        const u = '/api/token?room=' + encodeURIComponent(room) +
-                  '&identity=' + encodeURIComponent(identity) +
-                  '&invite=1';
-        const r = await fetch(u);
-        if (!r.ok) throw new Error('Token server ' + r.status);
+        // Billing-Runde 4: Normalmodus-Einladung zahlt wie host-call (Gratis,
+        // dann Guthaben). Server legt den Raum an (kein Client-Slug mehr).
+        const identity = 'host-' + Math.random().toString(36).slice(2, 8);
+        const r = await fetch('/api/invite-room', {
+          method: 'POST', headers: vhPayHeaders(),
+          body: JSON.stringify({ identity }),
+        });
+        if (!r.ok) {
+          const pay = await vhPayErrMsg(r);
+          if (pay) { vhPayShow(pay); vhFreeRefresh(); throw vhPayError(pay); }
+          throw new Error('Invite-room ' + r.status);
+        }
         tok = await r.json();
+        room = tok && tok.room;
+        try { localStorage.setItem(VH_ID_PREFIX + room, identity); } catch (_) {}
       }
       if (!tok || !tok.token || !tok.url || !room) throw new Error('invalid token response');
 
       // Live: Einladung mit ?invite=<hmac>, damit auch ein Mensch per Link im
       // selben Live-Raum landet (ohne Code würde /r/<slug> einen neuen Raum starten).
-      const inviteInv = live ? vhLiveInviteParam(tok) : '';
+      const inviteInv = vhLiveInviteParam(tok);
       const inviteUrl = location.origin + '/r/' + encodeURIComponent(room) +
                         (inviteInv ? '?invite=' + encodeURIComponent(inviteInv) : '');
       let clipOk = true;
@@ -4183,7 +5276,7 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
       // voicehook-join skill triggers). Banner lebt eigenständig in
       // #vh-invite-banner (NICHT in #vh-transcript-empty), damit vhTrLog die
       // Anweisung nicht killt sobald die ersten _meta-Lines reinkommen.
-      const inviteMsg = 'Kannst du bitte meinem voicecall beitreten auf voicehook.ai? ' + inviteUrl + '\nSkill: ' + location.origin + '/agent/SKILL.md';
+      const inviteMsg = vhT('invite.msg', { url: inviteUrl, skill: location.origin + '/agent/SKILL.md' });
       try { await navigator.clipboard.writeText(inviteMsg); }
       catch (_) { clipOk = false; }
       try {
@@ -4192,21 +5285,21 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
           banner.hidden = false;
           banner.innerHTML =
             '<div class="vh-invite-hint">' +
-              '<div class="hd">' + (clipOk
-                ? 'In Zwischenablage. Schick das deinem Agent:'
-                : 'Copy diese Zeile zu deinem Agent (Clipboard blockiert):') + '</div>' +
-              '<pre class="url" id="vh-invite-msg">' + inviteMsg + '</pre>' +
+              '<div class="hd">' + (clipOk ? vhT('invite.clipOk') : vhT('invite.clipFail')) + '</div>' +
+              '<pre class="url" id="vh-invite-msg"></pre>' +
               '<div class="vh-invite-actions">' +
-                '<button type="button" class="vh-copy-btn" id="vh-copy-invite">copy</button>' +
+                '<button type="button" class="vh-copy-btn" id="vh-copy-invite">' + vhT('invite.copy') + '</button>' +
               '</div>' +
-              '<div class="vh-invite-status" id="vh-invite-status">Warte auf Agent…</div>' +
+              '<div class="vh-invite-status" id="vh-invite-status">' + vhT('invite.wait') + '</div>' +
             '</div>';
+          const msgEl = document.getElementById('vh-invite-msg');
+          if (msgEl) msgEl.textContent = inviteMsg;
           const btnCopy = document.getElementById('vh-copy-invite');
           if (btnCopy) btnCopy.addEventListener('click', async () => {
             try {
               await navigator.clipboard.writeText(inviteMsg);
-              btnCopy.textContent = 'copied';
-              setTimeout(() => { btnCopy.textContent = 'copy'; }, 1500);
+              btnCopy.textContent = vhT('invite.copied');
+              setTimeout(() => { btnCopy.textContent = vhT('invite.copy'); }, 1500);
             } catch (_) {}
           });
         }
@@ -4218,13 +5311,14 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
       await lkRoom.localParticipant.setMicrophoneEnabled(true);
       try { await vhStartRoomAudio(lkRoom); } catch (_) {}
       lkConnected = true; try { vhHideJoinGate(); } catch (_) {}
-      try { history.replaceState(null, '', live ? vhLiveUrlFor(room, tok) : '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
+      try { vhMarkSeen(); } catch (_) {}  // Agent eingeladen -> kein Erstbesucher mehr
+      try { history.replaceState(null, '', (live || inviteInv) ? vhLiveUrlFor(room, tok) : '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
       if (live) vhLiveMark();
 
-      _setCallUi('in-call', 'in call' + (live ? ' (live)' : '') + ' · invite URL copied: ' + inviteUrl);
+      _setCallUi('in-call', vhT('call.inCall', { live: live ? ' (live)' : '', url: inviteUrl }));
     } catch (e) {
-      console.error('[vh-call] start failed', e);
-      _setCallUi('idle', 'failed: ' + (e && e.message ? e.message : e));
+      if (!(e && e.vhPay)) console.error('[vh-call] start failed', e);
+      _setCallUi('idle', vhT('call.failed', { msg: (e && e.message ? e.message : e) }));
       setTimeout(() => { _setCallUi('idle'); }, 4000);
     } finally {
       callBtn.disabled = false;
@@ -4290,48 +5384,47 @@ body.settings-collapsed #vh-build{display:none !important;}
 <div id="vh-foot">
   <div id="vh-foot-menu" hidden role="menu">
     <div class="vh-foot-meta">voicehook.ai</div>
-    <a href="/" role="menuitem">Start</a>
-    <a href="/aufladen" role="menuitem">Aufladen</a>
-    <a href="/setup" role="menuitem">Setup</a>
+    <a href="/aufladen" role="menuitem" target="_blank" rel="noopener" data-i18n="menu.topup">Aufladen</a>
+    <a href="/setup" role="menuitem" target="_blank" rel="noopener" data-i18n="menu.setup">Setup</a>
     <div class="vh-foot-sep"></div>
-    <a href="/datenschutz" role="menuitem">Datenschutz</a>
-    <a href="/impressum" role="menuitem">Impressum</a>
-    <a href="/security" role="menuitem">Security</a>
+    <a href="/datenschutz" role="menuitem" target="_blank" rel="noopener" data-i18n="menu.privacy">Datenschutz</a>
+    <a href="/impressum" role="menuitem" target="_blank" rel="noopener" data-i18n="menu.imprint">Impressum</a>
+    <a href="/security" role="menuitem" target="_blank" rel="noopener" data-i18n="menu.security">Security</a>
     <div class="vh-foot-sep"></div>
-    <div class="vh-foot-meta">Mikrofon</div>
+    <div class="vh-foot-meta" data-i18n="menu.mic">Mikrofon</div>
     <div id="vh-foot-mics" class="vh-foot-mics"></div>
     <div class="vh-foot-sep"></div>
-    <div class="vh-foot-meta">Style</div>
+    <div class="vh-foot-meta" data-i18n="menu.style">Style</div>
     <div id="vh-foot-styles" class="vh-foot-styles">
-      <button type="button" class="vh-foot-style" data-pal="ice"     role="menuitem">Ice</button>
-      <button type="button" class="vh-foot-style" data-pal="earth"   role="menuitem">Earth</button>
-      <button type="button" class="vh-foot-style" data-pal="fire"    role="menuitem">Fire</button>
-      <button type="button" class="vh-foot-style" data-pal="water"   role="menuitem">Water</button>
-      <button type="button" class="vh-foot-style" data-pal="air"     role="menuitem">Air</button>
-      <button type="button" class="vh-foot-style" data-pal="forest"  role="menuitem">Forest</button>
-      <button type="button" class="vh-foot-style" data-pal="zebra"   role="menuitem">Zebra</button>
-      <button type="button" class="vh-foot-style" data-pal="giraffe" role="menuitem">Giraffe</button>
-      <button type="button" class="vh-foot-style" data-pal="leopard" role="menuitem">Leopard</button>
-      <button type="button" class="vh-foot-style" data-pal="tiger"   role="menuitem">Tiger</button>
+      <button type="button" class="vh-foot-style" data-pal="ice"     role="menuitem" data-i18n="style.ice">Ice</button>
+      <button type="button" class="vh-foot-style" data-pal="earth"   role="menuitem" data-i18n="style.earth">Earth</button>
+      <button type="button" class="vh-foot-style" data-pal="fire"    role="menuitem" data-i18n="style.fire">Fire</button>
+      <button type="button" class="vh-foot-style" data-pal="water"   role="menuitem" data-i18n="style.water">Water</button>
+      <button type="button" class="vh-foot-style" data-pal="air"     role="menuitem" data-i18n="style.air">Air</button>
+      <button type="button" class="vh-foot-style" data-pal="forest"  role="menuitem" data-i18n="style.forest">Forest</button>
+      <button type="button" class="vh-foot-style" data-pal="zebra"   role="menuitem" data-i18n="style.zebra">Zebra</button>
+      <button type="button" class="vh-foot-style" data-pal="giraffe" role="menuitem" data-i18n="style.giraffe">Giraffe</button>
+      <button type="button" class="vh-foot-style" data-pal="leopard" role="menuitem" data-i18n="style.leopard">Leopard</button>
+      <button type="button" class="vh-foot-style" data-pal="tiger"   role="menuitem" data-i18n="style.tiger">Tiger</button>
       <!-- Punkt H: HD-Umschalter des Kringels (lag im seit 2026-05-28 unerreichbaren #fx-ctl) -->
-      <button type="button" class="vh-foot-style" id="vh-foot-hd" role="menuitemcheckbox" aria-checked="true" title="Kringel in voller Auflösung (HD) oder sparsam (SD)">HD</button>
+      <button type="button" class="vh-foot-style" id="vh-foot-hd" role="menuitemcheckbox" aria-checked="true" title="Kringel in voller Auflösung (HD) oder sparsam (SD)" data-i18n-title="hd.title">HD</button>
     </div>
     <div class="vh-foot-sep"></div>
-    <a href="https://github.com/voicehook-ai" role="menuitem" target="_blank" rel="noopener">GitHub ↗</a>
+    <a href="https://github.com/voicehook-ai" role="menuitem" target="_blank" rel="noopener" data-i18n="menu.github">GitHub ↗</a>
   </div>
   <div id="vh-foot-row">
-    <button id="vh-invite-btn" hidden title="Click: copy agent-snippet (paste into LLM) · Shift+Click: native share URL" aria-label="invite — copy snippet or shift-click to share">
+    <button id="vh-invite-btn" hidden title="Click: copy agent snippet" aria-label="invite" data-i18n-title="inviteBtn.title" data-i18n-aria="inviteBtn.aria">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
       </svg>
-      <span id="vh-invite-btn-label">Invite</span>
+      <span id="vh-invite-btn-label" data-i18n="inviteBtn.label">Invite</span>
     </button>
-    <button id="vh-burger" aria-label="menu" aria-expanded="false" aria-controls="vh-foot-menu">
+    <button id="vh-burger" aria-label="menu" data-i18n-aria="menu.aria" aria-expanded="false" aria-controls="vh-foot-menu">
       <span></span><span></span><span></span>
     </button>
   </div>
-  <button id="vh-build" hidden title="Click to copy build sha"></button>
+  <button id="vh-build" hidden title="Click to copy build sha" data-i18n-title="build.title"></button>
 </div>
 
 <script>
@@ -4358,6 +5451,10 @@ body.settings-collapsed #vh-build{display:none !important;}
     } catch(_) {}
   });
 })();
+</script>
+<script>
+/* i18n: statische Texte vor dem (deferred) Modul-Skript übersetzen. */
+try { window.vhApplyI18n(document); } catch (_) {}
 </script>
 
 </body>

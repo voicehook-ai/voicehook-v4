@@ -78,5 +78,7 @@ def test_footer_pages_exist_and_are_routed():
         assert (ROOT / "web" / f"{name}.html").is_file(), name
     assert (ROOT / "web" / ".well-known" / "security.txt").is_file()
     cf = (ROOT / "infra" / "caddy" / "Caddyfile.tmpl").read_text()
-    assert "try_files {path} {path}.html /voice.html" in cf
+    for name in ("impressum", "datenschutz", "setup"):
+        assert f"rewrite /{name} /{name}.html" in cf, name
     assert "rewrite /security /.well-known/security.txt" in cf
+    assert "try_files {path} /voice.html" in cf  # SPA-Fallback bleibt

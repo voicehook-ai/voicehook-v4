@@ -10,12 +10,19 @@ __SITE_MAIN__ {
   }
   @api path /api/* /healthz /status
   handle @api {
+    # Kein trusted_proxies: Caddy verwirft eingehende X-Forwarded-For-Werte und setzt
+    # die echte Client-IP. Die API nimmt das LETZTE Element (server._client_ip). Kommt
+    # je ein CDN davor, hier trusted_proxies <CDN-Netze> setzen, sonst zählt die CDN-IP.
     reverse_proxy 127.0.0.1:7400
   }
   handle {
     root * /var/www/voicehook
+    rewrite /impressum /impressum.html  # Footer-Seiten (PR #83)
+    rewrite /datenschutz /datenschutz.html
+    rewrite /setup /setup.html
     rewrite /security /.well-known/security.txt
-    try_files {path} {path}.html /voice.html  # /impressum, /datenschutz, /setup -> *.html, sonst SPA
+    rewrite /aufladen /aufladen.html  # Guthaben aufladen (Stripe Checkout)
+    try_files {path} /voice.html
     header Cache-Control "no-cache"  # nach jedem Deploy sofort neue Seite (ETag-Revalidierung)
     file_server
   }

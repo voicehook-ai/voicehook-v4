@@ -146,6 +146,8 @@ def _run_entrypoint_with_metrics(monkeypatch, *, live_mode, metrics):
     else:
         monkeypatch.delenv("VOICEHOOK_PIPELINE", raising=False)
         monkeypatch.setenv("VOICEHOOK_STT_GATE", "0")
+        from agent import freetier
+        freetier.register_room("r1", "normal", [], exempt=True)  # fail-closed seit PR #93
     session = _Emitter()
     session.start = AsyncMock()
     session.aclose = AsyncMock()
@@ -192,8 +194,9 @@ def test_cost_topic_silent_without_metrics(monkeypatch):
 
 
 def test_live_cost_still_booked_into_month_budget(monkeypatch):
-    from agent import budget
+    from agent import budget, freetier
 
+    freetier.register_room("r1", "live", [], exempt=True)  # Demo-/Admin-Raum (Live-Worker ist fail-closed)
     rt = _metric("RealtimeModelMetrics", input_tokens=1000, output_tokens=500,
                  input_token_details=None, output_token_details=None)
     sent = _run_entrypoint_with_metrics(monkeypatch, live_mode=True, metrics=[rt])

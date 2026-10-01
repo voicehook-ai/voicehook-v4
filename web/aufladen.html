@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22%3E%3Cpath d=%22M20 4.5 37 35.5H3Z%22 fill=%22none%22 stroke=%22%236dc9d9%22 stroke-width=%223.5%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E">
+<title>voicehook · Aufladen</title>
+<style>
+/* Drehregler-Design aus voicehook (alt) web/landing/aufladen.html, Tokens + Theme wie web/voice.html */
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+[hidden]{ display:none !important; }
+:root{
+  --vh-bg-0:#000000; --vh-fg-0:#f4f4f7; --vh-fg-2:#8a8a93; --vh-fg-3:#55555f;
+  --vh-teal:#6dc9d9; --vh-teal-glow:#a3eaf5; --vh-warm:#f2a65a;
+  --vh-mono:"Geist Mono","JetBrains Mono","SF Mono",Menlo,monospace;
+  --vh-btn-bg:rgba(0,0,0,.42); --vh-btn-bg-hover:rgba(0,0,0,.58);
+  --vh-btn-border:rgba(255,255,255,.10); --vh-btn-border-hov:rgba(255,255,255,.30);
+  --vh-btn-fg:rgba(255,255,255,.85); --vh-btn-fg-hov:#fff;
+  --vh-track:rgba(255,255,255,.06); --vh-tick:rgba(255,255,255,.10);
+  --vh-panel:rgba(255,255,255,.03); --vh-bg-glow:#0d1015;
+  --vh-cta-fg:#000;
+}
+body.theme-light{
+  --vh-bg-0:#f4f4f7; --vh-fg-0:#0b0b0f; --vh-fg-2:#5c5c66; --vh-fg-3:#888892;
+  --vh-teal:#1f8fa3; --vh-teal-glow:#6dc9d9; --vh-warm:#b8641a;
+  --vh-btn-bg:rgba(255,255,255,.55); --vh-btn-bg-hover:rgba(255,255,255,.78);
+  --vh-btn-border:rgba(0,0,0,.10); --vh-btn-border-hov:rgba(0,0,0,.32);
+  --vh-btn-fg:rgba(0,0,0,.78); --vh-btn-fg-hov:#000;
+  --vh-track:rgba(0,0,0,.07); --vh-tick:rgba(0,0,0,.14);
+  --vh-panel:rgba(0,0,0,.03); --vh-bg-glow:#ffffff;
+  --vh-cta-fg:#fff;
+}
+html{ min-height:100%; }
+body{
+  min-height:100vh; min-height:100dvh;
+  background:radial-gradient(ellipse at 50% 30%, var(--vh-bg-glow) 0%, var(--vh-bg-0) 70%) fixed, var(--vh-bg-0);
+  color:var(--vh-fg-0); font-family:var(--vh-mono);
+  display:flex; flex-direction:column; align-items:center;
+  padding:calc(64px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));
+}
+.brand{
+  position:fixed; top:calc(22px + env(safe-area-inset-top,0px)); left:50%; transform:translateX(-50%);
+  font-size:13px; letter-spacing:.02em; color:var(--vh-fg-0); font-weight:500; z-index:5; white-space:nowrap;
+}
+.brand a{ color:inherit; text-decoration:none; }
+/* ∆ als Inline-SVG statt Glyph (Oliver 01.10.): Tinte exakt mittig in der Box, auf jedem System gleich. */
+.vh-dlt{display:block;width:.75em;height:.75em;fill:none;stroke:currentColor;stroke-width:3.5;stroke-linejoin:round;overflow:visible;}
+.brand,.brand a{ display:flex; align-items:center; }
+.brand{ padding-top:3px; }  /* Text bleibt, wo er mit dem höheren Glyph-Zeilenkasten stand */
+.brand a .tld{ white-space:pre; }  /* führendes Leerzeichen in " voicehook" bleibt im Flex-Layout */
+.brand .dlt{ color:var(--vh-teal); font-size:18px; line-height:1; display:inline-flex; margin-right:6px; font-weight:400; }
+.brand .tld,.brand .by{ color:var(--vh-fg-3); font-weight:400; } .brand .by{ margin:0 6px; }
+#btn-theme{
+  position:fixed; top:calc(14px + env(safe-area-inset-top,0px)); right:14px; width:38px; height:38px; z-index:6;
+  display:flex; align-items:center; justify-content:center; cursor:pointer; border-radius:50%;
+  background:var(--vh-btn-bg); border:1px solid var(--vh-btn-border); color:var(--vh-btn-fg);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); transition:all .15s;
+}
+#btn-theme:hover{ background:var(--vh-btn-bg-hover); border-color:var(--vh-btn-border-hov); color:var(--vh-btn-fg-hov); }
+#btn-theme svg{ width:17px; height:17px; }
+.wrap{
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:24px; width:100%; max-width:420px;
+}
+h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; color:var(--vh-fg-2); text-align:center; }
+.balance{ font-size:12px; color:var(--vh-fg-2); letter-spacing:.04em; min-height:16px; text-align:center; }
+.balance b{ color:var(--vh-fg-0); font-weight:600; }
+.dial-box{ position:relative; width:300px; height:300px; max-width:100%; aspect-ratio:1; touch-action:none; cursor:grab; outline:none; border-radius:50%; }
+.dial-box:focus-visible{ box-shadow:0 0 0 2px var(--vh-teal); }
+.dial-box.dragging{ cursor:grabbing; }
+.dial-box svg{ width:100%; height:100%; transform:rotate(-90deg); }
+.track{ fill:none; stroke:var(--vh-track); stroke-width:14; }
+.fill{ fill:none; stroke:url(#g); stroke-width:14; stroke-linecap:round; transition:stroke-dashoffset .08s linear; filter:drop-shadow(0 0 8px rgba(109,201,217,.35)); }
+.ticks line{ stroke:var(--vh-tick); stroke-width:1.5; }
+.knob{ fill:var(--vh-teal); stroke:var(--vh-bg-0); stroke-width:3; filter:drop-shadow(0 0 10px var(--vh-teal-glow)); }
+.center{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; pointer-events:none; }
+.center .amt{ font-size:46px; font-weight:600; letter-spacing:-.01em; line-height:1; }
+.center .amt .u{ font-size:20px; color:var(--vh-fg-2); font-weight:400; margin:0 3px; }
+.center .sub{ font-size:12px; color:var(--vh-fg-3); margin-top:6px; letter-spacing:.04em; }
+.center .rate{ font-size:11px; color:var(--vh-fg-3); margin-top:8px; text-align:center; max-width:190px; line-height:1.45; }
+.chips{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+.chip{
+  appearance:none; border:1px solid var(--vh-btn-border); background:var(--vh-panel); color:var(--vh-fg-2);
+  font-family:var(--vh-mono); font-size:12px; padding:8px 14px; border-radius:8px; cursor:pointer; transition:all .12s; min-height:36px;
+}
+.chip:hover{ border-color:var(--vh-btn-border-hov); color:var(--vh-fg-0); }
+.chip.on{ border-color:var(--vh-teal); color:var(--vh-teal); }
+.cta{
+  appearance:none; border:none; cursor:pointer; width:100%; max-width:340px; min-height:48px;
+  background:var(--vh-teal); color:var(--vh-cta-fg); font-family:var(--vh-mono); font-size:15px; font-weight:600;
+  padding:15px 0; border-radius:12px; letter-spacing:.02em; transition:filter .15s, transform .06s;
+}
+.cta:hover{ filter:brightness(1.08); }
+.cta:active{ transform:translateY(1px); }
+.cta:disabled{ opacity:.45; cursor:not-allowed; filter:none; transform:none; }
+.cta.ghost{ background:transparent; color:var(--vh-fg-0); border:1px solid var(--vh-btn-border-hov); }
+.msg{ font-size:12px; line-height:1.5; text-align:center; max-width:340px; color:var(--vh-fg-2); }
+.msg.warn{ color:var(--vh-warm); }
+.fineprint{ font-size:10.5px; color:var(--vh-fg-3); text-align:center; line-height:1.55; max-width:320px; }
+.panel{
+  width:100%; max-width:360px; display:flex; flex-direction:column; gap:14px; align-items:stretch;
+  border:1px solid var(--vh-btn-border); background:var(--vh-panel); border-radius:14px; padding:20px 18px;
+}
+.panel .big{ font-size:34px; font-weight:600; text-align:center; }
+.panel .lbl{ font-size:11px; color:var(--vh-fg-3); letter-spacing:.06em; text-transform:uppercase; text-align:center; }
+.panel .link{
+  font-size:11px; word-break:break-all; color:var(--vh-fg-0); background:var(--vh-btn-bg); border:1px solid var(--vh-btn-border);
+  border-radius:8px; padding:10px; user-select:all; line-height:1.4;
+}
+.row{ display:flex; gap:8px; }
+.row .cta{ font-size:13px; padding:12px 0; }
+.login{ width:100%; max-width:340px; display:flex; flex-direction:column; align-items:center; gap:10px; }
+.linkbtn{ appearance:none; background:none; border:0; padding:6px 4px; font:inherit; font-size:12px; color:var(--vh-teal); text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
+.login form{ width:100%; display:flex; gap:8px; }
+.login input{ flex:1 1 auto; min-width:0; font-family:var(--vh-mono); font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid var(--vh-btn-border-hov); background:transparent; color:var(--vh-fg-0); }
+.login form .cta{ width:auto; padding:0 14px; font-size:13px; min-height:44px; white-space:nowrap; }
+.em{ text-transform:none; letter-spacing:.02em; color:var(--vh-fg-0); }
+.tagline{ margin-top:28px; font-size:11px; color:var(--vh-fg-3); letter-spacing:.04em; white-space:nowrap; }
+@media (max-width:480px){ .dial-box{ width:260px; height:260px; } .center .amt{ font-size:40px; } .wrap{ gap:20px; } }
+</style>
+</head>
+<body>
+<script>
+  // Theme wie voice.html: localStorage 'vh-theme-v1' hat Vorrang, sonst mobil hell, Desktop dunkel.
+  (function(){
+    let pref; try { pref = localStorage.getItem('vh-theme-v1'); } catch {}
+    if (!pref) pref = matchMedia('(max-width: 640px)').matches ? 'light' : 'dark';
+    if (pref === 'light') document.body.classList.add('theme-light');
+  })();
+</script>
+<div class="brand"><a href="/"><span class="dlt"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span>by</span><span class="tld"> voicehook</span></a><span class="by">·</span><span id="t-brand">Aufladen</span></div>
+<button id="btn-theme" type="button" aria-label="Theme"></button>
+
+<main class="wrap" id="view-topup">
+  <h1 id="t-h1">Guthaben aufladen</h1>
+  <div class="balance" id="balance" hidden></div>
+
+  <div class="dial-box" id="dial" tabindex="0" role="slider" aria-valuemin="10" aria-valuemax="200" aria-valuenow="20" aria-label="Betrag">
+    <svg viewBox="0 0 300 300" aria-hidden="true">
+      <defs>
+        <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:var(--vh-teal)"/><stop offset="100%" style="stop-color:var(--vh-teal-glow)"/>
+        </linearGradient>
+      </defs>
+      <circle class="track" cx="150" cy="150" r="120"/>
+      <g class="ticks" id="ticks"></g>
+      <circle class="fill" id="fill" cx="150" cy="150" r="120" stroke-dasharray="753.98" stroke-dashoffset="753.98"/>
+      <circle class="knob" id="knob" cx="150" cy="30" r="11"/>
+    </svg>
+    <div class="center">
+      <div class="amt" id="amt"></div>
+      <div class="sub" id="t-sub">Guthaben inkl. MwSt</div>
+      <div class="rate" id="t-rate">Abgerechnet wird der echte Verbrauch</div>
+    </div>
+  </div>
+
+  <div class="chips" id="chips"></div>
+
+  <button class="cta" id="cta" type="button"></button>
+  <div class="msg" id="msg" hidden></div>
+
+  <div class="fineprint" id="t-fine">Zahlung über Stripe. Kein Abo.</div>
+
+  <div class="login" id="login-box">
+    <button class="linkbtn" id="login-open" type="button"></button>
+    <form id="login-form" novalidate hidden>
+      <input type="email" id="login-email" autocomplete="email" inputmode="email" required>
+      <button class="cta ghost" id="login-go" type="submit"></button>
+    </form>
+    <div class="msg" id="login-msg" aria-live="polite" hidden></div>
+  </div>
+</main>
+
+<main class="wrap" id="view-done" hidden>
+  <h1 id="t-done-h1">Guthaben aufgeladen</h1>
+  <div class="panel">
+    <div class="lbl" id="t-done-bal">Aktuelles Guthaben</div>
+    <div class="big" id="done-bal"></div>
+  </div>
+  <div class="panel" id="recovery-box" hidden>
+    <div class="lbl" id="t-rec-h">Wiederherstellungs-Link</div>
+    <div class="msg" id="t-rec-txt">Speichere diesen Link. Damit holst du dein Guthaben auf ein anderes Gerät oder nach dem Löschen der Browserdaten zurück. Wer den Link hat, kann dein Guthaben nutzen.</div>
+    <div class="link" id="rec-link"></div>
+    <button class="cta ghost" id="rec-copy" type="button"></button>
+  </div>
+  <div class="login" id="confirm-box" hidden>
+    <button class="cta ghost" id="confirm-open" type="button"></button>
+    <form id="confirm-form" novalidate hidden>
+      <input type="email" id="confirm-email" autocomplete="email" inputmode="email" required>
+      <button class="cta ghost" id="confirm-go" type="submit"></button>
+    </form>
+    <div class="msg" id="confirm-msg" aria-live="polite" hidden></div>
+  </div>
+  <div class="row" style="width:100%;max-width:360px">
+    <button class="cta" id="go-call" type="button"></button>
+  </div>
+  <button class="chip" id="more" type="button"></button>
+</main>
+
+<main class="wrap" id="view-ask" hidden>
+  <h1 id="ask-h1"></h1>
+  <div class="msg" id="ask-txt"></div>
+  <div class="row" style="width:100%;max-width:360px">
+    <button class="cta ghost" id="ask-no" type="button"></button>
+    <button class="cta" id="ask-yes" type="button"></button>
+  </div>
+</main>
+
+<div class="tagline">Talk with your agents</div>
+
+<script>
+(function(){
+'use strict';
+const LANG = (navigator.language || 'de').toLowerCase().startsWith('de') ? 'de' : 'en';
+document.documentElement.lang = LANG;
+const T = {
+  de: { brand:'Aufladen', h1:'Guthaben aufladen', sub:'Guthaben inkl. MwSt', rate:'Abgerechnet wird der echte Verbrauch',
+        cta:a=>'Aufladen · '+a, busy:'Verbinde mit Stripe …', soon:'Aufladen bald verfügbar',
+        soonMsg:'Die Zahlung ist noch nicht freigeschaltet.', err:'Das hat nicht geklappt. Bitte versuch es noch einmal.',
+        fine:'Zahlung über Stripe. Kein Abo.<br>Mit der E-Mail, die du bei Stripe angibst, wird dein Konto angelegt. Auf anderen Geräten meldest du dich per E-Mail-Link an.',
+        login:'Schon Guthaben? Anmelden', loginPh:'deine@email.de', loginSend:'Link senden',
+        loginHint:'Die E-Mail, die du bei Stripe angegeben hast.', loginSent:'Link gesendet. Öffne ihn aus deinem Postfach.',
+        loginBad:'Bitte eine gültige E-Mail eingeben', loginUnavail:'Anmelden bald verfügbar',
+        loginRate:'Zu viele Versuche. Bitte warte ein paar Minuten.', loginMailFail:'Die E-Mail ließ sich nicht senden. Bitte versuch es später noch einmal.',
+        loginExpired:'Dieser Anmelde-Link ist abgelaufen oder wurde schon benutzt. Fordere unten einen neuen an.',
+        verifying:'Anmeldung wird geprüft …', loggedInAs:e=>'Angemeldet als '+e,
+        askH:e=>'Anmelden als '+e+'?', askTxt:'In diesem Browser ist schon ein Guthaben gespeichert. „Anmelden“ wechselt zu diesem Konto, „Abbrechen“ lässt alles wie es ist.',
+        askYes:'Anmelden', askNo:'Abbrechen', askKept:'Abgebrochen. Dieser Browser bleibt im bisherigen Konto.',
+        confirmMail:'E-Mail bestätigen', confirmHint:'Die E-Mail, die du bei Stripe angegeben hast. Öffne den Link in diesem Browser, danach meldest du dich auf anderen Geräten per E-Mail an.',
+        bal:b=>'Guthaben: <b>'+b+'</b>', cancel:'Zahlung abgebrochen. Es wurde nichts abgebucht.',
+        confirming:'Zahlung wird bestätigt …', slow:'Die Bestätigung dauert länger als üblich. Lade die Seite gleich neu.',
+        claimed:'Diese Zahlung wurde schon auf einem Gerät eingelöst. Nutze dort deinen Wiederherstellungs-Link.',
+        badRec:'Dieser Wiederherstellungs-Link ist ungültig.', restored:'Guthaben wiederhergestellt',
+        doneH:'Guthaben aufgeladen', doneBal:'Aktuelles Guthaben', recH:'Wiederherstellungs-Link',
+        recTxt:'Speichere diesen Link. Damit holst du dein Guthaben auf ein anderes Gerät oder nach dem Löschen der Browserdaten zurück. Wer den Link hat, kann dein Guthaben nutzen.',
+        copy:'Link kopieren', copied:'Kopiert', call:'Zum Call', more:'Weiter aufladen', amount:'Betrag', theme:'Hell oder dunkel' },
+  en: { brand:'Top up', h1:'Top up credit', sub:'credit incl. VAT', rate:'You pay for actual usage',
+        cta:a=>'Top up · '+a, busy:'Connecting to Stripe …', soon:'Top-up coming soon',
+        soonMsg:'Payments are not enabled yet.', err:'That did not work. Please try again.',
+        fine:'Payment via Stripe. No subscription.<br>Your account is created with the email you give Stripe. On other devices you log in with an email link.',
+        login:'Already have credit? Log in', loginPh:'you@example.com', loginSend:'Send link',
+        loginHint:'The email you entered at Stripe.', loginSent:'Link sent. Open it from your inbox.',
+        loginBad:'Please enter a valid email', loginUnavail:'Login coming soon',
+        loginRate:'Too many attempts. Please wait a few minutes.', loginMailFail:'The email could not be sent. Please try again later.',
+        loginExpired:'This login link has expired or was already used. Request a new one below.',
+        verifying:'Checking your login …', loggedInAs:e=>'Logged in as '+e,
+        askH:e=>'Log in as '+e+'?', askTxt:'This browser already holds credit. “Log in” switches to this account, “Cancel” leaves everything as it is.',
+        askYes:'Log in', askNo:'Cancel', askKept:'Cancelled. This browser stays in its previous account.',
+        confirmMail:'Confirm email', confirmHint:'The email you entered at Stripe. Open the link in this browser; afterwards you log in on other devices by email.',
+        bal:b=>'Credit: <b>'+b+'</b>', cancel:'Payment cancelled. Nothing was charged.',
+        confirming:'Confirming payment …', slow:'Confirmation is taking longer than usual. Reload the page in a moment.',
+        claimed:'This payment was already redeemed on a device. Use your recovery link there.',
+        badRec:'This recovery link is not valid.', restored:'Credit restored',
+        doneH:'Credit topped up', doneBal:'Current credit', recH:'Recovery link',
+        recTxt:'Keep this link safe. It restores your credit on another device or after clearing browser data. Anyone with the link can use your credit.',
+        copy:'Copy link', copied:'Copied', call:'Start a call', more:'Top up more', amount:'Amount', theme:'Light or dark' },
+}[LANG];
+const $ = id => document.getElementById(id);
+const TOKEN_KEY = 'vh-wallet-v1';
+const NONCE_KEY = 'vh_login_nonce';  // localStorage: der Mail-Link öffnet einen neuen Tab
+const getNonce = () => { try { return localStorage.getItem(NONCE_KEY) || ''; } catch { return ''; } };
+const setNonce = n => { try { if (n) localStorage.setItem(NONCE_KEY, n); else localStorage.removeItem(NONCE_KEY); } catch {} };
+const getToken = () => { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } };
+const setToken = t => { try { localStorage.setItem(TOKEN_KEY, t); } catch {} };
+const eurFmt = new Intl.NumberFormat(LANG === 'de' ? 'de-DE' : 'en-IE', { style:'currency', currency:'EUR' });
+const eurWhole = new Intl.NumberFormat(LANG === 'de' ? 'de-DE' : 'en-IE', { style:'currency', currency:'EUR', maximumFractionDigits:0, minimumFractionDigits:0 });
+
+// ---- statische Texte ----
+$('t-brand').textContent = T.brand; $('t-h1').textContent = T.h1; $('t-sub').textContent = T.sub;
+$('t-rate').textContent = T.rate; $('t-fine').innerHTML = T.fine; $('t-done-h1').textContent = T.doneH;
+$('t-done-bal').textContent = T.doneBal; $('t-rec-h').textContent = T.recH; $('t-rec-txt').textContent = T.recTxt;
+$('rec-copy').textContent = T.copy; $('go-call').textContent = T.call; $('more').textContent = T.more;
+$('dial').setAttribute('aria-label', T.amount); document.title = 'voicehook · ' + T.brand;
+$('login-open').textContent = T.login; $('login-email').placeholder = T.loginPh;
+$('login-email').setAttribute('aria-label', T.loginPh); $('login-go').textContent = T.loginSend;
+$('confirm-open').textContent = T.confirmMail; $('confirm-email').placeholder = T.loginPh;
+$('confirm-email').setAttribute('aria-label', T.loginPh); $('confirm-go').textContent = T.loginSend;
+$('ask-yes').textContent = T.askYes; $('ask-no').textContent = T.askNo;
+
+// ---- Theme-Schalter (gleicher Schlüssel wie voice.html) ----
+const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+const ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const btnTheme = $('btn-theme'); btnTheme.setAttribute('aria-label', T.theme); btnTheme.title = T.theme;
+const paintTheme = () => { btnTheme.innerHTML = document.body.classList.contains('theme-light') ? ICON_SUN : ICON_MOON; };
+btnTheme.addEventListener('click', () => {
+  const light = document.body.classList.toggle('theme-light');
+  try { localStorage.setItem('vh-theme-v1', light ? 'light' : 'dark'); } catch {}
+  paintTheme();
+});
+paintTheme();
+
+// ---- Drehregler (1:1 aus dem alten Repo, Einheit Euro statt Minuten) ----
+let MIN = 10, MAX = 200, STEP = 5, AMOUNTS = [10, 20, 50], amount = 20, checkoutOn = false;
+const R = 120, CIRC = 2 * Math.PI * R;
+const dial = $('dial'), fill = $('fill'), knob = $('knob'), amtEl = $('amt'), cta = $('cta'), chips = $('chips');
+
+function drawTicks(){
+  const g = $('ticks'); g.innerHTML = '';
+  const span = MAX, every = span > 100 ? 10 : 5, bigEvery = span > 100 ? 50 : 10;
+  for (let v = 0; v <= MAX; v += every) {
+    const ang = (v / MAX) * 2 * Math.PI;  // SVG ist per CSS -90° gedreht: 0 = oben
+    const big = v % bigEvery === 0;
+    const r1 = R - (big ? 24 : 16), r2 = R - 8;
+    const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    l.setAttribute('x1', 150 + r1 * Math.cos(ang)); l.setAttribute('y1', 150 + r1 * Math.sin(ang));
+    l.setAttribute('x2', 150 + r2 * Math.cos(ang)); l.setAttribute('y2', 150 + r2 * Math.sin(ang));
+    if (big) l.setAttribute('stroke-width', '2.5');
+    g.appendChild(l);
+  }
+}
+function drawChips(){
+  chips.innerHTML = '';
+  AMOUNTS.forEach(a => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.dataset.eur = a; b.textContent = eurWhole.format(a);
+    chips.appendChild(b);
+  });
+}
+function amountHtml(a){
+  const parts = eurWhole.formatToParts(a);
+  return parts.map(p => p.type === 'currency' ? '<span class="u">' + p.value + '</span>'
+                     : p.type === 'literal' ? '' : p.value).join('');
+}
+function render(){
+  const frac = amount / MAX;
+  fill.setAttribute('stroke-dashoffset', CIRC * (1 - frac));
+  const ang = frac * 2 * Math.PI;  // altes Repo zog hier zusätzlich PI/2 ab -> Knopf 90° neben dem Bogenende
+  knob.setAttribute('cx', 150 + R * Math.cos(ang));
+  knob.setAttribute('cy', 150 + R * Math.sin(ang));
+  amtEl.innerHTML = amountHtml(amount);
+  dial.setAttribute('aria-valuenow', amount); dial.setAttribute('aria-valuetext', eurWhole.format(amount));
+  if (!cta.dataset.busy) {
+    cta.disabled = !checkoutOn;
+    cta.textContent = checkoutOn ? T.cta(eurWhole.format(amount)) : T.soon;
+  }
+  [...chips.children].forEach(c => c.classList.toggle('on', +c.dataset.eur === amount));
+}
+function setAmount(v){
+  v = Math.round(v / STEP) * STEP;
+  amount = Math.max(MIN, Math.min(MAX, v));
+  render();
+}
+function angleFromEvent(e){
+  const rect = dial.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+  const pt = e.touches ? e.touches[0] : e;
+  let a = Math.atan2(pt.clientY - cy, pt.clientX - cx) + Math.PI / 2;
+  if (a < 0) a += 2 * Math.PI;
+  return a / (2 * Math.PI);
+}
+let dragging = false;
+function onDown(e){ dragging = true; dial.classList.add('dragging'); onMove(e); e.preventDefault(); }
+function onMove(e){ if (!dragging) return; setAmount(angleFromEvent(e) * MAX); }
+function onUp(){ dragging = false; dial.classList.remove('dragging'); }
+dial.addEventListener('mousedown', onDown);
+dial.addEventListener('touchstart', onDown, { passive:false });
+window.addEventListener('mousemove', onMove);
+window.addEventListener('touchmove', onMove, { passive:false });
+window.addEventListener('mouseup', onUp);
+window.addEventListener('touchend', onUp);
+dial.addEventListener('wheel', e => { e.preventDefault(); setAmount(amount + (e.deltaY < 0 ? STEP : -STEP)); }, { passive:false });
+dial.addEventListener('keydown', e => {
+  if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { setAmount(amount + STEP); e.preventDefault(); }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { setAmount(amount - STEP); e.preventDefault(); }
+});
+chips.addEventListener('click', e => { const b = e.target.closest('.chip'); if (b) setAmount(+b.dataset.eur); });
+
+function showMsg(text, warn){ const m = $('msg'); m.textContent = text; m.className = 'msg' + (warn ? ' warn' : ''); m.hidden = !text; }
+function headers(){ const h = { 'Content-Type':'application/json' }; const t = getToken(); if (t) h['X-Wallet-Token'] = t; return h; }
+
+cta.addEventListener('click', async () => {
+  if (!checkoutOn) return;
+  cta.dataset.busy = '1'; cta.disabled = true; cta.textContent = T.busy; showMsg('');
+  try {
+    const r = await fetch('/api/checkout', { method:'POST', headers:headers(), body:JSON.stringify({ amount_eur:amount }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.url) throw new Error('checkout ' + r.status);
+    location.href = d.url;
+  } catch (e) {
+    delete cta.dataset.busy; render(); showMsg(T.err, true);
+  }
+});
+
+// ---- Wallet ----
+async function loadBalance(){
+  const t = getToken(); if (!t) return null;
+  try {
+    const r = await fetch('/api/wallet', { headers:{ 'X-Wallet-Token':t } });
+    if (!r.ok) return null;
+    const w = await r.json();
+    const b = $('balance'); b.innerHTML = T.bal(eurFmt.format(w.balance_eur)); b.hidden = false;
+    return w;
+  } catch { return null; }
+}
+// Überschriften sind VERSAL; die maskierte Mail bleibt in ihrer echten Schreibweise.
+function setWithEmail(el, text, email){
+  el.textContent = '';
+  const i = email ? text.indexOf(email) : -1;
+  if (i < 0) { el.textContent = text; return; }
+  const sp = document.createElement('span'); sp.className = 'em'; sp.textContent = email;
+  el.append(text.slice(0, i), sp, text.slice(i + email.length));
+}
+function showDone(w, recoveryUrl, title){
+  $('view-topup').hidden = true; $('view-ask').hidden = true; $('view-done').hidden = false;
+  $('login-box').hidden = true; $('confirm-box').hidden = true;
+  if (title) setWithEmail($('t-done-h1'), title, w.email_masked);
+  $('done-bal').textContent = eurFmt.format(w.balance_eur || 0);
+  if (recoveryUrl) { $('recovery-box').hidden = false; $('rec-link').textContent = recoveryUrl; }
+}
+$('rec-copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('rec-link').textContent); $('rec-copy').textContent = T.copied; }
+  catch { const s = getSelection(), rg = document.createRange(); rg.selectNodeContents($('rec-link')); s.removeAllRanges(); s.addRange(rg); }
+});
+$('go-call').addEventListener('click', () => { location.href = '/'; });
+$('more').addEventListener('click', () => { $('view-done').hidden = true; $('view-topup').hidden = false; loadBalance(); });
+
+// ---- Anmelden per E-Mail-Link (Vertrag PR #93) ----
+// POST /api/login {email} MIT X-Wallet-Token (falls vorhanden): der Server bindet
+// den Link an genau dieses Wallet und antwortet mit login_nonce (localStorage).
+// Die Mail enthält /aufladen#login=<token>; init() löst ihn über
+// GET /api/login/verify?token=&nonce= ein. Kein Token kommt je aus der URL.
+let loginUnavail = false;
+function setMsg(el, text, warn){ el.textContent = text; el.className = 'msg' + (warn ? ' warn' : ''); el.hidden = !text; }
+function loginMsg(text, warn){ setMsg($('login-msg'), text, warn); }
+function markLoginUnavail(){
+  loginUnavail = true;
+  $('login-open').disabled = true; $('login-open').textContent = T.loginUnavail;
+  $('login-form').hidden = true; $('confirm-form').hidden = true;
+  $('confirm-open').disabled = true; $('confirm-open').hidden = false; $('confirm-open').textContent = T.loginUnavail;
+}
+// -> true = gesendet
+async function sendLoginLink(email, input, go, msg){
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) { msg(T.loginBad, true); return false; }
+  go.disabled = true;
+  try {
+    const r = await fetch('/api/login', { method:'POST', headers:headers(), body:JSON.stringify({ email }) });
+    if (r.ok) {
+      const d = await r.json().catch(() => ({}));
+      if (d && typeof d.login_nonce === 'string' && d.login_nonce) setNonce(d.login_nonce);
+      msg(T.loginSent); input.disabled = true; return true;
+    }
+    if (r.status === 503) { markLoginUnavail(); msg(''); return false; }
+    msg(r.status === 400 ? T.loginBad : r.status === 429 ? T.loginRate : r.status === 502 ? T.loginMailFail : T.err, true);
+  } catch { msg(T.err, true); }
+  go.disabled = false;
+  return false;
+}
+$('login-open').addEventListener('click', () => {
+  if (loginUnavail) return;
+  const f = $('login-form'); f.hidden = !f.hidden;
+  if (!f.hidden) { loginMsg(T.loginHint); $('login-email').focus(); } else loginMsg('');
+});
+$('login-form').addEventListener('submit', e => {
+  e.preventDefault();
+  sendLoginLink($('login-email').value.trim(), $('login-email'), $('login-go'), loginMsg);
+});
+// "E-Mail bestätigen" nach dem Checkout: gleicher Aufruf, Wallet-Header = dieses Konto.
+const confirmMsg = (t, w) => setMsg($('confirm-msg'), t, w);
+$('confirm-open').addEventListener('click', () => {
+  if (loginUnavail) return;
+  $('confirm-open').hidden = true; $('confirm-form').hidden = false; confirmMsg(T.confirmHint); $('confirm-email').focus();
+});
+$('confirm-form').addEventListener('submit', e => {
+  e.preventDefault();
+  sendLoginLink($('confirm-email').value.trim(), $('confirm-email'), $('confirm-go'), confirmMsg);
+});
+async function offerConfirm(){
+  // Schon bestätigte Konten brauchen den Knopf nicht (GET /api/me.email_verified).
+  try {
+    const r = await fetch('/api/me', { headers:headers() });
+    if (r.ok) { const m = await r.json(); if (m && m.email_verified === true) return; }
+  } catch {}
+  $('confirm-box').hidden = false;
+}
+
+// GET /api/login/verify?token=&nonce= -> 200 {wallet_token, recovery_url, wallet_linked, email_masked, ...}
+// 409 confirm_required {email_masked}: Link aus einem anderen Browser (kein/falscher
+// Nonce), noch NICHT verbraucht -> erst fragen "Anmelden als …?", bei Ja &confirm=1.
+// Abbrechen speichert nichts. 400 invalid_or_expired: alt oder schon benutzt.
+async function verifyCall(token, confirm){
+  const n = confirm ? '' : getNonce();
+  const u = '/api/login/verify?token=' + encodeURIComponent(token) + (n ? '&nonce=' + encodeURIComponent(n) : '') + (confirm ? '&confirm=1' : '');
+  const r = await fetch(u, { headers:headers() });
+  const d = await r.json().catch(() => ({}));
+  return { r, d };
+}
+async function verifyFail(){ showMsg(T.err, true); await loadBalance(); }
+function askLogin(email, onYes){
+  showMsg('');
+  setWithEmail($('ask-h1'), T.askH(email || '?'), email); $('ask-txt').textContent = getToken() ? T.askTxt : '';
+  $('ask-txt').hidden = !getToken();
+  $('view-topup').hidden = true; $('view-done').hidden = true; $('view-ask').hidden = false;
+  $('ask-yes').disabled = false;
+  $('ask-yes').onclick = () => { $('ask-yes').disabled = true; onYes(); };
+  $('ask-no').onclick = async () => {
+    $('view-ask').hidden = true; $('view-topup').hidden = false;
+    await loadBalance(); showMsg(getToken() ? T.askKept : '');
+  };
+  $('ask-yes').focus();
+}
+async function verifyLogin(token, confirmed){
+  showMsg(T.verifying);
+  let r, d;
+  try { ({ r, d } = await verifyCall(token, confirmed)); } catch { return verifyFail(); }
+  if (r.status === 400) {
+    $('view-ask').hidden = true; $('view-topup').hidden = false;
+    showMsg(T.loginExpired, true); await loadBalance();
+    $('login-box').hidden = false; $('login-form').hidden = false; loginMsg(T.loginHint); return;
+  }
+  if (r.status === 409) {
+    const c = (d && typeof d.detail === 'object' && d.detail) || d || {};
+    if (c.error === 'confirm_required' && !confirmed) return askLogin(c.email_masked, () => verifyLogin(token, true));
+    return verifyFail();
+  }
+  if (!r.ok || !d || !d.wallet_token) return verifyFail();
+  // 200 kommt nur mit passender Nonce (dieser Browser hat den Link angefordert)
+  // oder nach bestätigter Rückfrage (confirm=1): Token übernehmen.
+  setNonce('');
+  setToken(d.wallet_token); showMsg('');
+  showDone(d, d.recovery_url, d.email_masked ? T.loggedInAs(d.email_masked) : T.loggedIn);
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function claim(sessionId){
+  showMsg(T.confirming);
+  for (let i = 0; i < 30; i++) {
+    let r;
+    try { r = await fetch('/api/wallet/claim', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ session_id:sessionId }) }); }
+    catch { await sleep(2000); continue; }
+    if (r.status === 200) {
+      const d = await r.json(); setToken(d.wallet_token); showMsg(''); showDone(d, d.recovery_url); offerConfirm(); return;
+    }
+    if (r.status === 409) { showMsg(T.claimed, true); loadBalance(); return; }
+    await sleep(2000);
+  }
+  showMsg(T.slow, true);
+}
+async function recover(code){
+  try {
+    const r = await fetch('/api/wallet/recover', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ code }) });
+    if (!r.ok) { showMsg(T.badRec, true); return; }
+    const d = await r.json(); setToken(d.wallet_token); showDone(d, d.recovery_url, T.restored);  // alter Link ist jetzt ungültig: neuen zeigen
+  } catch { showMsg(T.err, true); }
+}
+
+async function init(){
+  // Codes sofort aus der Adresszeile (vor jedem await): ?session_id, #r=, #login=.
+  const q = new URLSearchParams(location.search);
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const sid = q.get('session_id'), rec = hash.get('r'), login = hash.get('login');
+  if (sid || q.get('topup') || rec || login || q.has('wallet')) history.replaceState(null, '', location.pathname);
+  try {
+    const r = await fetch('/api/billing/config');
+    if (r.ok) {
+      const c = await r.json();
+      MIN = c.min_eur || MIN; MAX = c.max_eur || MAX; AMOUNTS = (c.amounts_eur && c.amounts_eur.length) ? c.amounts_eur : AMOUNTS;
+      checkoutOn = !!c.checkout_available;
+      dial.setAttribute('aria-valuemin', MIN); dial.setAttribute('aria-valuemax', MAX);
+    }
+  } catch {}
+  amount = AMOUNTS.includes(20) ? 20 : AMOUNTS[0];
+  drawTicks(); drawChips(); render();
+  if (!checkoutOn) showMsg(T.soonMsg);
+
+  if (getToken()) $('login-box').hidden = true;
+  if (rec) return recover(rec);
+  if (login) return verifyLogin(login);
+  await loadBalance();
+  if (sid) return claim(sid);
+  if (q.get('topup') === 'cancel') showMsg(T.cancel);
+}
+init();
+})();
+</script>
+</body>
+</html>
