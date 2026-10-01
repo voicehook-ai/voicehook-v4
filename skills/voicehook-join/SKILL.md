@@ -1,6 +1,6 @@
 ---
 name: voicehook-join
-description: Join an existing voicehook.ai voice call as the brain behind its voicebot. Use when the user shares a voicehook invite URL (https://voicehook.ai/r/<slug>) or says "join voicehook", "tritt meinem Call bei", "übernimm den voice-call", "/voicehook-join". The voicebot speaks what you push with `say`; you listen with `next`. Install: voicehook-agent CLI from GitHub. Works on https://voicehook.ai and self-hosted v4 boxes.
+description: Join an existing voicehook.ai voice call as the brain behind its voicebot. Use when the user shares a voicehook invite URL (https://voicehook.ai/r/<slug>) or says "join voicehook", "tritt meinem Call bei", "übernimm den voice-call", "/voicehook-join". The voicebot speaks what you push with `say`; you listen with `next`. No install needed (plain curl over HTTPS, works in cloud sandboxes behind a proxy); optional voicehook-agent CLI for local machines. Works on https://voicehook.ai and self-hosted v4 boxes.
 ---
 
 # voicehook-join: be the brain in a voicehook call
@@ -8,7 +8,38 @@ description: Join an existing voicehook.ai voice call as the brain behind its vo
 Canonical: `voicehook-ai/voicehook-v4:skills/voicehook-join/SKILL.md`, served at
 https://voicehook.ai/agent/SKILL.md. Protocol details: `docs/OPERATOR-PROTOCOL.md`.
 
-## Quickstart (target: in the call in under 30 s)
+## Quickstart A: no install (cloud sandbox, proxy network, installs blocked)
+
+Plain curl over HTTPS: the server joins the call for you (HTTPS bridge). Works behind an
+HTTP proxy (`HTTPS_PROXY`, e.g. claude.ai/code), no network approval, nothing to
+install. The session key stays in `$D/h` (mode 600), never in a URL.
+
+```bash
+I="<INVITE_URL>"; D=$(mktemp -d /tmp/vh-XXXXXX); chmod 700 $D; echo "${I%%/r/*}" >$D/base
+curl -sS $(cat $D/base)/api/bridge/join -H content-type:application/json -d '{"invite_url":"'"$I"'",
+ "name":"Claude","model":"<your-model-id>","greet":"Hallo, hier ist Claude. Worum geht es?"}' >$D/join
+(umask 077; sed -n 's/.*"session":"\([^"]*\)".*/Authorization: Bearer \1/p' $D/join >$D/h)
+cat >$D/vh <<'VH'
+#!/bin/sh
+D=$(dirname "$0"); B=$(cat $D/base); c="curl -sS -H @$D/h -H content-type:application/json"
+j(){ python3 -c 'import json,sys;a=sys.argv;d={a[1]:a[2]};a[3:] and d.update(mode=a[3]);print(json.dumps(d))' "$@"; }
+case $1 in
+next) r=$($c -m 130 "$B/api/bridge/next?timeout=${3:-50}"); echo "$r"; case $r in *'"ended"'*) exit 3;; esac;;
+say) shift; m=; [ "$1" = --mode ] && { m=$2; shift 2; }; $c $B/api/bridge/say -d "$(j text "$*" $m)"; echo;;
+leave) $c $B/api/bridge/leave -d "$(j say "$3")"; echo;;
+status) $c $B/api/bridge/status; echo;;
+esac
+VH
+chmod 700 $D/vh; [ -s $D/h ] && echo "D=$D ready" || cat $D/join
+```
+
+`$D/vh next|say|leave|status` then work exactly like the CLI below (same JSON from `next`,
+exit 3 once the call is over). Idle guard and persona guard run on the server.
+
+## Quickstart B: CLI (local machine, target: in the call in under 30 s)
+
+CLI 0.6.0 switches to the same HTTPS bridge on its own when `HTTPS_PROXY` is set or WebRTC
+cannot connect (`--transport auto|webrtc|bridge`).
 
 ```bash
 R=git+https://github.com/voicehook-ai/voicehook-agent; export PATH="$HOME/.local/bin:$PATH"
@@ -17,7 +48,7 @@ D=$(mktemp -d /tmp/vh-XXXXXX); mkfifo $D/in; (setsid sleep 86400 >$D/in & echo $
 printf '#!/bin/sh\nexport VOICEHOOK_AGENT_HOME=%s\n[ "$1" = leave ] || exec "%s" "$@"\n"%s" "$@"; rc=$?; kill $(cat %s/holder) 2>/dev/null; exit $rc\n' \
   $D "$(command -v voicehook-agent)" "$(command -v voicehook-agent)" $D >$D/vh; chmod +x $D/vh
 (setsid nohup $D/vh join "<INVITE_URL>" --name Claude --model <your-model-id> --json --greet "Hallo, hier ist Claude. Worum geht's?" <$D/in >$D/out 2>&1 &)
-$D/vh next --help >/dev/null 2>&1 && echo "D=$D ready" || echo "D=$D CLI 0.4.0: run the Fallback block"
+$D/vh next --help >/dev/null 2>&1 && echo "D=$D ready" || echo "D=$D CLI 0.4.0: upgrade (below)"
 ```
 
 Write down the printed `D=` path. Shell variables and `PATH` do NOT survive between your
@@ -30,8 +61,8 @@ tool calls, so every later call uses the absolute wrapper, e.g. `/tmp/vh-ab12cd/
 - `--greet` is spoken right after connect. Write it in the language of the invite
   message (German invite → German greeting). One short sentence.
 - No `uv`: `curl -LsSf https://astral.sh/uv/install.sh | sh` takes a few seconds and beats pip.
-  pip refused by PEP 668: add `--break-system-packages`. Old CLI installed and you want
-  `next`/`say`/`leave` natively: `uv tool install --force $R`.
+  pip refused by PEP 668: add `--break-system-packages`. CLI 0.4.0 installed (no
+  `next`/`say`/`leave`): `uv tool install --force $R`, or use Quickstart A.
 - `setsid` matters: without it the join dies with the shell of your tool call.
 
 ## The work cycle: say → next → say
@@ -94,43 +125,11 @@ tool calls, so every later call uses the absolute wrapper, e.g. `/tmp/vh-ab12cd/
   capabilities, access, whether something works, or anything you would have to assume: never answer,
   never deny, never claim. Say only 'Moment, ich schau nach.' and wait for the operator."
 
-## Fallback: CLI 0.4.0 (no next/say/leave)
-
-If the quickstart printed `CLI 0.4.0`, replace `$D/vh` with this script (use your real
-`D=` path in the first line). The join keeps running; the loop above stays the same.
-
-```bash
-D=/tmp/vh-ab12cd; cat >$D/vh.new <<'EOF'
-#!/bin/bash
-D=$(dirname "$0"); cmd=$1; shift; m=
-case $cmd in
-say)   [ "$1" = --mode ] && { m=$2; shift 2; }
-       python3 -c 'import json,sys;d={"topic":"operator.say","text":sys.argv[1]}
-if sys.argv[2:]: d["mode"]=sys.argv[2]
-print(json.dumps(d,ensure_ascii=False))' "$*" $m >$D/in ;;
-next)  t=60; [ "$1" = --timeout ] && t=$2; n=$(cat $D/n 2>/dev/null || echo 0)
-       hit=$(grep -n -m1 -E '"topic": "(_wake|operator\.revise)"|session ended' \
-             < <(timeout $t tail -n +$((n+1)) -f $D/out))
-       [ -n "$hit" ] && echo $((n+${hit%%:*})) >$D/n; echo "${hit#*:}" ;;
-leave) [ "$1" = --say ] && { "$0" say --mode append "$2"; sleep 4; }
-       echo '{"topic":"quit"}' >$D/in; sleep 1; kill $(cat $D/holder) 2>/dev/null ;;
-*)     echo "CLI 0.4.0 fallback: say|next|leave only" >&2; exit 2 ;;
-esac
-EOF
-chmod +x $D/vh.new; mv $D/vh.new $D/vh
-```
-
-Fallback `next` prints the raw log line instead of `{"type": …}`:
-
-- `"topic": "_wake"` = a finished user turn, its `"text"` is what the user said (0.4.0
-  logs every turn twice, as `transcript` and as `_wake`; matching only `_wake` answers
-  each turn once and skips interim fragments).
-- `"topic": "operator.revise"` = revise, answer with `say --mode overwrite`.
-- `session ended` = the call is over. Empty output = timeout, call `next` again.
-
 ## Check the connection
 
-`$D/out` (JSON lines) should show within ~5 s:
+Quickstart A: `$D/vh status` lists `peers` (one with `"kind_label": "agent"` = voicebot);
+`curl -sSN -H @$D/h <base>/api/bridge/events` streams every packet (SSE).
+Quickstart B: `$D/out` (JSON lines) should show within ~5 s:
 
 - `connected — N peers` and a `room-state` line with a peer of `"kind": "agent"` (the
   voicebot). With CLI 0.5.0 `$D/vh status` shows the same as JSON (`peers[].kind`).
@@ -187,6 +186,7 @@ was really said. Budget used up mid-call: the voicebot announces it and ends the
 | `several joins running` | only without your own `$D/vh`; pass `--session <slug>/<identity>` |
 | `voicehook-agent: command not found` | use the absolute `$D/vh`, never the bare command |
 | `livekit connect failed` | invite URL wrong or expired, ask the user for a fresh link |
+| bridge join 403 / 410 / 429 | invite invalid / call over / too many sessions: fresh link or wait |
 | `0 peers` / no `agent` peer | user should reload the call tab |
 | silence after the greeting | no `agent` peer in `room-state`/`status` = voicebot down, tell the user |
 | voicebot makes things up | `operator.interrupt`, then a correcting `say` |
