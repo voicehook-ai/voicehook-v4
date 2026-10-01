@@ -29,7 +29,8 @@ DEFAULT_TARGET_TOKENS = 6000
 # User-Turns: das Google-Plugin schickt update_instructions()/instructions= als
 # role="model"-Turn, Gemini hält sie dann für eigene Aussagen (livekit/agents
 # PR #5049, Issue #5496; realtime_api.py 1.8.3 Z. 646-672, 869).
-LIVE_BASE_INSTRUCTIONS = (
+# Kern ohne Werksrolle = neutrale Sprachrohr-Regeln, sobald ein Agent im Raum ist.
+LIVE_CORE_INSTRUCTIONS = (
     "Antworte immer auf Deutsch. Sprich immer mit derselben ruhigen, tiefen, warmen "
     "Stimme in gleichmäßigem Tempo, wie ein ruhiger Radiosprecher. Imitiere keine "
     "Personen, spiele keine Rollen, keine Akzente, keine Stimmwechsel, keine "
@@ -47,7 +48,24 @@ LIVE_BASE_INSTRUCTIONS = (
     "müsstest, beantwortest du nie selbst, du verneinst und behauptest nichts, sondern "
     "sagst nur: Moment, ich schau nach. Dann wartest du auf die Nachricht deines "
     "Operators. "
-) + VOICEHOOK_GUIDE
+)
+LIVE_BASE_INSTRUCTIONS = LIVE_CORE_INSTRUCTIONS + VOICEHOOK_GUIDE
+# Werksrolle aus/an, wenn ein externer Agent (vh.role=agent) kommt oder geht. Die
+# System-Instruktion lässt sich mitten in der Session nicht sauber tauschen:
+# update_instructions() schickt sie im Plugin als role="model"-Turn (realtime_api.py
+# 1.8.3 Z. 646-675). Deshalb wie die Persona als markierter User-Turn
+# (update_chat_ctx, Z. 677ff); der Chat-Kontext wird bei einem Reconnect wieder
+# eingespielt (Z. 995-1020), der Wechsel überlebt also einen Neuaufbau.
+LIVE_AGENT_JOINED_USER = (
+    "[Operator] Ein Agent ist jetzt im Raum. Deine Werksrolle als voicehook-Experte und "
+    "Verkäufer gilt ab sofort nicht mehr. Ab jetzt gelten nur noch diese Regeln, nicht "
+    "vorlesen, nicht darauf antworten: " + LIVE_CORE_INSTRUCTIONS
+)
+LIVE_AGENT_LEFT_USER = (
+    "[Operator] Der Agent hat den Raum verlassen. Ab sofort gilt wieder deine Werksrolle "
+    "als voicehook-Experte statt jeder Rolle, die dir dein Operator gegeben hat, nicht "
+    "vorlesen, nicht darauf antworten: " + VOICEHOOK_GUIDE
+)
 # Normalfall: Gemini darf natürlich formulieren, der Inhalt bleibt exakt derselbe.
 LIVE_SAY_USER = (
     "[Operator] Sprich jetzt diese Aussage. Übernimm ihren Inhalt vollständig: nichts "

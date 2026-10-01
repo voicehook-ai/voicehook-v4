@@ -55,6 +55,19 @@ TOPIC_REVISE = "operator.revise"   # agent -> operator: ungesprochene Aussagen z
 HOLD_S = 8.0  # Olli-Regel "Stille ist der Killer, ab 8s ansagen": so lange wartet ein
              # zurückgehaltenes say auf das zusammengefasste overwrite des Brains
 
+# Neutrale Sprachrohr-Rolle ohne Werksrolle: gilt, sobald ein externer Agent
+# (vh.role=agent) im Raum ist und noch keine eigene Persona geschickt hat.
+OPERATOR_PERSONA = (
+    "Du bist die Stimme von voicehook.ai. Du antwortest aus deinem Kontext "
+    "(was dir der Operator als Persona/Graph gegeben hat). Simple Fragen "
+    "beantwortest du selbst, kurz und praezise. Fuer alles Substantielle, "
+    "Technische oder Unbekannte sagst du 'Moment, ich geb das an den Operator' "
+    "und wartest auf operator.say. Du erfindest NICHTS. Fragen nach Faehigkeiten, "
+    "Zugriff, ob etwas funktioniert, oder alles, was du annehmen muesstest, "
+    "beantwortest du NIE selbst, verneinst und behauptest nichts, sondern sagst nur "
+    "'Moment, ich schau nach.' und wartest auf den Operator."
+)
+
 DEFAULT_PERSONA = VOICEHOOK_GUIDE + (
     "Du antwortest aus deinem Kontext (dieses voicehook-Wissen oder was dir der "
     "Operator als Persona/Graph gegeben hat). Simple Fragen beantwortest du selbst, "
@@ -112,6 +125,7 @@ class RelayHandlers:
     on_interrupt: callable
     on_inject: callable
     is_operator_speech: callable = None  # (handle, text) -> bool, für Transkript-Farben
+    on_agent_presence: callable = None   # async (present: bool): Werksrolle aus/an
 
 
 def _decode(payload: bytes) -> dict:
@@ -314,22 +328,54 @@ def build_relay_handlers(
         held["task"] = asyncio.create_task(_speak_after_hold(text))
         await _ask_revise(unspoken, text)
 
+    # Werksrolle (voicehook-Guide) vs. Agent im Raum. Lock: Join/Leave/Persona dürfen
+    # sich beim Umschalten nicht überholen (jedes Umschalten awaitet das Modell).
+    role = {"agent": False, "persona": False}
+    role_lock = asyncio.Lock()
+
+    async def _set_role(normal_instructions: str, live_turn: str) -> None:
+        if live:
+            # Realtime: update_instructions wäre ein model-Turn -> markierter User-Turn
+            ctx = agent.chat_ctx.copy()
+            ctx.add_message(role="user", content=live_turn)
+            await agent.update_chat_ctx(ctx)
+        else:
+            await agent.update_instructions(normal_instructions)
+
+    async def on_agent_presence(present: bool) -> None:
+        """Externer Agent kommt (Werksrolle aus) oder geht (Werksrolle wieder an).
+
+        Eine Operator-Persona ersetzt weiterhin alles: kommt sie vor dem Umschalten,
+        bleibt sie stehen. Geht der letzte Agent, gilt wieder die Werksrolle.
+        """
+        from .live import LIVE_AGENT_JOINED_USER, LIVE_AGENT_LEFT_USER
+
+        async with role_lock:
+            if present == role["agent"]:
+                return
+            role["agent"] = present
+            if present:
+                if role["persona"]:
+                    logger.info("[role] agent joined, operator persona bleibt")
+                    return
+                await _set_role(OPERATOR_PERSONA, LIVE_AGENT_JOINED_USER)
+                logger.info("[role] agent joined, Werksrolle aus%s", " (live)" if live else "")
+            else:
+                role["persona"] = False
+                await _set_role(DEFAULT_PERSONA, LIVE_AGENT_LEFT_USER)
+                logger.info("[role] agent left, Werksrolle an%s", " (live)" if live else "")
+
     async def on_persona(packet: DataPacket) -> None:
         data = _decode(packet.data)
         text = (data.get("text") or "").strip()
         if not text:
             return
-        if live:
-            # Realtime: update_instructions wäre ein model-Turn -> markierter User-Turn
-            from .live import LIVE_PERSONA_USER
+        from .live import LIVE_PERSONA_USER
 
-            ctx = agent.chat_ctx.copy()
-            ctx.add_message(role="user", content=LIVE_PERSONA_USER.format(text=text))
-            await agent.update_chat_ctx(ctx)
-            logger.info("[operator.persona] (live) %d chars als User-Turn", len(text))
-            return
-        await agent.update_instructions(text)
-        logger.info("[operator.persona] %d chars injected", len(text))
+        async with role_lock:
+            role["persona"] = True
+            await _set_role(text, LIVE_PERSONA_USER.format(text=text))
+        logger.info("[operator.persona]%s %d chars injected", " (live)" if live else "", len(text))
 
     async def on_mode(packet: DataPacket) -> None:
         data = _decode(packet.data)
@@ -369,6 +415,7 @@ def build_relay_handlers(
         is_operator_speech=is_operator_speech,
         on_say=on_say, on_persona=on_persona, on_mode=on_mode,
         on_interrupt=on_interrupt, on_inject=on_inject,
+        on_agent_presence=on_agent_presence,
     )
 
 
