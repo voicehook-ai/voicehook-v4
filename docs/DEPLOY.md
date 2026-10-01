@@ -138,9 +138,13 @@ dasselbe Konto zuerst verrechnet. Der Wiederherstellungs-Link gilt genau einmal 
 | `VOICEHOOK_USD_EUR` | `0.8807` | Kurs USD -> EUR (EZB 30.09.2026) |
 | `VOICEHOOK_TOPUP_AMOUNTS_EUR` | `10,20,50` | Vorschlagsbeträge |
 | `VOICEHOOK_TOPUP_MIN_EUR` / `_MAX_EUR` | `10` / `200` | Spanne des Drehreglers (Minimum nie unter 10) |
-| `VOICEHOOK_FREE_MIN_PER_DAY_NORMAL` | `20` | Gratis-Gesprächsminuten pro UTC-Tag für Normal-Räume; `0` = aus |
-| `VOICEHOOK_FREE_MIN_PER_DAY_LIVE` | `10` | dasselbe für Live-Räume; `0` = aus |
-| `VH_FREE_TICK_SECONDS` | `5` | Takt, in dem der Worker Gratis-Minuten bucht (nur Worker) |
+| `VH_FREE_EUR_PER_DAY` | `1.0` | Gratis-Verbrauch in Euro (Kundenpreis inkl. Faktor und MwSt) pro UTC-Tag und Identität, Normal und Live gemeinsam; `0` = aus; kaputter Wert (kein Zahlwert, negativ, inf/nan) = 0 € Gratis bei weiter aktiver Prüfung (ohne Wallet 402), nie unbegrenzt |
+| `VH_FREE_TICK_SECONDS` | `5` | Prüftakt der Restzeit-Warnung im Worker (bucht nichts) |
+
+Entfallen: `VOICEHOOK_FREE_MIN_PER_DAY_NORMAL` / `_LIVE` (Gratis-Minuten) werden ignoriert und
+können aus der Env-Datei gelöscht werden. Die alte Sekunden-Tabelle `free_usage` in
+`freetier.sqlite` bleibt liegen, wird nicht mehr gelesen und nach 7 Tagen leer geräumt; die neue
+Tabelle `free_usage_eur` legt der Dienst beim Start selbst an (idempotent).
 | `VOICEHOOK_APPROX_EUR_PER_HOUR_NORMAL` / `_LIVE` | `1.70` / `8.80` | nur Anzeige: ungefährer Kundenpreis pro Stunde (inkl. Marge und MwSt) am Normal/Live-Schalter, via `/api/billing/config` `approx_eur_per_hour` |
 
 Stripe-Dashboard: Webhook-Endpunkt `https://voicehook.ai/api/stripe/webhook` mit den Events
@@ -151,25 +155,30 @@ Signing-Secret als `STRIPE_WEBHOOK_SECRET` setzen, danach Agent neu starten (Env
 
 ### Gratis-Kontingent (ohne Login)
 
-Reihenfolge im Call: erst Gratis-Minuten, dann Guthaben. Hat der Ersteller heute noch Gratis-Minuten
-und zusätzlich ein gedecktes Wallet, steht der Raum in beiden Tabellen; der Worker zählt erst die
-Gratis-Minuten herunter und bucht danach vom Wallet, ohne den Call zu beenden. Der Call endet erst,
-wenn beides leer ist. Reichen Gratis-Rest + Guthaben (Guthaben / Verbrauch der letzten 3 Minuten)
+Reihenfolge im Call: erst der Gratis-Topf, dann Guthaben. Hat der Ersteller heute noch Gratis-Rest
+und zusätzlich ein gedecktes Wallet, steht der Raum in beiden Tabellen; der Worker bucht erst aus
+dem Gratis-Topf und danach vom Wallet, ohne den Call zu beenden. Das Kostenereignis, das die Grenze
+überschreitet, leert den Topf bis 0, der Überhang geht ans Wallet. Der Call endet erst, wenn beides
+leer ist. Reichen Gratis-Rest + Guthaben ((Gratis-Rest + Guthaben) / Verbrauch der letzten 3 Minuten)
 noch höchstens 5 Minuten, schickt der Worker einmal pro Call `operator.notice`
 `{kind:"low_balance", minutes_left, ...}` an alle im Raum und sagt "Noch etwa fünf Minuten, lade
 Guthaben auf voicehook.ai auf." `GET /api/me` liefert der Oberfläche Gratis-Rest und Guthaben.
 
-Gratis gibt es höchstens `VOICEHOOK_FREE_MIN_PER_DAY_*` Gesprächsminuten pro UTC-Tag und Modus
-(Zeit mit mindestens einem Menschen im Raum). Gezählt wird je Merkmal des Raum-Erstellers: anonyme
+Gratis gibt es `VH_FREE_EUR_PER_DAY` (1 €) Verbrauch pro UTC-Tag, Normal und Live gemeinsam.
+Gebucht wird nur aus echten Kostenereignissen des Workers (Spracherkennung, Sprachmodell,
+Sprachausgabe bzw. Live-Turns), als Kundenpreis: Anbieterkosten x Faktor (Normal 3, Live 1,5) plus
+MwSt, dieselbe Rechnung wie beim Guthaben. Stille ohne Kosten zählt nichts herunter (früher zählte
+die Wanduhr, sobald ein Mensch im Raum war). Gezählt wird je Merkmal des Raum-Erstellers: anonyme
 ID aus dem Header `X-Anon-Id` (8 bis 128 Zeichen `A-Za-z0-9_-`, sonst ignoriert) und Client-IP
 (letztes Element von `X-Forwarded-For`, das Caddy selbst setzt; IPv6 je /64-Netz). Erreicht EINES der Merkmale das Limit, antworten
-`/api/host-call`, `/api/invite-room` bzw. `/api/live-room` ohne gedecktes Wallet mit 402 `{error: free_limit, topup_url: /aufladen}`; ein
-laufender Gratis-Call endet mit der Ansage "Deine Gratisminuten für heute sind um. Lade Guthaben
-auf." Gespeichert werden nur SHA-256-Hashes der Merkmale in `/opt/voicehook/state/freetier.sqlite`
+`/api/host-call`, `/api/invite-room` bzw. `/api/live-room` ohne gedecktes Wallet mit 402 `{error: free_limit, topup_url: /aufladen, free_eur_per_day}`; ein
+laufender Gratis-Call endet mit der Ansage "Dein Gratis-Verbrauch für heute ist um. Lade Guthaben
+auf." `GET /api/me` und `GET /api/free/remaining` liefern `free: {eur_left, eur_per_day}` (Euro, 2
+Nachkommastellen, abgerundet). Gespeichert werden nur SHA-256-Hashes der Merkmale in `/opt/voicehook/state/freetier.sqlite`
 (älter als 7 Tage wird gelöscht). Mit gedecktem Wallet endet der Call am Gratis-Limit nicht, das
 Wallet zahlt weiter. Die Obergrenze pro Live-Call
 (`VH_MAX_CALL_SECONDS=1200` im Live-Dienst) gilt zusätzlich. Der Worker ist in beiden Modi
-fail-closed, solange das Gratis-Kontingent des Modus an ist: ein Raum ohne Wallet und ohne
+fail-closed, solange das Gratis-Kontingent an ist: ein Raum ohne Wallet und ohne
 Gratis-Eintrag wird abgelehnt (`free_room_unknown`). Ausnahmen stehen als exempt drin: Admin-Live-Räume
 und Normal-Räume, die jemand mit einer gültigen HMAC-Einladung betritt, die der Server nicht selbst
 ausgestellt hat (call-starten mintet sie mit `INVITE_SECRET`). `GET /api/token?invite=1`

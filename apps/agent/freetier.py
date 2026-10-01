@@ -1,7 +1,10 @@
-"""Gratis-Kontingent ohne Login (Oliver 01.10.2026).
+"""Gratis-Kontingent ohne Login (Oliver 01.10.2026, Euro-Topf seit 01.10. abends).
 
-Wer nicht bezahlt hat (Raum ohne Wallet), bekommt höchstens N Gesprächsminuten pro
-UTC-Tag. Gesprächsminuten = Zeit, in der mindestens ein Mensch im Raum ist.
+Wer nicht bezahlt hat, bekommt pro UTC-Tag einen Gratis-Verbrauch von 1,00 EUR
+(Kundenpreis inkl. Faktor und MwSt, billing/pricing.charge_ueur). Normal und Live
+teilen sich den Topf. Gebucht wird NUR aus echten Kostenereignissen des Workers
+(metrics_collected), nie aus Zeit: Stille ohne Kosten zählt nichts herunter
+(Bug Oliver 01.10.: "die min zählen schon runter bevor ein gespräch gestartet ist").
 
 Identität ohne Login, zwei Merkmale je Raum-Ersteller:
   - anonyme ID aus dem Browser (Header X-Anon-Id, die Oberfläche setzt sie aus
@@ -9,26 +12,31 @@ Identität ohne Login, zwei Merkmale je Raum-Ersteller:
   - Client-IP (wie server._client_ip: letztes X-Forwarded-For-Element = das, was
     Caddy selbst angehängt hat). IPv6 zählt je /64-Netz (Review 01.10. #3: ein
     Anschluss bekommt ein ganzes /64, sonst neue Adresse = neues Kontingent).
-Gezählt wird je Merkmal; das Limit greift, sobald EINES der Merkmale es erreicht.
+Gezählt wird je Merkmal; der Rest ist der des knappsten Merkmals (MAX über die Keys).
 Gespeichert werden nur SHA-256-Hashes der Merkmale, nie IP oder ID im Klartext.
 
-Env (Minuten pro Tag, 0 = aus):
-  VOICEHOOK_FREE_MIN_PER_DAY_NORMAL  Default 20
-  VOICEHOOK_FREE_MIN_PER_DAY_LIVE    Default 10
-Live- und Normal-Minuten zählen getrennt (je Modus ein Zähler). Reihenfolge im Call
-(Oliver 01.10.): erst die Gratis-Minuten, dann das Guthaben eines Wallets; ein
-Raum kann deshalb gleichzeitig in free_rooms stehen und an ein Wallet gebunden sein.
+Env VH_FREE_EUR_PER_DAY (Euro pro UTC-Tag), Default 1.0:
+  0           Gratis aus (wie früher Limit 0: Räume laufen ohne Zählung, es sei denn
+              VOICEHOOK_REQUIRE_CREDITS_<MODE>=1),
+  kaputt      (kein Zahlwert, negativ, inf/nan) -> 0 EUR Gratis, die Prüfung bleibt
+              aber an: ohne Wallet 402 free_limit, nie unbegrenzt.
+Die alten Minuten-Envs (VOICEHOOK_FREE_MIN_PER_DAY_*) werden ignoriert, die alte
+Tabelle free_usage (Sekunden) bleibt liegen und wird nicht mehr gelesen.
+
+Einheit intern Mikro-Euro (µEUR, int) wie das Wallet. Reihenfolge im Call: erst der
+Gratis-Topf, dann das Guthaben eines Wallets; das Kostenereignis, das die Grenze
+überschreitet, füllt den Topf bis 0 und gibt den Überhang ans Wallet (consume_ueur).
 
 Datei: $VOICEHOOK_STATE_DIR/freetier.sqlite. Der HTTP-Server prüft beim Anlegen des
 Raums (402 free_limit) und merkt sich Raum -> Merkmale; der Worker liest das EINMAL
-beim Start und bucht im Takt die Minuten, solange ein Mensch da ist.
+beim Start und bucht danach je Kostenereignis.
 
 free_rooms wird _KEEP_DAYS (7) Tage gehalten, länger als jede Raumzuordnung im
 Server (Token-TTL max. 1 Tag). Der Worker ist in BEIDEN Modi fail-closed, solange
-das Gratis-Kontingent des Modus an ist: Raum ohne Wallet und ohne free_rooms-Eintrag
-wird abgelehnt (Review 01.10. #2, Normal seit PR #93). Admin-/Operator-Räume stehen
-mit exempt=1 drin (nicht gezählt, aber bekannt): admin/live-room, und Normal-Räume,
-die jemand mit einer gültigen HMAC-Einladung betritt, die der Server nicht selbst
+das Gratis-Kontingent an ist: Raum ohne Wallet und ohne free_rooms-Eintrag wird
+abgelehnt (Review 01.10. #2, Normal seit PR #93). Admin-/Operator-Räume stehen mit
+exempt=1 drin (nicht gezählt, aber bekannt): admin/live-room, und Normal-Räume, die
+jemand mit einer gültigen HMAC-Einladung betritt, die der Server nicht selbst
 ausgestellt hat (call-starten, register_room_if_absent).
 """
 
@@ -37,6 +45,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import ipaddress
+import math
 import os
 import re
 import sqlite3
@@ -45,8 +54,9 @@ import time
 from collections.abc import Iterable
 from pathlib import Path
 
-DEFAULT_MIN_LIVE = 10.0
-DEFAULT_MIN_NORMAL = 20.0
+DEFAULT_EUR_PER_DAY = 1.0
+ENV_EUR_PER_DAY = "VH_FREE_EUR_PER_DAY"
+UEUR_PER_EUR = 1_000_000
 ANON_HEADER = "x-anon-id"
 _ANON_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 _KEEP_DAYS = 7
@@ -54,6 +64,7 @@ _KEEP_DAYS = 7
 _INIT_LOCK = threading.Lock()
 _INITIALIZED: set[str] = set()
 
+# free_usage (Sekunden) ist Altlast des Minuten-Modells: bleibt, wird nur noch aufgeräumt.
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS free_usage (
     day TEXT NOT NULL,
@@ -61,6 +72,12 @@ CREATE TABLE IF NOT EXISTS free_usage (
     key TEXT NOT NULL,
     seconds REAL NOT NULL DEFAULT 0,
     PRIMARY KEY (day, mode, key)
+);
+CREATE TABLE IF NOT EXISTS free_usage_eur (
+    day TEXT NOT NULL,
+    key TEXT NOT NULL,
+    ueur INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, key)
 );
 CREATE TABLE IF NOT EXISTS free_rooms (
     room TEXT PRIMARY KEY,
@@ -72,29 +89,32 @@ CREATE TABLE IF NOT EXISTS free_rooms (
 """
 
 
-def limit_minutes(mode: str) -> float:
-    """Minuten pro Tag; 0 = kein Limit. Kaputter Wert -> Default, nie unbegrenzt."""
-    name, default = (
-        ("VOICEHOOK_FREE_MIN_PER_DAY_LIVE", DEFAULT_MIN_LIVE)
-        if mode == "live"
-        else ("VOICEHOOK_FREE_MIN_PER_DAY_NORMAL", DEFAULT_MIN_NORMAL)
-    )
-    raw = os.environ.get(name, "").strip()
+def _parse_eur() -> tuple[float, bool]:
+    """(Euro pro Tag, Prüfung an). Leer -> Default; 0 -> aus; kaputt -> 0 EUR, Prüfung an."""
+    raw = os.environ.get(ENV_EUR_PER_DAY, "").strip()
     if not raw:
-        return default
+        return DEFAULT_EUR_PER_DAY, True
     try:
         v = float(raw)
     except ValueError:
-        return default
-    return v if v >= 0 else default
+        return 0.0, True
+    if not math.isfinite(v) or v < 0:
+        return 0.0, True
+    return v, v > 0
 
 
-def limit_seconds(mode: str) -> float:
-    return limit_minutes(mode) * 60.0
+def limit_eur() -> float:
+    """Gratis-Euro pro UTC-Tag (0 = kein Gratis)."""
+    return _parse_eur()[0]
 
 
-def enabled(mode: str) -> bool:
-    return limit_seconds(mode) > 0
+def limit_ueur() -> int:
+    return round(limit_eur() * UEUR_PER_EUR)
+
+
+def enabled(mode: str | None = None) -> bool:
+    """Gratis-Prüfung an (beide Modi gemeinsam; `mode` nur für alte Aufrufer)."""
+    return _parse_eur()[1]
 
 
 def day_key(now: float | None = None) -> str:
@@ -154,48 +174,87 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
-def used_seconds(keys: Iterable[str], mode: str, now: float | None = None) -> float:
-    """Höchster Tagesverbrauch über alle Merkmale (das Limit greift beim ersten)."""
+def used_ueur(keys: Iterable[str], now: float | None = None) -> int:
+    """Höchster Tagesverbrauch über alle Merkmale (der Topf ist leer beim ersten)."""
     keys = list(keys)
     if not keys:
-        return 0.0
+        return 0
     conn = connect()
     try:
         q = ",".join("?" * len(keys))
         row = conn.execute(
-            f"SELECT MAX(seconds) FROM free_usage WHERE day = ? AND mode = ? AND key IN ({q})",
-            (day_key(now), mode, *keys),
+            f"SELECT MAX(ueur) FROM free_usage_eur WHERE day = ? AND key IN ({q})",
+            (day_key(now), *keys),
         ).fetchone()
     finally:
         conn.close()
-    return float(row[0] or 0.0)
+    return int(row[0] or 0)
 
 
-def remaining_seconds(keys: Iterable[str], mode: str, now: float | None = None) -> float:
-    return limit_seconds(mode) - used_seconds(keys, mode, now)
+def remaining_ueur(keys: Iterable[str], now: float | None = None) -> int:
+    return max(0, limit_ueur() - used_ueur(keys, now))
 
 
-def add_seconds(keys: Iterable[str], mode: str, seconds: float, now: float | None = None) -> None:
+def remaining_eur(keys: Iterable[str], now: float | None = None) -> float:
+    """Rest in Euro, 2 Nachkommastellen, abgerundet (nie mehr anzeigen als da ist)."""
+    return math.floor(remaining_ueur(keys, now) / 10_000) / 100
+
+
+def _add(conn: sqlite3.Connection, keys: list[str], ueur: int, day: str) -> None:
+    for k in keys:
+        conn.execute(
+            "INSERT INTO free_usage_eur (day, key, ueur) VALUES (?, ?, ?)"
+            " ON CONFLICT(day, key) DO UPDATE SET ueur = ueur + excluded.ueur",
+            (day, k, int(ueur)),
+        )
+
+
+def add_ueur(keys: Iterable[str], ueur: int, now: float | None = None) -> None:
+    """Verbrauch auf jedes Merkmal buchen (ohne Deckel; Tests und Altlast)."""
     keys = list(keys)
-    if seconds <= 0 or not keys:
+    if ueur <= 0 or not keys:
         return
-    day = day_key(now)
     conn = connect()
     try:
         conn.execute("BEGIN IMMEDIATE")
         try:
-            for k in keys:
-                conn.execute(
-                    "INSERT INTO free_usage (day, mode, key, seconds) VALUES (?, ?, ?, ?)"
-                    " ON CONFLICT(day, mode, key) DO UPDATE SET seconds = seconds + excluded.seconds",
-                    (day, mode, k, float(seconds)),
-                )
+            _add(conn, keys, ueur, day_key(now))
             conn.execute("COMMIT")
         except BaseException:
             conn.execute("ROLLBACK")
             raise
     finally:
         conn.close()
+
+
+def consume_ueur(keys: Iterable[str], ueur: int, now: float | None = None) -> tuple[int, int]:
+    """Kostenereignis aus dem Gratis-Topf nehmen, atomar (parallele Räume derselben
+    Identität teilen den Topf). Liefert (aus dem Topf genommen, Rest danach).
+    Überhang = ueur - genommen geht ans Wallet."""
+    keys = list(keys)
+    if not keys:
+        return 0, 0
+    day = day_key(now)
+    limit = limit_ueur()
+    conn = connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            q = ",".join("?" * len(keys))
+            row = conn.execute(
+                f"SELECT MAX(ueur) FROM free_usage_eur WHERE day = ? AND key IN ({q})", (day, *keys)
+            ).fetchone()
+            left = max(0, limit - int(row[0] or 0))
+            take = max(0, min(int(ueur), left))
+            if take > 0:
+                _add(conn, keys, take, day)
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+    finally:
+        conn.close()
+    return take, left - take
 
 
 def register_room(
@@ -215,7 +274,9 @@ def register_room(
             # Länger halten als jede Raumzuordnung (Token-TTL <= 1 Tag), sonst fiele ein
             # alter Raum aus der Zählung (Review 01.10. #2).
             conn.execute("DELETE FROM free_rooms WHERE created_at < ?", (now - _KEEP_DAYS * 86400,))
-            conn.execute("DELETE FROM free_usage WHERE day < ?", (day_key(now - _KEEP_DAYS * 86400),))
+            old = day_key(now - _KEEP_DAYS * 86400)
+            conn.execute("DELETE FROM free_usage_eur WHERE day < ?", (old,))
+            conn.execute("DELETE FROM free_usage WHERE day < ?", (old,))  # Altlast (Sekunden)
             conn.execute("COMMIT")
         except BaseException:
             conn.execute("ROLLBACK")

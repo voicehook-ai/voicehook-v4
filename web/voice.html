@@ -120,13 +120,12 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'mic.default': 'System-Standard', 'mic.show': 'Mikros anzeigen …',
       'mic.showTitle': 'Einmal Mikro-Zugriff erlauben, dann erscheinen alle Geräte',
       'build.title': 'Klick kopiert die Build-Version',
-      'cost.perMin': '{v} ¢/min',
-      'pay.free': 'Gratisminuten für heute aufgebraucht',
+      'cost.perMin': '{v} ct/min',
+      'pay.free': 'Gratis heute aufgebraucht',
       'pay.empty': 'Dein Guthaben ist aufgebraucht',
       'pay.missing': 'Für diesen Modus brauchst du Guthaben',
       'pay.topup': 'Aufladen',
-      'free.left': 'noch {n} min gratis heute',
-      'free.lt1': 'noch unter 1 min gratis heute',
+      'free.left': 'Gratis heute: {v}',
       'bal.label': 'Guthaben {v}',
       'login.link': 'Anmelden', 'login.have': 'Schon Guthaben? Anmelden', 'login.title': 'Anmelden mit E-Mail-Link',
       'login.ph': 'deine@email.de', 'login.send': 'Link senden',
@@ -145,7 +144,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'topup.fine': 'Zahlung über Stripe, kein Abo. Mit deiner E-Mail aus Stripe wird dein Konto angelegt.',
       'topup.done': 'Guthaben aufgeladen: {v}',
       'low.notice': 'Noch etwa {n} min, dann endet der Call',
-      'pay.ended': 'Call beendet: Gratisminuten und Guthaben aufgebraucht',
+      'pay.ended': 'Call beendet: Gratis-Verbrauch und Guthaben aufgebraucht',
       'price.approx': 'ca. {p} pro Stunde inkl. MwSt',
       'adv.live1': 'natürlichere Stimme', 'adv.live2': 'schneller', 'adv.live3': 'hört den Tonfall',
       'adv.normal1': 'günstiger', 'adv.normal2': 'kostet nichts bei Stille',
@@ -253,13 +252,12 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'mic.default': 'System default', 'mic.show': 'Show microphones …',
       'mic.showTitle': 'Allow mic access once, then all devices appear',
       'build.title': 'Click to copy build sha',
-      'cost.perMin': '{v} ¢/min',
-      'pay.free': 'Free minutes for today are used up',
+      'cost.perMin': '{v} ct/min',
+      'pay.free': 'Free today used up',
       'pay.empty': 'Your credit is used up',
       'pay.missing': 'This mode needs credit',
       'pay.topup': 'Top up',
-      'free.left': '{n} min free left today',
-      'free.lt1': 'under 1 min free left today',
+      'free.left': 'Free today: {v}',
       'bal.label': 'credit {v}',
       'login.link': 'Log in', 'login.have': 'Already have credit? Log in', 'login.title': 'Log in with an email link',
       'login.ph': 'you@example.com', 'login.send': 'Send link',
@@ -278,7 +276,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'topup.fine': 'Payment via Stripe, no subscription. Your account is created with the email you give Stripe.',
       'topup.done': 'Credit topped up: {v}',
       'low.notice': 'About {n} min left, then the call ends',
-      'pay.ended': 'Call ended: free minutes and credit used up',
+      'pay.ended': 'Call ended: free allowance and credit used up',
       'price.approx': 'approx. {p} per hour incl. VAT',
       'adv.live1': 'more natural voice', 'adv.live2': 'faster', 'adv.live3': 'hears your tone of voice',
       'adv.normal1': 'cheaper', 'adv.normal2': 'costs nothing during silence',
@@ -999,7 +997,7 @@ body.theme-light .vh-invite-status.warn{color:#b8641a;}
 #vh-mode-row{display:flex;gap:8px;justify-content:center;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;margin-bottom:6px;flex-shrink:0;}
 #vh-mode-row[hidden],#vh-presence.vh-in-call + #vh-mode-row{display:none;}
 #vh-mode-row .vh-pres-chip{font:inherit;padding:3px 9px;border-radius:12px;letter-spacing:0.01em;}
-/* Unter dem Schalter (UI-Runde 3): übrige Gratisminuten (dezent) und nach Klick
+/* Unter dem Schalter (UI-Runde 3): übriger Gratis-Verbrauch in Euro (dezent) und nach Klick
    auf einen Modus dessen ungefährer Preis + Vorteile. Nur vor dem Call. */
 #vh-mode-info{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;line-height:1.5;text-align:center;color:var(--vh-btn-fg);margin:-2px 0 6px;flex-shrink:0;}
 #vh-mode-info[hidden],#vh-mode-info [hidden],#vh-presence.vh-in-call ~ #vh-mode-info{display:none;}
@@ -3518,7 +3516,7 @@ const vhModeRow = document.getElementById('vh-mode-row');
 let vhLiveAvailable = false;
 
 // ── Aufladen-Verdrahtung (UI-Runde 3, PR #88) ────────────────────────────────
-// X-Anon-Id: zufällige ID dieses Browsers (localStorage), zählt die Gratisminuten.
+// X-Anon-Id: zufällige ID dieses Browsers (localStorage), zählt den Gratis-Verbrauch.
 // X-Wallet-Token: kommt aus dem /aufladen-Flow (localStorage 'vh-wallet-v1').
 // Beide gehen NUR an /api/host-call und /api/live-room (wer den Raum anlegt,
 // zahlt), X-Anon-Id zusätzlich an /api/free/remaining. NIE an /api/token:
@@ -3550,7 +3548,7 @@ async function vhPayErrMsg(r) {
   let d = null;
   try { d = (await r.clone().json()).detail; } catch (_) {}
   if (!d || typeof d !== 'object') return null;
-  if (d.error === 'free_limit') { try { vhFreeMarkSeen(vhLiveOn() ? 'live' : 'normal'); } catch (_) {} return vhT('pay.free'); }
+  if (d.error === 'free_limit') return vhT('pay.free');
   if (d.error === 'credits_required') return vhT(d.wallet === 'empty' ? 'pay.empty' : 'pay.missing');
   return null;
 }
@@ -3795,18 +3793,17 @@ function vhPayAfterRefresh() {
   if (vhCallEndedCheck) {
     vhCallEndedCheck = false;
     if (!vhFree && !vhMe) return;  // nichts bekannt: nichts behaupten
-    const mode = vhLiveOn() ? 'live' : 'normal';
-    const f = vhFree ? Math.max(0, Number(vhFree[mode + '_s']) || 0) : 0;
+    const f = vhFree ? Math.max(0, Number(vhFree.eur_left) || 0) : 0;
     const b = vhMe && typeof vhMe.balance_eur === 'number' ? vhMe.balance_eur : 0;
     if (f <= 0 && b <= 0) vhPayShow(vhT('pay.ended'));
   }
 }
 
-// Übrige Gratisminuten (GET /api/free/remaining) und ungefährer Preis
+// Übriger Gratis-Verbrauch in Euro (GET /api/me, Fallback /api/free/remaining) und ungefährer Preis
 // (GET /api/billing/config). Kein Timer: geladen beim Seitenstart und nach
 // Call-Ende, angezeigt wird nur, was der Server meldet.
 const vhModeInfo = document.getElementById('vh-mode-info');
-let vhFree = null;          // {live_s, normal_s, enabled:{live,normal}}
+let vhFree = null;          // {eur_left, eur_per_day}: 1 EUR pro Tag, Normal + Live gemeinsam
 let vhPriceCfg = null;      // {normal, live} EUR pro Stunde
 let vhModeDetail = null;    // 'normal' | 'live' | null (erst nach Klick)
 const vhEur = (() => { try { return new Intl.NumberFormat(VH_LANG === 'de' ? 'de-DE' : 'en-IE', { style: 'currency', currency: 'EUR' }); } catch (_) { return null; } })();
@@ -3815,17 +3812,16 @@ function vhModeInfoRender() {
   if (!vhModeInfo) return;
   const freeEl = vhModeInfo.querySelector('.vh-free-left');
   const detEl = vhModeInfo.querySelector('.vh-mode-detail');
-  const mode = vhLiveOn() ? 'live' : 'normal';
-  // Gratis-Zeile (Billing-Runde 4): "noch X min gratis heute · Guthaben Y € ·
+  // Gratis-Zeile (Billing-Runde 4): "Gratis heute: 0,73 € · Guthaben Y € ·
   // Aufladen · Anmelden". Gratis und Guthaben immer beide, sobald bekannt.
   let showFree = false;
   if (freeEl) {
     freeEl.textContent = '';
     const parts = [];
-    const freeOn = vhFree && (vhFree.enabled ? vhFree.enabled[mode] === true : vhFreeKnown(mode));
-    if (freeOn) {
-      const sec = Math.max(0, Number(vhFree[mode + '_s']) || 0);
-      parts.push(sec <= 0 ? vhT('pay.free') : sec < 60 ? vhT('free.lt1') : vhT('free.left', { n: Math.floor(sec / 60) }));
+    // eur_per_day 0 = Gratis aus: dann keine Gratis-Angabe.
+    if (vhFree && Number(vhFree.eur_per_day) > 0) {
+      const eur = Math.max(0, Number(vhFree.eur_left) || 0);
+      parts.push(eur <= 0 ? vhT('pay.free') : vhT('free.left', { v: vhEur ? vhEur.format(eur) : eur.toFixed(2) + ' €' }));
     }
     if (vhMe && typeof vhMe.balance_eur === 'number' && isFinite(vhMe.balance_eur) && vhEur) {
       parts.push(vhT('bal.label', { v: vhEur.format(vhMe.balance_eur) }));
@@ -3873,29 +3869,10 @@ function vhModeInfoRender() {
   vhModeInfo.hidden = !(showFree || showDet);
   try { vhPanelSync(); } catch (_) {}
 }
-// GET /api/me -> {free:{normal_s,live_s}, balance_eur|null, email_masked|null}
+// GET /api/me -> {free:{eur_left,eur_per_day}, balance_eur|null, email_masked|null}
 // (Billing-Runde 4). Solange das Backend /api/me noch nicht hat (404): Fallback
 // auf /api/free/remaining + /api/wallet wie bisher.
 let vhMe = null;
-// /api/me.free hat kein enabled-Feld: ein Modus ohne Gratis-Kontingent meldet 0,
-// genau wie ein aufgebrauchtes. "Aufgebraucht" zeigen wir deshalb nur, wenn wir
-// heute (UTC) schon Gratis-Rest > 0 gesehen haben oder der Server 402 free_limit
-// gemeldet hat; sonst gar keine Gratis-Angabe für diesen Modus.
-const VH_FREE_SEEN_KEY = 'vh-free-seen-v1';
-function vhUtcDay() { return new Date().toISOString().slice(0, 10); }
-function vhFreeSeen() {
-  try { const o = JSON.parse(localStorage.getItem(VH_FREE_SEEN_KEY) || 'null'); if (o && o.day === vhUtcDay()) return o; } catch (_) {}
-  return { day: vhUtcDay() };
-}
-function vhFreeMarkSeen(mode) {
-  const o = vhFreeSeen(); if (o[mode]) return;
-  o[mode] = true; try { localStorage.setItem(VH_FREE_SEEN_KEY, JSON.stringify(o)); } catch (_) {}
-}
-function vhFreeKnown(mode) {
-  const sec = vhFree ? Number(vhFree[mode + '_s']) || 0 : 0;
-  if (sec > 0) { vhFreeMarkSeen(mode); return true; }
-  return vhFreeSeen()[mode] === true;
-}
 function vhLoggedIn() { return !!vhWalletToken() || !!(vhMe && vhMe.email_masked); }
 async function vhFreeRefresh() {
   let me = null, meOk = false;
@@ -3906,14 +3883,13 @@ async function vhFreeRefresh() {
   if (meOk) {
     vhMe = me;
     const f = me.free && typeof me.free === 'object' ? me.free : null;
-    vhFree = f ? Object.assign({}, f) : null;
-    if (f) ['normal', 'live'].forEach((m) => { if (Number(f[m + '_s']) > 0) vhFreeMarkSeen(m); });
+    vhFree = f && 'eur_left' in f ? Object.assign({}, f) : null;
   } else {
     vhMe = null;
     try {
       const r = await fetch('/api/free/remaining', { cache: 'no-store', headers: { 'X-Anon-Id': vhAnonId() } });
       const j = r.ok ? await r.json() : null;
-      vhFree = j && typeof j === 'object' && j.enabled ? j : null;
+      vhFree = j && typeof j === 'object' && 'eur_left' in j ? j : null;
     } catch (_) { vhFree = null; }
     const w = vhWalletToken();
     if (w) {
@@ -4033,7 +4009,7 @@ function vhLiveUrlFor(room, tok) {
   return '/r/' + encodeURIComponent(room) + (qs ? '?' + qs : '');
 }
 // Laufender Live-Call: Untertitel zeigt "live", bis der erste Kosten-Payload
-// "0.012 $ · live" daraus macht (vhCostShow); vhCostStop setzt beim Ende zurück.
+// "0,01 € · live" daraus macht (vhCostShow); vhCostStop setzt beim Ende zurück.
 function vhLiveMark() {
   const t = document.getElementById('tagline');
   if (!t) return;
@@ -4153,7 +4129,7 @@ function vhEndCall(fromEvent) {
   btnCall.title = vhT('call.start');
   try { vhMuteBtnVisibility(false); } catch (_) {}  // hide mic-mute when call ends
   try { vhFirstVisitRender(); vhFreeRefreshSoon(); } catch (_) {}
-  // Call endet auch ohne Klick (Gratisminuten um, Gegenseite trennt): Knopf zurück.
+  // Call endet auch ohne Klick (Gratis-Verbrauch um, Gegenseite trennt): Knopf zurück.
   try { if (window.vhSetCallUi) window.vhSetCallUi('idle'); } catch (_) {}
   // Verbindungs-/Einladungsfehler bleiben stehen (sprachunabhängig, Flag statt
   // Suche nach dem englischen Wort 'failed').
@@ -4575,25 +4551,29 @@ async function vhStartRoomAudio(room) {
 
 // Wire LiveKit room events that feed the transcript (works for both modes).
 // ── Kostenanzeige im laufenden Call ──────────────────────────────────────────
-// Der Worker schickt auf Topic `cost` {usd, mode, basis} (Menge x verifizierter
-// Preis). Untertitel zeigt "0.012 $" (+ " · live"), title = basis. KEINE Uhr,
+// Der Worker schickt auf Topic `cost` {eur, mode} = Kundenpreis (echte Kosten x
+// Faktor + MwSt, wie Wallet und Gratis-Topf); usd + basis (Rohkosten) nur in
+// Admin-Räumen, dann als title. Untertitel zeigt "0,87 €" (+ " · live"). KEINE Uhr,
 // kein Timer, kein "≈" (Olli 30.09.: eine hochzählende Uhr wirkte wie laufende
 // Kosten): Anzeige erscheint erst mit dem ersten echten Payload und ändert sich
 // nur bei neuen Payloads. Ohne Payload bleibt "Talk with your agents"; nach Call-Ende zurück.
 // Schnitt pro Minute (Olli 01.10.): Summe aus dem letzten echten Payload geteilt
 // durch die Call-Minuten seit Connect, erst ab 1 Minute Calldauer, nur bei
 // eintreffenden Payloads neu gerechnet (kein Timer, der Kosten erfindet).
-// Payload-Währung ist USD, daher Cent: "0.290 $ · 1.8 ¢/min".
+// Payload-Währung ist EUR: "0,87 € · 2,6 ct/min" (en "€0.87 · 2.6 ct/min").
 const vhTagline = document.getElementById('tagline');
 const VH_TAGLINE_TEXT = vhTagline ? vhTagline.textContent : '';
 let vhCallT0 = 0;   // Date.now() beim Connect des laufenden Calls
+const vhCt1 = (() => { try { return new Intl.NumberFormat(VH_LANG === 'de' ? 'de-DE' : 'en-IE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }); } catch (_) { return { format: (n) => n.toFixed(1) }; } })();
 function vhCostShow(c) {
   if (!vhTagline) return;
   if (!vhCallT0) vhCallT0 = Date.now();
   const mins = (Date.now() - vhCallT0) / 60000;
-  const rate = mins >= 1 ? ' · ' + vhT('cost.perMin', { v: (c.usd * 100 / mins).toFixed(1) }) : '';
-  vhTagline.textContent = c.usd.toFixed(3) + ' $' + rate + (c.mode === 'live' ? ' · ' + vhT('live.tag') : '');
-  vhTagline.title = String(c.basis || '');
+  const rate = mins >= 1 ? ' · ' + vhT('cost.perMin', { v: vhCt1.format(c.eur * 100 / mins) }) : '';
+  vhTagline.textContent = (vhEur ? vhEur.format(c.eur) : c.eur.toFixed(2) + ' €') + rate + (c.mode === 'live' ? ' · ' + vhT('live.tag') : '');
+  // Rohkosten nur, wenn der Worker sie schickt (Admin-Raum).
+  vhTagline.title = typeof c.usd === 'number' && isFinite(c.usd)
+    ? c.usd.toFixed(4) + ' $' + (c.basis ? ' · ' + JSON.stringify(c.basis) : '') : '';
   vhTagline.classList.add('vh-cost-on');
 }
 function vhCostStop() {
@@ -4773,7 +4753,7 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
     if (topic === 'cost') {
       try {
         const c = JSON.parse(new TextDecoder().decode(payload));
-        if (typeof c.usd === 'number' && isFinite(c.usd) && c.usd >= 0 && vhCallLive()) vhCostShow(c);
+        if (typeof c.eur === 'number' && isFinite(c.eur) && c.eur >= 0 && vhCallLive()) vhCostShow(c);
       } catch (_) {}
       return;
     }

@@ -1,4 +1,5 @@
-"""GET /api/free/remaining + /api/billing/config approx_eur_per_hour (UI-Runde 3)."""
+"""GET /api/free/remaining (Gratis-Euro, Normal + Live gemeinsam) + /api/billing/config
+approx_eur_per_hour (UI-Runde 3)."""
 
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ ANON_B = "anon-bbbbbbbb-2222"
 
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
-    for k in ("VOICEHOOK_FREE_MIN_PER_DAY_LIVE", "VOICEHOOK_FREE_MIN_PER_DAY_NORMAL",
+    for k in ("VH_FREE_EUR_PER_DAY",
               "VOICEHOOK_APPROX_EUR_PER_HOUR_NORMAL", "VOICEHOOK_APPROX_EUR_PER_HOUR_LIVE"):
         monkeypatch.delenv(k, raising=False)
 
@@ -33,41 +34,36 @@ def _rem(client, anon=None, ip="1.1.1.1"):
     return r.json()
 
 
-def test_defaults_full_normal_20_live_10(client):
-    assert _rem(client, ANON_A) == {"live_s": 600, "normal_s": 1200,
-                                    "enabled": {"live": True, "normal": True}}
+def test_default_full_one_euro(client):
+    assert _rem(client, ANON_A) == {"enabled": True, "eur_left": 1.0, "eur_per_day": 1.0}
 
 
-def test_used_minutes_reduce_remaining_per_mode(client, monkeypatch):
-    monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_NORMAL", "10")
-    freetier.add_seconds(freetier.identity_keys(ANON_A, "1.1.1.1"), "live", 450)
-    freetier.add_seconds(freetier.identity_keys(ANON_A, "1.1.1.1"), "normal", 60)
-    got = _rem(client, ANON_A)
-    assert got == {"live_s": 150, "normal_s": 540, "enabled": {"live": True, "normal": True}}
+def test_used_euro_reduces_remaining_rounded_down(client):
+    freetier.add_ueur(freetier.identity_keys(ANON_A, "1.1.1.1"), 333_333)
+    assert _rem(client, ANON_A)["eur_left"] == 0.66                 # 0,666667 -> 0,66, nie mehr als da
 
 
 def test_counts_like_host_call_either_anon_or_ip(client):
-    freetier.add_seconds(freetier.identity_keys(ANON_A, "1.1.1.1"), "live", 300)
-    assert _rem(client, ANON_A, ip="2.2.2.2")["live_s"] == 300   # gleiche Anon-ID, neue IP
-    assert _rem(client, ANON_B, ip="1.1.1.1")["live_s"] == 300   # neue Anon-ID, gleiche IP
-    assert _rem(client, ANON_B, ip="2.2.2.2")["live_s"] == 600   # Positivkontrolle: beides frisch
+    freetier.add_ueur(freetier.identity_keys(ANON_A, "1.1.1.1"), 500_000)
+    assert _rem(client, ANON_A, ip="2.2.2.2")["eur_left"] == 0.5   # gleiche Anon-ID, neue IP
+    assert _rem(client, ANON_B, ip="1.1.1.1")["eur_left"] == 0.5   # neue Anon-ID, gleiche IP
+    assert _rem(client, ANON_B, ip="2.2.2.2")["eur_left"] == 1.0   # Positivkontrolle: beides frisch
     # IP wie bei host-call: letztes X-Forwarded-For-Element, Fake davor zählt nicht
-    assert _rem(client, ANON_B, ip="9.9.9.9, 1.1.1.1")["live_s"] == 300
+    assert _rem(client, ANON_B, ip="9.9.9.9, 1.1.1.1")["eur_left"] == 0.5
 
 
 def test_never_negative_and_read_only(client):
     keys = freetier.identity_keys(ANON_A, "1.1.1.1")
-    freetier.add_seconds(keys, "live", 5000)
-    assert _rem(client, ANON_A)["live_s"] == 0
-    before = freetier.used_seconds(keys, "live")
+    freetier.add_ueur(keys, 5_000_000)
+    assert _rem(client, ANON_A)["eur_left"] == 0
+    before = freetier.used_ueur(keys)
     _rem(client, ANON_A)
-    assert freetier.used_seconds(keys, "live") == before          # Lesen bucht nichts
+    assert freetier.used_ueur(keys) == before                      # Lesen bucht nichts
 
 
-def test_mode_off_reports_disabled(client, monkeypatch):
-    monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_LIVE", "0")
-    got = _rem(client, ANON_A)
-    assert got["enabled"]["live"] is False and got["live_s"] == 0
+def test_off_reports_disabled(client, monkeypatch):
+    monkeypatch.setenv("VH_FREE_EUR_PER_DAY", "0")
+    assert _rem(client, ANON_A) == {"enabled": False, "eur_left": 0.0, "eur_per_day": 0.0}
 
 
 def test_billing_config_approx_price_defaults_and_env(client, monkeypatch):

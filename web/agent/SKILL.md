@@ -159,7 +159,7 @@ heartbeats).
 
 ## Low balance (`operator.notice`)
 
-`kind:"low_balance"`: free minutes plus credit last about `minutes_left` more minutes; the
+`kind:"low_balance"`: free allowance plus credit last about `minutes_left` more minutes; the
 call ends when both are empty. It arrives once per call as a `$D/out` line with
 `"topic": "operator.notice"`, and the voicebot already said "Noch etwa fünf Minuten, lade
 Guthaben auf voicehook.ai auf." Do not repeat that. Add one short sentence to your next
