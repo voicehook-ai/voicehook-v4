@@ -12,11 +12,15 @@ Schema:
         Konto-Übernahme). email_verified_at wird erst gesetzt, wenn jemand einen
         Magic-Link an genau diese Adresse eingelöst hat (login_verified_email);
         eine bestätigte Adresse gehört höchstens einem Konto (Teilindex).
-    login_links(token_hash PK, email, created_at, expires_at, used_at, requester_hash)
+    login_links(token_hash PK, email, created_at, expires_at, used_at, requester_hash,
+                nonce_hash)
         Magic-Link-Tokens (nur SHA-256), einmalig, kurzlebig (LOGIN_TTL_S).
         requester_hash = SHA-256 des Wallet-Tokens, das den Link ANGEFORDERT hat
         (Review PR #93 critical, Login-CSRF): nur genau dieses Wallet darf beim
         Einlösen mit dem Konto verknüpft werden.
+        nonce_hash = SHA-256 der login_nonce, die NUR der anfordernde Browser
+        bekommt (Rest-Login-CSRF, Re-Review PR #93): ohne passende Nonce wird der
+        Link erst nach ausdrücklicher Bestätigung (confirm) eingelöst.
         Saldo in µEUR, brutto. debt_ueur = offener Fehlbetrag aus Erstattung/
         Rückbuchung, wird bei der nächsten Gutschrift zuerst verrechnet.
     tokens(token_hash PK, account_id, kind 'wallet'|'recovery', created_at, last_used_at)
@@ -52,6 +56,7 @@ import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import NamedTuple
 
 _INIT_LOCK = threading.Lock()
 _INITIALIZED_PATHS: set[str] = set()
@@ -114,7 +119,8 @@ CREATE TABLE IF NOT EXISTS login_links (
     created_at REAL NOT NULL,
     expires_at REAL NOT NULL,
     used_at REAL,
-    requester_hash TEXT
+    requester_hash TEXT,
+    nonce_hash TEXT
 );
 """
 
@@ -158,6 +164,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
     cols = {r[1] for r in conn.execute("PRAGMA table_info(login_links)").fetchall()}
     if "requester_hash" not in cols:  # Altbestand: Links ohne Bindung verknüpfen nie ein Wallet
         conn.execute("ALTER TABLE login_links ADD COLUMN requester_hash TEXT")
+    if "nonce_hash" not in cols:  # Altbestand ohne Nonce: Einlösen nur mit confirm
+        conn.execute("ALTER TABLE login_links ADD COLUMN nonce_hash TEXT")
     conn.executescript(_INDEXES)
 
 
@@ -516,39 +524,67 @@ def _token_hash_or_none(token: str | None) -> str | None:
 
 
 def create_login_link(email: str, *, requester_token: str | None = None,
-                      ttl_seconds: float = LOGIN_TTL_S, now: float | None = None) -> str:
-    """Einmal-Token für einen Login-Link an `email` (nur der Hash wird gespeichert).
+                      ttl_seconds: float = LOGIN_TTL_S, now: float | None = None) -> tuple[str, str]:
+    """Einmal-Token für einen Login-Link an `email` plus login_nonce für den
+    anfordernden Browser; von beiden wird nur der Hash gespeichert.
     requester_token = Wallet-Token des anfordernden Browsers (X-Wallet-Token); nur
-    dieses Wallet darf beim Einlösen verknüpft werden (Login-CSRF, PR #93)."""
+    dieses Wallet darf beim Einlösen verknüpft werden (Login-CSRF, PR #93).
+    Liefert (token, nonce): token geht in die Mail, nonce in die POST-Antwort."""
     now = time.time() if now is None else now
     token = "vhl_" + secrets.token_urlsafe(32)
+    nonce = "vhn_" + secrets.token_urlsafe(32)
     with _Tx() as conn:
         conn.execute("DELETE FROM login_links WHERE expires_at < ?", (now - 86400,))
         conn.execute(
-            "INSERT INTO login_links (token_hash, email, created_at, expires_at, requester_hash)"
-            " VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO login_links (token_hash, email, created_at, expires_at, requester_hash, nonce_hash)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
             (_hash(token), normalize_email(email), now, now + float(ttl_seconds),
-             _token_hash_or_none(requester_token)),
+             _token_hash_or_none(requester_token), _hash(nonce)),
         )
-    return token
+    return token, nonce
 
 
-def consume_login_link(token: str | None, *, now: float | None = None) -> tuple[str, str | None] | None:
-    """Token einlösen: (bestätigte Adresse, requester_hash) oder None (unbekannt,
-    abgelaufen, schon benutzt). requester_hash = Hash des Wallet-Tokens, das den
-    Link angefordert hat, oder None."""
+class LoginLink(NamedTuple):
+    """Ergebnis von consume_login_link.
+    status 'ok'               Link verbraucht, Login durchführen.
+    status 'confirm_required' Link NICHT verbraucht: Nonce fehlt/falsch und kein
+                              confirm. Nur email (für die Maske) ist gesetzt."""
+    status: str
+    email: str
+    requester_hash: str | None = None
+
+
+def consume_login_link(token: str | None, *, nonce: str | None = None, confirm: bool = False,
+                       now: float | None = None) -> LoginLink | None:
+    """Token einlösen. None = unbekannt, abgelaufen oder schon benutzt.
+
+    Rest-Login-CSRF (Re-Review PR #93): ein Link, den ein Angreifer an SEINE Adresse
+    angefordert und dem Opfer geschickt hat, darf einen Browser nicht still in das
+    Angreiferkonto schalten. Deshalb:
+      - passende login_nonce (= derselbe Browser hat angefordert) -> 'ok', mit
+        requester_hash (Wallet-Verknüpfung nach den Regeln in login_verified_email);
+      - sonst ohne confirm -> 'confirm_required', Link bleibt gültig;
+      - sonst mit confirm (Login auf anderem Gerät, Nutzer hat die Adresse
+        bestätigt) -> 'ok' OHNE requester_hash: ein Wallet des einlösenden
+        Browsers wird dann nie verknüpft."""
     if not token or len(token) > 200:
         return None
     now = time.time() if now is None else now
     with _Tx() as conn:
         row = conn.execute(
-            "SELECT email, expires_at, used_at, requester_hash FROM login_links WHERE token_hash = ?",
+            "SELECT email, expires_at, used_at, requester_hash, nonce_hash FROM login_links"
+            " WHERE token_hash = ?",
             (_hash(token),),
         ).fetchone()
         if row is None or row["used_at"] is not None or float(row["expires_at"]) <= now:
             return None
+        nonce_hash = _token_hash_or_none(nonce)
+        same_browser = bool(nonce_hash and row["nonce_hash"]
+                            and hmac.compare_digest(nonce_hash, row["nonce_hash"]))
+        if not same_browser and not confirm:
+            return LoginLink("confirm_required", row["email"])
         conn.execute("UPDATE login_links SET used_at = ? WHERE token_hash = ?", (now, _hash(token)))
-        return row["email"], row["requester_hash"]
+        return LoginLink("ok", row["email"], row["requester_hash"] if same_browser else None)
 
 
 def login_verified_email(
@@ -641,6 +677,10 @@ def login_verified_email(
                 "UPDATE accounts SET email = ?, email_verified_at = ?, updated_at = ? WHERE id = ?",
                 (email, now, now, target),
             )
+        # Jeder Login widerruft alle bisherigen Recovery-Codes des Kontos (Re-Review
+        # PR #93): gültig ist nur der neue, der gleich an diesen Browser geht.
+        # Wallet-Tokens anderer Geräte bleiben angemeldet.
+        conn.execute("DELETE FROM tokens WHERE account_id = ? AND kind = 'recovery'", (target,))
         conn.executemany(
             "INSERT INTO tokens (token_hash, account_id, kind, created_at) VALUES (?, ?, ?, ?)",
             [(_hash(wallet), target, "wallet", now), (_hash(code), target, "recovery", now)],

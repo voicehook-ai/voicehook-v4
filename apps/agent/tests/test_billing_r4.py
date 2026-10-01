@@ -155,9 +155,10 @@ def test_login_without_resend_key_is_503(client):
 
 def test_login_sends_link_same_answer_for_known_and_unknown(client, outbox):
     _paid_wallet(client, "cs_known", email="known@x.de")
-    a = client.post("/api/login", json={"email": "Known@X.de"})
-    b = client.post("/api/login", json={"email": "nobody@x.de"})
-    assert a.status_code == b.status_code == 200 and a.json() == b.json()   # nichts leakt
+    a = client.post("/api/login", json={"email": "Known@X.de"}).json()
+    b = client.post("/api/login", json={"email": "nobody@x.de"}).json()
+    assert a.pop("login_nonce") != b.pop("login_nonce")                     # je Anfrage zufällig
+    assert a == b == {"sent": True, "expires_in": 900}                      # nichts leakt
     assert [to for to, _ in outbox] == ["known@x.de", "nobody@x.de"]
     assert "https://vh.test/aufladen#login=vhl_" in outbox[0][1]["text"]
     assert "—" not in outbox[0][1]["text"] and "–" not in outbox[0][1]["text"]
@@ -169,11 +170,11 @@ def test_login_invalid_email_400(client, outbox):
 
 
 def test_login_rate_limit_per_mail_and_per_ip(client, outbox):
-    for i in range(3):
+    for _ in range(3):
         assert client.post("/api/login", json={"email": "rl@x.de"},
-                           headers={"x-forwarded-for": f"7.7.7.{i}"}).status_code == 200
+                           headers={"x-forwarded-for": "7.7.7.1"}).status_code == 200
     assert client.post("/api/login", json={"email": "rl@x.de"},
-                       headers={"x-forwarded-for": "7.7.7.9"}).status_code == 429   # je Adresse
+                       headers={"x-forwarded-for": "7.7.7.1"}).status_code == 429   # je Adresse + IP
     billing_routes._LOGIN_HITS.clear()
     for i in range(5):
         assert client.post("/api/login", json={"email": f"ip{i}@x.de"},
@@ -184,13 +185,13 @@ def test_login_rate_limit_per_mail_and_per_ip(client, outbox):
 
 def test_verify_once_and_expiry(client, outbox):
     _paid_wallet(client, "cs_v", amount_cents=1500, email="me@x.de")
-    client.post("/api/login", json={"email": "me@x.de"})
+    nonce = client.post("/api/login", json={"email": "me@x.de"}).json()["login_nonce"]
     tok = _link_token(outbox)
-    r = client.get("/api/login/verify", params={"token": tok})
+    r = client.get("/api/login/verify", params={"token": tok, "nonce": nonce})
     assert r.status_code == 200 and r.json()["balance_eur"] == 15.0
     assert r.json()["wallet_token"].startswith("vhw_") and "#r=vhr_" in r.json()["recovery_url"]
-    assert client.get("/api/login/verify", params={"token": tok}).status_code == 400   # einmalig
-    old = db.create_login_link("me@x.de", now=time.time() - db.LOGIN_TTL_S - 1)
+    assert client.get("/api/login/verify", params={"token": tok, "nonce": nonce}).status_code == 400
+    old, _ = db.create_login_link("me@x.de", now=time.time() - db.LOGIN_TTL_S - 1)
     assert client.get("/api/login/verify", params={"token": old}).status_code == 400   # abgelaufen
     assert client.get("/api/login/verify", params={"token": "vhl_falsch"}).status_code == 400
 
@@ -206,8 +207,8 @@ def test_attacker_typing_victim_mail_never_keeps_access_after_victim_login(clien
     unbestätigt, er hat das Token). Loggt das Opfer sich per Mail ein, verliert der
     Angreifer jeden Zugriff; er erreicht nie ein Konto, dessen Mail er nicht bestätigt hat."""
     att = _paid_wallet(client, "cs_att", amount_cents=1000, email="victim@x.de")
-    client.post("/api/login", json={"email": "victim@x.de"})
-    v = client.get("/api/login/verify", params={"token": _link_token(outbox)}).json()
+    n = client.post("/api/login", json={"email": "victim@x.de"}).json()["login_nonce"]
+    v = client.get("/api/login/verify", params={"token": _link_token(outbox), "nonce": n}).json()
     assert db.account_for_token(att["wallet_token"]) is None                # Angreifer-Token tot
     assert db.account_for_token(att["recovery_url"].split("#r=")[1], "recovery") is None
     assert db.account_for_token(v["wallet_token"]) is not None              # Opfer drin
@@ -217,8 +218,8 @@ def test_attacker_typing_victim_mail_never_keeps_access_after_victim_login(clien
     assert db.account_for_token(att2["wallet_token"]) != acc_v
     assert client.get("/api/wallet", headers={"x-wallet-token": att2["wallet_token"]}).json()["balance_eur"] == 10.0
     # Nächster Opfer-Login führt es ins bestätigte Konto über, Angreifer-Token wieder tot
-    client.post("/api/login", json={"email": "victim@x.de"})
-    v2 = client.get("/api/login/verify", params={"token": _link_token(outbox)}).json()
+    n = client.post("/api/login", json={"email": "victim@x.de"}).json()["login_nonce"]
+    v2 = client.get("/api/login/verify", params={"token": _link_token(outbox), "nonce": n}).json()
     assert db.account_for_token(v2["wallet_token"]) == acc_v and v2["balance_eur"] == 20.0
     assert db.account_for_token(att2["wallet_token"]) is None
 
@@ -228,7 +229,8 @@ def test_attacker_requesting_link_for_victim_cannot_bind_own_wallet(client, outb
     geht ans Opfer; klickt es in seinem Browser, wird nie das Angreifer-Konto bestätigt."""
     att = _paid_wallet(client, "cs_att3", email="att@x.de")
     client.post("/api/login", json={"email": "victim2@x.de"}, headers={"x-wallet-token": att["wallet_token"]})
-    v = client.get("/api/login/verify", params={"token": _link_token(outbox)}).json()  # Opfer-Browser
+    # Opfer-Browser (ohne Nonce), Opfer bestätigt sogar die eigene Adresse
+    v = client.get("/api/login/verify", params={"token": _link_token(outbox), "confirm": 1}).json()
     acc_att = db.account_for_token(att["wallet_token"])
     assert acc_att is not None and db.account_for_token(v["wallet_token"]) != acc_att
     assert db.account(acc_att)["email_verified_at"] is None
@@ -237,8 +239,9 @@ def test_attacker_requesting_link_for_victim_cannot_bind_own_wallet(client, outb
 def test_same_browser_confirmation_keeps_wallet_logged_in(client, outbox):
     me = _paid_wallet(client, "cs_same", amount_cents=1000, email="same@x.de")
     acc = db.account_for_token(me["wallet_token"])
-    client.post("/api/login", json={"email": "same@x.de"}, headers={"x-wallet-token": me["wallet_token"]})
-    r = client.get("/api/login/verify", params={"token": _link_token(outbox)},
+    n = client.post("/api/login", json={"email": "same@x.de"},
+                    headers={"x-wallet-token": me["wallet_token"]}).json()["login_nonce"]
+    r = client.get("/api/login/verify", params={"token": _link_token(outbox), "nonce": n},
                    headers={"x-wallet-token": me["wallet_token"]}).json()
     assert db.account_for_token(r["wallet_token"]) == acc
     assert db.account_for_token(me["wallet_token"]) == acc                  # bleibt angemeldet
@@ -246,8 +249,8 @@ def test_same_browser_confirmation_keeps_wallet_logged_in(client, outbox):
 
 
 def test_new_mail_without_account_creates_empty_verified_account(client, outbox):
-    client.post("/api/login", json={"email": "new@x.de"})
-    r = client.get("/api/login/verify", params={"token": _link_token(outbox)}).json()
+    n = client.post("/api/login", json={"email": "new@x.de"}).json()["login_nonce"]
+    r = client.get("/api/login/verify", params={"token": _link_token(outbox), "nonce": n}).json()
     assert r["balance_eur"] == 0.0 and r["can_call"] is False
     assert db.account(db.account_for_token(r["wallet_token"]))["email_verified_at"]
 
@@ -255,8 +258,8 @@ def test_new_mail_without_account_creates_empty_verified_account(client, outbox)
 def test_refund_after_merge_hits_merged_account(client, outbox):
     _paid_wallet(client, "cs_m1", amount_cents=1000, email="m@x.de")
     _paid_wallet(client, "cs_m2", amount_cents=1000, email="m@x.de")
-    client.post("/api/login", json={"email": "m@x.de"})
-    r = client.get("/api/login/verify", params={"token": _link_token(outbox)}).json()
+    n = client.post("/api/login", json={"email": "m@x.de"}).json()["login_nonce"]
+    r = client.get("/api/login/verify", params={"token": _link_token(outbox), "nonce": n}).json()
     assert r["balance_eur"] == 20.0                                       # beide zusammengeführt
     ev = {"id": "evt_rf", "type": "charge.refunded", "data": {"object": {
         "id": "ch_1", "payment_intent": "pi_cs_m2", "amount_refunded": 1000}}}

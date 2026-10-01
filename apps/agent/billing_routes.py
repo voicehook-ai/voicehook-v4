@@ -23,8 +23,9 @@ aus ist: VOICEHOOK_REQUIRE_CREDITS_NORMAL=0, VOICEHOOK_REQUIRE_CREDITS_LIVE=0
 
 Login (Magic-Link, Oliver 01.10.): POST /api/login {email} schickt einen Link an
 die Adresse; GET /api/login/verify?token=... tauscht ihn einmalig (15 min) gegen
-ein Wallet-Token für das Konto mit dieser BESTÄTIGTEN Adresse. Die Stripe-Mail
-allein verknüpft nie (siehe billing/db.py login_verified_email).
+ein Wallet-Token für das Konto mit dieser BESTÄTIGTEN Adresse. Ohne die
+login_nonce des anfordernden Browsers nur nach Bestätigung (confirm=1). Die
+Stripe-Mail allein verknüpft nie (siehe billing/db.py login_verified_email).
 
 Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, VOICEHOOK_PUBLIC_URL,
      VOICEHOOK_TOPUP_AMOUNTS_EUR ("10,20,50"), VOICEHOOK_TOPUP_MIN_EUR (10),
@@ -40,6 +41,7 @@ import os
 import re
 import threading
 import time
+from collections import OrderedDict
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -344,23 +346,65 @@ def api_wallet_recover(req: RecoverRequest) -> dict:
 
 # ----- Magic-Link-Login -----------------------------------------------------------
 _EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
-LOGIN_IP_LIMIT, LOGIN_IP_WINDOW = 5, 600          # 5 Links je IP in 10 min
-LOGIN_MAIL_LIMIT, LOGIN_MAIL_WINDOW = 3, 900      # 3 Links je Adresse in 15 min
-_LOGIN_HITS: dict[str, list[float]] = {}
+# Ratenlimits Magic-Link (Re-Review PR #93):
+#   je IP-Bucket (IPv4 voll, IPv6 /64)      5 in 10 min
+#   je Adresse + IP-Bucket                  3 in 15 min
+#   je Adresse (alle IPs zusammen)         10 in 60 min
+# Ein Angreifer aus fremden Netzen sperrt damit die Adresse höchstens eine Stunde,
+# nicht mit 3 Anfragen; das Opfer aus seinem eigenen Netz kommt bis dahin durch.
+LOGIN_IP_LIMIT, LOGIN_IP_WINDOW = 5, 600
+LOGIN_MAIL_IP_LIMIT, LOGIN_MAIL_IP_WINDOW = 3, 900
+LOGIN_MAIL_LIMIT, LOGIN_MAIL_WINDOW = 10, 3600
+LOGIN_HITS_MAX = 10_000
+# LRU statt clear(): wer die Tabelle mit neuen Schlüsseln flutet, verdrängt nur die
+# am längsten unbenutzten, setzt aber nicht alle Limits auf einmal zurück.
+_LOGIN_HITS: OrderedDict[str, list[float]] = OrderedDict()
 _LOGIN_LOCK = threading.Lock()
 
 
-def _login_rate_ok(key: str, limit: int, window: float) -> bool:
+def _login_rate_take(rules: list[tuple[str, int, float]]) -> bool:
+    """Alle Limits (key, limit, window) prüfen; nur wenn ALLE frei sind, zählt die
+    Anfrage bei allen (atomar). Eine abgelehnte Anfrage verbraucht nichts."""
     now = time.time()
     with _LOGIN_LOCK:
-        if len(_LOGIN_HITS) > 10_000:  # Prozess-Speicher begrenzen
-            _LOGIN_HITS.clear()
-        hits = [t for t in _LOGIN_HITS.get(key, []) if now - t < window]
-        ok = len(hits) < limit
-        if ok:
-            hits.append(now)
-        _LOGIN_HITS[key] = hits
+        fresh = {}
+        for key, limit, window in rules:
+            hits = [t for t in _LOGIN_HITS.get(key, []) if now - t < window]
+            fresh[key] = hits
+            if len(hits) >= limit:
+                ok = False
+                break
+        else:
+            ok = True
+        for key, hits in fresh.items():
+            if ok:
+                hits.append(now)
+            _LOGIN_HITS[key] = hits
+            _LOGIN_HITS.move_to_end(key)
+        while len(_LOGIN_HITS) > LOGIN_HITS_MAX:
+            _LOGIN_HITS.popitem(last=False)
         return ok
+
+
+def _login_rate_give_back(rules: list[tuple[str, int, float]]) -> None:
+    """Anfrage zählt doch nicht (Mail-Versand fehlgeschlagen): je Schlüssel den
+    jüngsten Eintrag wieder entfernen."""
+    with _LOGIN_LOCK:
+        for key, _limit, _window in rules:
+            hits = _LOGIN_HITS.get(key)
+            if hits:
+                hits.pop()
+
+
+def _login_rules(email: str, ip: str) -> list[tuple[str, int, float]]:
+    bucket = freetier.ip_bucket(ip)
+    mail_h = hashlib.sha256(email.encode()).hexdigest()
+    mail_ip_h = hashlib.sha256(f"{email}|{bucket}".encode()).hexdigest()
+    return [
+        ("ip:" + bucket, LOGIN_IP_LIMIT, LOGIN_IP_WINDOW),
+        ("mailip:" + mail_ip_h, LOGIN_MAIL_IP_LIMIT, LOGIN_MAIL_IP_WINDOW),
+        ("mail:" + mail_h, LOGIN_MAIL_LIMIT, LOGIN_MAIL_WINDOW),
+    ]
 
 
 def login_link(token: str) -> str:
@@ -382,41 +426,50 @@ def api_login(req: LoginRequest, request: Request) -> dict:
     email = db.normalize_email(req.email)
     if not _EMAIL_RE.match(email):
         raise HTTPException(status_code=400, detail="invalid_email")
-    mail_key = "mail:" + hashlib.sha256(email.encode()).hexdigest()
-    if not _login_rate_ok("ip:" + client_ip(request), LOGIN_IP_LIMIT, LOGIN_IP_WINDOW) or \
-            not _login_rate_ok(mail_key, LOGIN_MAIL_LIMIT, LOGIN_MAIL_WINDOW):
+    rules = _login_rules(email, client_ip(request))
+    if not _login_rate_take(rules):
         raise HTTPException(status_code=429, detail="rate_limited")
     # Wallet des anfordernden Browsers an den Link binden (Login-CSRF, PR #93):
-    # nur genau dieses Wallet darf beim Einlösen verknüpft werden.
-    token = db.create_login_link(email, requester_token=wallet_token(request) or None)
+    # nur genau dieses Wallet darf beim Einlösen verknüpft werden. Die Nonce bekommt
+    # nur dieser Browser; ohne sie verlangt verify eine Bestätigung (Rest-CSRF).
+    token, nonce = db.create_login_link(email, requester_token=wallet_token(request) or None)
     try:
         mail.send(email, mail.login_message(login_link(token), db.LOGIN_TTL_S // 60))
     except mail.MailError as e:
+        _login_rate_give_back(rules)  # Fehlversuch zählt nicht gegen die Limits
         logger.error("[login] mail send failed: %s", e)
         raise HTTPException(status_code=502, detail="mail_failed") from e
     logger.info("[login] link sent")
-    return {"sent": True, "expires_in": db.LOGIN_TTL_S}
+    return {"sent": True, "expires_in": db.LOGIN_TTL_S, "login_nonce": nonce}
 
 
 @router.get("/api/login/verify")
-def api_login_verify(token: str, request: Request) -> dict:
+def api_login_verify(  # noqa: ANN201
+    request: Request, token: str, nonce: str | None = None, confirm: bool = False,
+):
     """Magic-Link einlösen (einmal, 15 min) -> Wallet-Token für das Konto mit dieser
     jetzt bestätigten Adresse.
 
-    X-Wallet-Token zählt nur, wenn es exakt das Token ist, mit dem der Link per
-    POST /api/login angefordert wurde (Login-CSRF, PR #93). Dann wird dieses Wallet
-    bestätigt bzw. in das Konto überführt (wallet_linked true). In jedem anderen
-    Fall (anderer Browser, fremdes Token, kein Token) bleibt das Wallet des Browsers
-    unberührt (wallet_linked false); die Seite zeigt dann vor dem Ersetzen ihres
-    gespeicherten Tokens, als wer sie angemeldet wird (email, maskiert).
-    Regeln in billing/db.py login_verified_email."""
-    link = db.consume_login_link(token)
+    nonce = login_nonce aus der Antwort von POST /api/login. Fehlt sie oder passt
+    sie nicht (Link in einem anderen Browser geöffnet, z. B. ein vom Angreifer an
+    SEINE Adresse angeforderter Link), wird der Link NICHT verbraucht: 409
+    {"error": "confirm_required", "email_masked": ...}; die Seite fragt "Anmelden
+    als <maske>?" und ruft bei Ja erneut mit confirm=1 auf (Login auf anderem
+    Gerät). Dann wird eingeloggt, ein Wallet dieses Browsers aber nie verknüpft.
+
+    Mit passender Nonce zählt X-Wallet-Token nur, wenn es exakt das Token ist, mit
+    dem der Link angefordert wurde (Login-CSRF, PR #93): dann wird dieses Wallet
+    bestätigt bzw. in das Konto überführt (wallet_linked true), sonst bleibt es
+    unberührt (wallet_linked false). Regeln in billing/db.py login_verified_email."""
+    link = db.consume_login_link(token, nonce=nonce, confirm=confirm)
     if link is None:
         raise HTTPException(status_code=400, detail="invalid_or_expired")
-    email, requester_hash = link
+    if link.status == "confirm_required":
+        return JSONResponse(status_code=409, content={
+            "error": "confirm_required", "email_masked": mask_email(link.email)})
     acc, wallet, code, linked = db.login_verified_email(
-        email, wallet_token=wallet_token(request) or None, requester_hash=requester_hash,
+        link.email, wallet_token=wallet_token(request) or None, requester_hash=link.requester_hash,
     )
     logger.info("[login] verified account %s (wallet_linked=%s)", acc, linked)
     return {"wallet_token": wallet, "recovery_url": _recovery_url(code), "email_verified": True,
-            "wallet_linked": linked, "email_masked": mask_email(email), **_wallet_view(acc)}
+            "wallet_linked": linked, "email_masked": mask_email(link.email), **_wallet_view(acc)}

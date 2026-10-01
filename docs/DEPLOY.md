@@ -182,9 +182,16 @@ zahlt bei Wallet-Räumen das Guthaben von Anfang an (kein Gratis-Teil).
 ### Login per Magic-Link
 
 `POST /api/login {email}` schickt über Resend einen Link `https://voicehook.ai/aufladen#login=<token>`
-(einmal, 15 Minuten; Ratenlimit 5 je IP in 10 min, 3 je Adresse in 15 min). Die Seite ruft damit
-`GET /api/login/verify?token=...` auf und bekommt ein Wallet-Token für das Konto mit dieser jetzt
-bestätigten Adresse. Das Wallet des Browsers (`X-Wallet-Token`) wird nur verknüpft, wenn es exakt das
+(einmal, 15 Minuten; Ratenlimit 5 je IP in 10 min (IPv6 je /64), 3 je Adresse und IP in 15 min,
+10 je Adresse in 60 min; fehlgeschlagener Mailversand zählt nicht). Die Antwort enthält eine
+`login_nonce`, die nur dieser Browser kennt. Die Seite ruft mit dem Link
+`GET /api/login/verify?token=...&nonce=...` auf und bekommt ein Wallet-Token für das Konto mit dieser
+jetzt bestätigten Adresse. Ohne passende Nonce (Link in einem anderen Browser geöffnet) wird der
+Link nicht verbraucht: 409 `confirm_required` mit maskierter Adresse; erst nach "Anmelden als ...?"
+und erneutem Aufruf mit `confirm=1` wird eingeloggt, ein Wallet dieses Browsers aber nie verknüpft
+(Schutz gegen Rest-Login-CSRF: ein vom Angreifer an seine Adresse angeforderter Link schaltet einen
+fremden Browser nicht mehr still in sein Konto). Jeder Login widerruft die älteren Recovery-Codes des
+Kontos. Das Wallet des Browsers (`X-Wallet-Token`) wird nur verknüpft, wenn es exakt das
 Token ist, mit dem der Link angefordert wurde (Hash in `login_links.requester_hash`, Schutz gegen
 Login-CSRF); sonst bleibt es unberührt und die Antwort sagt `wallet_linked: false`. Die Stripe-Mail ist nur eine unbestätigte Kontakt-Mail und verknüpft allein nie.
 Wird eine Adresse zum ersten Mal bestätigt, verlieren alle anderen Tokens der so übernommenen Konten
@@ -192,3 +199,12 @@ ihre Gültigkeit (wer bei Stripe eine fremde Adresse eintippt, behält keinen Zu
 unbestätigte Konten mit derselben Kontakt-Mail werden samt Saldo zusammengeführt. Einrichtung:
 Resend-Konto, Domain `voicehook.ai` dort verifizieren (SPF/DKIM), `RESEND_API_KEY` und optional
 `MAIL_FROM` in `/opt/voicehook/.env`, Agent neu starten.
+
+**Übergang beim Deploy (24 h):** Backend und Web (`aufladen.html`) gemeinsam ausrollen. Bis alle
+Browser die neue Seite haben (Cache, offene Tabs; spätestens nach 24 h), schickt eine alte Seite keine
+Nonce und kennt kein 409: ein Login-Link endet dort mit einem Fehler statt einer Rückfrage, der Nutzer
+lädt die Seite neu und klickt den Link erneut (der Link bleibt bei 409 gültig, 15 min). Links, die vor
+dem Deploy angefordert wurden, haben keine Nonce (Spalte `login_links.nonce_hash` wird beim Start
+ergänzt, Altbestand NULL) und gehen nur über die Rückfrage (`confirm=1`). In den ersten 24 h im Log
+auf gehäufte `GET /api/login/verify` mit 409 achten; danach ist der Übergang vorbei, es ist nichts
+zurückzubauen.
