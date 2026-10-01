@@ -320,7 +320,15 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
     'dp.cluster.sub': 'Fein verteilt oder zu größeren Flecken und Inseln gruppiert',
     'dp.sat.sub': 'Einzelne Punkte, die frei um den Ring schweben',
     'dp.res.sub': 'HD ist schärfer, SD spart Akku',
-    'dp.akku.sub': 'Wie viel Rechenleistung der Ring nutzen darf'
+    'dp.akku.sub': 'Wie viel Rechenleistung der Ring nutzen darf',
+    'dp.rand': 'Zufall', 'dp.rand.title': 'Neue harmonische Farben für das gewählte Muster',
+    'dp.my': 'Meine Styles', 'dp.save': 'Style speichern', 'dp.my.name': 'Name des Styles',
+    'dp.my.sub': 'Speichert Farben, Muster, alle Regler und die Qualität. Ein Klick auf die Kachel lädt den Style wieder.',
+    'dp.my.empty': 'Noch keine eigenen Styles', 'dp.my.default': 'Mein Style {n}',
+    'dp.my.full': 'Es passen 12 eigene Styles hierher. Lösche einen, um Platz zu schaffen.',
+    'dp.my.nospace': 'Der Browser-Speicher ist voll, der Style wurde nicht gespeichert.',
+    'dp.my.del': '„{name}“ löschen?', 'dp.my.delbtn': 'Löschen', 'dp.my.delx': 'Style löschen',
+    'dp.my.ren': 'Umbenennen', 'dp.my.ok': 'Speichern', 'dp.my.cancel': 'Abbrechen'
   });
   Object.assign(D.en, {
     'dp.btn': 'Design', 'dp.title': 'Design', 'dp.close': 'Close', 'dp.styles': 'Styles', 'dp.ringsec': 'Dome',
@@ -343,7 +351,15 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
     'dp.cluster.sub': 'Finely scattered or grouped into larger spots and islands',
     'dp.sat.sub': 'Single dots floating freely around the ring',
     'dp.res.sub': 'HD is sharper, SD saves battery',
-    'dp.akku.sub': 'How much computing power the ring may use'
+    'dp.akku.sub': 'How much computing power the ring may use',
+    'dp.rand': 'Shuffle', 'dp.rand.title': 'New harmonious colors for the selected pattern',
+    'dp.my': 'My styles', 'dp.save': 'Save style', 'dp.my.name': 'Style name',
+    'dp.my.sub': 'Saves colors, pattern, all sliders and quality. Click the tile to load the style again.',
+    'dp.my.empty': 'No custom styles yet', 'dp.my.default': 'My style {n}',
+    'dp.my.full': 'There is room for 12 custom styles. Delete one to make space.',
+    'dp.my.nospace': 'Browser storage is full, the style was not saved.',
+    'dp.my.del': 'Delete “{name}”?', 'dp.my.delbtn': 'Delete', 'dp.my.delx': 'Delete style',
+    'dp.my.ren': 'Rename', 'dp.my.ok': 'Save', 'dp.my.cancel': 'Cancel'
   });
   // UI-Paket 8: Hinweis-"i" und Musik-Leiste minimieren.
   Object.assign(D.de, {
@@ -1361,6 +1377,38 @@ body.theme-light .vh-dp-use[data-lvl="low"] b { color: #3d8a1e; }
 body.theme-light .vh-dp-use[data-lvl="mid"] b { color: #8a6d0a; }
 body.theme-light .vh-dp-use[data-lvl="high"] b { color: #b8641a; }
 body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
+/* Zufall + Meine Styles (01.10.): Mini-Knöpfe in der Abschnittszeile, Kacheln wie Mockup A. */
+.vh-dp-sechd { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 10px 0 5px; }
+.vh-dp-sechd .vh-dp-sec { margin: 0; min-width: 0; }
+.vh-dp-mini { appearance: none; display: inline-flex; align-items: center; gap: 4px; min-height: 26px; padding: 3px 9px; margin: 0; border-radius: 8px; cursor: pointer;
+  font: inherit; font-size: 10.5px; line-height: 1; white-space: nowrap; color: inherit; background: var(--dp-card); border: 1px solid var(--dp-line); transition: border-color .15s, background .15s, color .15s; }
+.vh-dp-mini svg { width: 13px; height: 13px; flex-shrink: 0; }
+.vh-dp-mini:hover { border-color: var(--vh-btn-border-hov, rgba(255,255,255,0.3)); }
+.vh-dp-mini:focus-visible { outline: 2px solid var(--dp-acc); outline-offset: 1px; }
+.vh-dp-mini.on, .vh-dp-mini.vh-dp-ok { border-color: var(--dp-acc); color: var(--dp-acc); background: var(--dp-cardon); }
+.vh-dp-mini:disabled { opacity: 0.45; cursor: default; }
+.vh-dp-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0 0 6px; }
+.vh-dp-edit[hidden] { display: none; }
+.vh-dp-edit-q { flex: 1 1 100%; font-size: 10.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.vh-dp-edit-q:empty { display: none; }
+.vh-dp-edit input { flex: 1 1 110px; min-width: 0; height: 26px; padding: 0 8px; border-radius: 8px; font: inherit; font-size: 11px; color: inherit;
+  background: var(--dp-track); border: 1px solid var(--dp-line); outline: none; }
+.vh-dp-edit input:focus-visible { border-color: var(--dp-acc); }
+.vh-dp-edit input[hidden] { display: none; }
+.vh-dp-note { margin: 0 0 6px; font-size: 9.5px; line-height: 1.35; color: var(--dp-mut); }
+.vh-dp-note[hidden] { display: none; }
+.vh-dp-empty { font-size: 9.5px; color: var(--dp-mut); margin: 0 0 2px; }
+.vh-dp-empty[hidden], .vh-dp-mine:empty { display: none; }
+.vh-dp-my { position: relative; min-width: 0; }
+.vh-dp-my .vh-dp-sw-img { background: var(--img) center / cover no-repeat, var(--c, #000); }
+body.theme-light .vh-dp-my .vh-dp-sw-img { background: var(--img) center / cover no-repeat, var(--c, #f4f4f7); }
+.vh-dp-my-b { position: absolute; top: 1px; width: 20px; height: 20px; padding: 0; margin: 0; display: flex; align-items: center; justify-content: center;
+  appearance: none; border: 0; border-radius: 50%; cursor: pointer; color: #f4f4f7; background: rgba(10,12,16,0.62); opacity: 0.8; }
+.vh-dp-my-b svg { width: 10px; height: 10px; }
+.vh-dp-my-b:hover, .vh-dp-my-b:focus-visible { opacity: 1; }
+.vh-dp-my-b:focus-visible { outline: 2px solid var(--dp-acc); outline-offset: 0; }
+.vh-dp-my-x { right: 1px; }
+.vh-dp-my-r { left: 1px; }
 .vh-dp-reset { appearance: none; margin-top: 10px; width: 100%; font: inherit; font-size: 11px; padding: 7px 10px; border-radius: 8px; cursor: pointer;
   background: transparent; color: inherit; border: 1px solid var(--vh-btn-border-hov, rgba(255,255,255,0.3)); }
 .vh-dp-reset:hover { background: var(--vh-btn-bg-hover); }
@@ -1402,7 +1450,7 @@ body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
 <div id="vh-design-panel" role="dialog" aria-labelledby="vh-dp-title" hidden>
   <div class="vh-dp-head"><span id="vh-dp-title" data-i18n="dp.title">Design</span>
     <button type="button" class="vh-dp-x" id="vh-dp-close" aria-label="Schließen" data-i18n-aria="dp.close">&#215;</button></div>
-  <div class="vh-dp-sec" data-i18n="dp.styles">Styles</div>
+  <div class="vh-dp-sechd"><div class="vh-dp-sec" data-i18n="dp.styles">Styles</div><button type="button" class="vh-dp-mini" id="vh-dp-rand" title="Neue harmonische Farben für das gewählte Muster" data-i18n-title="dp.rand.title"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="2" y="2" width="12" height="12" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="5.3" cy="5.3" r="1.05" fill="currentColor"/><circle cx="10.7" cy="5.3" r="1.05" fill="currentColor"/><circle cx="8" cy="8" r="1.05" fill="currentColor"/><circle cx="5.3" cy="10.7" r="1.05" fill="currentColor"/><circle cx="10.7" cy="10.7" r="1.05" fill="currentColor"/></svg><span data-i18n="dp.rand">Zufall</span></button></div>
   <div class="vh-dp-styles">
       <button type="button" class="vh-dp-sw" data-pal="ice" style="--img-d:url(/img/styles/ice-dark.webp);--img-l:url(/img/styles/ice-light.webp);--c:linear-gradient(120deg,#7fb8e8,#b8e6f5,#ffffff)" data-i18n-title="style.ice" data-i18n-aria="style.ice" title="ice" aria-label="ice"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.ice">ice</span></button>
       <button type="button" class="vh-dp-sw" data-pal="earth" style="--img-d:url(/img/styles/earth-dark.webp);--img-l:url(/img/styles/earth-light.webp);--c:linear-gradient(120deg,#1e5fb5,#2d8c4a,#caa56a)" data-i18n-title="style.earth" data-i18n-aria="style.earth" title="earth" aria-label="earth"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.earth">earth</span></button>
@@ -1417,6 +1465,12 @@ body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
       <button type="button" class="vh-dp-sw" data-pal="tiger" style="--img-d:url(/img/styles/tiger-dark.webp);--img-l:url(/img/styles/tiger-light.webp);--c:linear-gradient(120deg,#ff8c1a,#a04010,#0a0a0a)" data-i18n-title="style.tiger" data-i18n-aria="style.tiger" title="tiger" aria-label="tiger"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.tiger">tiger</span></button>
       <button type="button" class="vh-dp-sw" data-pal="glacier" style="--img-d:url(/img/styles/glacier-dark.webp);--img-l:url(/img/styles/glacier-light.webp);--c:linear-gradient(120deg,#e8fbff,#2fb2dc,#1650c8)" data-i18n-title="style.glacier" data-i18n-aria="style.glacier" title="glacier" aria-label="glacier"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.glacier">glacier</span></button>
   </div>
+  <div class="vh-dp-sechd"><div class="vh-dp-sec"><span data-i18n="dp.my">Meine Styles</span><button type="button" class="vh-i" data-hint="dp-my" aria-controls="vh-dp-sub-my" aria-expanded="false" title="Hinweis anzeigen" aria-label="Hinweis anzeigen"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/><path d="M8 7.2v4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></div><button type="button" class="vh-dp-mini" id="vh-dp-save"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 2.5h8a.5.5 0 0 1 .5.5v10.6l-4.5-3-4.5 3V3a.5.5 0 0 1 .5-.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg><span data-i18n="dp.save">Style speichern</span></button></div>
+  <div class="vh-dp-sub vh-dp-sub-sec" id="vh-dp-sub-my" data-i18n="dp.my.sub" hidden></div>
+  <div class="vh-dp-edit" id="vh-dp-edit" hidden><span class="vh-dp-edit-q" id="vh-dp-edit-q"></span><input type="text" id="vh-dp-name" maxlength="24" autocomplete="off" spellcheck="false" aria-label="Name des Styles" data-i18n-aria="dp.my.name"><button type="button" class="vh-dp-mini vh-dp-ok" id="vh-dp-edit-ok" data-i18n="dp.my.ok">Speichern</button><button type="button" class="vh-dp-mini" id="vh-dp-edit-no" data-i18n="dp.my.cancel">Abbrechen</button></div>
+  <div class="vh-dp-note" id="vh-dp-note" role="status" aria-live="polite" hidden></div>
+  <div class="vh-dp-styles vh-dp-mine" id="vh-dp-my"></div>
+  <div class="vh-dp-empty" id="vh-dp-my-empty" data-i18n="dp.my.empty">Noch keine eigenen Styles</div>
   <div class="vh-dp-sec" data-i18n="dp.ringsec">Kringel</div>
     <label class="vh-dp-row"><span class="vh-dp-lbl"><span class="vh-dp-lt" data-i18n="dp.zoom">Zoom</span><button type="button" class="vh-i" data-hint="dp-zoom" aria-controls="vh-dp-sub-zoom" aria-expanded="false" title="Hinweis anzeigen" aria-label="Hinweis anzeigen"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/><path d="M8 7.2v4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></span><input id="zoom-ctl" type="range" min="0.5" max="4" step="0.01" value="1"><output class="vh-dp-val"></output><span class="vh-dp-sub" id="vh-dp-sub-zoom" data-i18n="dp.zoom.sub" hidden></span></label>
     <label class="vh-dp-row"><span class="vh-dp-lbl"><span class="vh-dp-lt" data-i18n="dp.size">Punktgröße</span><button type="button" class="vh-i" data-hint="dp-size" aria-controls="vh-dp-sub-size" aria-expanded="false" title="Hinweis anzeigen" aria-label="Hinweis anzeigen"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.75" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/><path d="M8 7.2v4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></span><input id="size" type="range" min="0.02" max="0.20" step="0.005" value="0.155"><output class="vh-dp-val"></output><span class="vh-dp-sub" id="vh-dp-sub-size" data-i18n="dp.size.sub" hidden></span></label>
@@ -3929,6 +3983,206 @@ function loadState() {
   el.addEventListener('input', saveState);
 });
 
+// ── Zufallsfarben + eigene Styles (Oliver 01.10.: "random farben switcher" und
+// "style speichern", "das soll bei allen Mustern klappen") ──────────────────
+// Zufall färbt das Muster des gewählten Styles neu: Bucket-Zahl, Rollen und
+// Helligkeitsstufen bleiben (Luminanz je Bucket wie im Original, damit Fell-
+// und Gletscherkontrast, Weiß- und Schwarzanteil gleich bleiben), nur die
+// Farbtöne kommen aus einem harmonischen Schema. Verlaufs-Styles ohne Buckets
+// (Eis, Feuer, Wasser, Luft, Wald) bekommen eine Insel-Palette mit 3 bis 5
+// Farben, selten eines der Muster. Der alte Würfel (#btn-rand, oben) würfelte
+// freie HSL-Werte ohne Schema und Helligkeitsbezug und bleibt unberührt.
+const VH_RND_KEY = 'vh-rnd-pal-v1';
+const VH_RND_SCHEMES = {
+  analog: [0, 1 / 12, -1 / 12, 2 / 12, -2 / 12],
+  complementary: [0, 0.5, 0.04, 0.46, -0.04],
+  triadic: [0, 1 / 3, 2 / 3],
+  split: [0, 5 / 12, 7 / 12],
+};
+const VH_RND_PATTERNS = ['zebra', 'giraffe', 'leopard', 'tiger', 'glacier'];
+function vhHslRgb(h, s, l) {
+  const a = s * Math.min(l, 1 - l), f = (n) => { const k = (n + h * 12) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
+  return [f(0), f(8), f(4)];
+}
+function vhLum(rgb) { return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]; }
+// Lightness, bei der Farbton h mit Sättigung s die Luminanz Y hat (monoton in l).
+function vhSolveL(h, s, Y) {
+  let lo = 0, hi = 1;
+  for (let k = 0; k < 24; k++) { const m = (lo + hi) / 2; if (vhLum(vhHslRgb(h, s, m)) < Y) lo = m; else hi = m; }
+  return Math.round((lo + hi) * 500) / 1000;
+}
+const vhWrap1 = (h) => ((h % 1) + 1) % 1;
+const vhR3 = (v) => Math.round(v * 1000) / 1000;
+function vhRgbHex(rgb) { return '#' + rgb.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join(''); }
+// Sprecherfarben aus derselben Palette: drei Töne des Schemas, gestaffelte
+// Helligkeit, damit User, Delta und Agent auch bei engem Schema klar getrennt sind.
+function vhRandomSpeakers(pool) {
+  // User = Grundton, Delta = am weitesten entfernter Ton des Schemas, Agent = der
+  // Ton mit dem größten Abstand zu beiden (bei Komplementär nah an einem: dann trennt die Helligkeit).
+  const cd = (a, b) => { const d = Math.abs(a - b) % 1; return Math.min(d, 1 - d); };
+  const hu = pool[0];
+  const hd = pool.slice(1).reduce((m, h) => cd(h, hu) > cd(m, hu) ? h : m, pool[1] ?? hu);
+  const ha = pool.filter(h => h !== hu && h !== hd).reduce((m, h) => Math.min(cd(h, hu), cd(h, hd)) > Math.min(cd(m, hu), cd(m, hd)) ? h : m, vhWrap1(hu + 0.5));
+  const hs = [hu, hd, ha];
+  const user = vhHslRgb(hs[0], 0.78, 0.62), delta = vhHslRgb(hs[1], 0.85, 0.55);
+  let agent = vhHslRgb(hs[2], 0.60, 0.78);
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  if (Math.min(dist(agent, user), dist(agent, delta)) < 0.25) agent = vhHslRgb(hs[2], 0.45, 0.86);
+  return { user: vhRgbHex(user), delta: vhRgbHex(delta), agent: vhRgbHex(agent) };
+}
+// Inseln: größte Fläche an die dunkelste Farbe (wie Ozean bei Erde, Tiefe bei
+// Lagune), sonst kippt der Ring bei hellen Zufallsfarben ins Blasse.
+function vhDarkHeavy(weights, Y) {
+  const w = weights.slice().sort((a, b) => b - a);
+  const ord = Y.map((y, k) => k).sort((a, b) => Y[a] - Y[b]);
+  const out = new Array(weights.length);
+  ord.forEach((k, r) => { out[k] = w[r]; });
+  return out;
+}
+// Neue Palette aus dem Muster von `origin` (Style-Schlüssel). rng für Tests.
+function vhRandomPalette(origin, rng, forcePattern) {
+  rng = rng || Math.random;
+  const o0 = PALETTES[origin] || PALETTES.ice;
+  const names = Object.keys(VH_RND_SCHEMES);
+  const scheme = names[Math.floor(rng() * names.length)];
+  const h0 = rng();
+  const pool = VH_RND_SCHEMES[scheme].map(d => vhWrap1(h0 + d));
+  let src = o0, patternFrom = origin;
+  // Verlaufs-Style: meist Inseln, selten (12 %) ein Muster
+  if (!o0.discrete && forcePattern !== 'islands' && (forcePattern || rng() < 0.12)) {
+    patternFrom = forcePattern || VH_RND_PATTERNS[Math.floor(rng() * VH_RND_PATTERNS.length)];
+    src = PALETTES[patternFrom];
+  }
+  const jit = () => (rng() - 0.5) * 0.03;
+  let disc, litMul, bright;
+  if (src.discrete) {
+    const d = src.discrete, n = d.hues.length;
+    const Y0 = d.hues.map((h, k) => vhLum(vhHslRgb(h, d.sats[k], d.lits[k])));
+    const hues = [], sats = [], lits = [];
+    const span = 0.06 + rng() * 0.12;
+    for (let k = 0; k < n; k++) {
+      let h;
+      if (n > 6) {   // Gletscher: sanfte Tonrampe entlang der Helligkeitsstufen
+        h = vhWrap1(h0 + span * (k / (n - 1) - 0.5));
+      } else h = vhWrap1(pool[k % pool.length] + jit());
+      // Graue Buckets (Zebra) bekommen Farbe, sonst Sättigung wie im Original
+      const s0 = d.sats[k];
+      const s = s0 < 0.15 ? (Y0[k] > 0.5 ? 0.30 + rng() * 0.25 : 0.45 + rng() * 0.30)
+                          : Math.max(0.35, Math.min(1, s0 * (0.85 + rng() * 0.25)));
+      // Inseln: Helligkeit wie Erde/Lagune höchstens 0,55 (darüber pastellig und im
+      // Render ohnehin auf 0,62 gekappt); Muster behalten die volle Rampe.
+      const L = vhSolveL(h, s, Y0[k]);
+      hues.push(vhR3(h)); sats.push(vhR3(s)); lits.push(src.spatial ? L : Math.min(0.55, L));
+    }
+    let weights = d.weights ? d.weights.slice() : hues.map(() => 1 / n);
+    if (!src.spatial) {   // Inseln: zufällige Flächenanteile, jede Farbe >= 8 %
+      const raw = hues.map(() => 0.5 + rng());
+      const sum = raw.reduce((a, b) => a + b, 0);
+      weights = raw.map(v => Math.max(0.08, v / sum));
+      const s2 = weights.reduce((a, b) => a + b, 0);
+      weights = vhDarkHeavy(weights.map(v => vhR3(v / s2)), Y0);
+    }
+    disc = { hues, sats, lits, weights };
+    if (d.scale) disc.scale = d.scale;
+    litMul = src.litMul ?? 1;
+    bright = VH_STYLE_BRIGHT[patternFrom] || { d: 1.85, l: 1.85 };
+  } else {
+    // Inseln aus Verlaufs-Style: 3 bis 5 Farben, Luminanz-Staffel wie Erde/Lagune
+    const n = 3 + Math.floor(rng() * 3);
+    const hues = [], sats = [], lits = [];
+    const Ys = [];
+    for (let k = 0; k < n; k++) Ys.push(0.16 + 0.32 * (k / (n - 1)));
+    for (let k = Ys.length - 1; k > 0; k--) { const j = Math.floor(rng() * (k + 1)); [Ys[k], Ys[j]] = [Ys[j], Ys[k]]; }
+    for (let k = 0; k < n; k++) {
+      const h = vhWrap1(pool[k % pool.length] + jit());
+      const s = 0.60 + rng() * 0.35;
+      hues.push(vhR3(h)); sats.push(vhR3(s)); lits.push(Math.min(0.55, vhSolveL(h, s, Ys[k])));
+    }
+    const raw = hues.map(() => 0.5 + rng());
+    const sum = raw.reduce((a, b) => a + b, 0);
+    disc = { hues, sats, lits, weights: vhDarkHeavy(raw.map(v => vhR3(v / sum)), Ys), scale: vhR3(0.6 + rng() * 0.4) };
+    litMul = 0.62;
+    bright = { d: 1.30, l: 1.70 };
+  }
+  const acc = pool[pool.length - 1];
+  const mouse = vhHslRgb(acc, 0.9, 0.55);
+  return {
+    v: 1, origin, patternFrom, scheme,
+    hueStart: vhR3(h0), hueRange: 0.05, satFloor: 0.6, litMul,
+    satH: vhR3(acc), satS: vhR3(0.70 + rng() * 0.30), satL: vhR3(0.48 + rng() * 0.18),
+    mR: vhR3(mouse[0]), mG: vhR3(mouse[1]), mB: vhR3(mouse[2]),
+    spatial: src.spatial || undefined, furSoftness: src.furSoftness || 0,
+    discrete: disc, spk: vhRandomSpeakers(pool), bright,
+  };
+}
+// Dynamische Paletten ('rnd', 'my-<id>') in alle Style-Tabellen eintragen.
+function vhRegisterPalette(key, pal) {
+  if (!pal || !pal.discrete || !Array.isArray(pal.discrete.hues)) return false;
+  PALETTES[key] = pal;
+  VH_SPEAKER_COLORS[key] = pal.spk || VH_SPEAKER_COLORS[pal.patternFrom] || VH_SPEAKER_COLORS.ice;
+  VH_STYLE_BRIGHT[key] = pal.bright || VH_STYLE_BRIGHT[pal.patternFrom] || { d: 1.85, l: 1.85 };
+  return true;
+}
+const vhOriginOf = (k) => (PALETTES[k] && PALETTES[k].origin) || k;
+// Weicher Übergang beim Neufärben: gleiche Bucket-Zahl -> Töne, Sättigung und
+// Helligkeit gleiten in ~450 ms (Ton auf kürzestem Weg).
+let vhPalTween = 0;
+function vhTweenDiscrete(fromH, fromS, fromL) {
+  cancelAnimationFrame(vhPalTween);
+  const toH = discreteHues, toS = discreteSats, toL = discreteLits;
+  if (!fromH || !toH || fromH.length !== toH.length) return;
+  const t0 = performance.now(), D = 450;
+  const step = (now) => {
+    if (discreteHues !== toH && discreteHues && discreteHues.__tw !== toH) return;   // anderer Style dazwischen
+    const t = Math.min(1, (now - t0) / D), e = t * t * (3 - 2 * t);
+    if (t >= 1) { discreteHues = toH; discreteSats = toS; discreteLits = toL; return; }
+    const H = toH.map((h, k) => { let dh = h - fromH[k]; dh -= Math.round(dh); return vhWrap1(fromH[k] + dh * e); });
+    H.__tw = toH;
+    discreteHues = H;
+    discreteSats = toS.map((s, k) => fromS[k] + (s - fromS[k]) * e);
+    discreteLits = toL.map((l, k) => fromL[k] + (l - fromL[k]) * e);
+    vhPalTween = requestAnimationFrame(step);
+  };
+  discreteHues = fromH.slice(); discreteHues.__tw = toH; discreteSats = fromS.slice(); discreteLits = fromL.slice();
+  vhPalTween = requestAnimationFrame(step);
+}
+function vhApplyRandom(rng, forcePattern) {
+  const from = discreteHues ? [discreteHues.slice(), discreteSats.slice(), discreteLits.slice()] : null;
+  const prevSpatial = spatialMode;
+  const pal = vhRandomPalette(vhOriginOf(lastPalette), rng, forcePattern);
+  vhRegisterPalette('rnd', pal);
+  try { localStorage.setItem(VH_RND_KEY, JSON.stringify(pal)); } catch (_) {}
+  applyPalette('rnd');
+  lastPalette = 'rnd';
+  vhUserPalettePinned = true;
+  if (from && prevSpatial === spatialMode) vhTweenDiscrete(from[0], from[1], from[2]);
+  saveState();
+  return pal;
+}
+window.vhApplyRandom = vhApplyRandom;
+window.vhRandomPalette = vhRandomPalette;
+// Lesezugriff für Tests/Diagnose: aktiver Style und seine Palette
+window.vhStyleState = () => ({ palette: lastPalette, pal: PALETTES[lastPalette] || null,
+  hues: discreteHues && Array.from(discreteHues), sats: discreteSats && Array.from(discreteSats), lits: discreteLits && Array.from(discreteLits),
+  spatial: spatialMode, litMul, colorBoost, n: activeN, size: mat.size, intensity, ringFx, satFraction, cluster: vhCluster, zoom: vhZoomTarget, zoomUser: vhZoomUser, hd: hdOn, akku: vhAkku });
+// Zuletzt gewürfelte Palette und eigene Styles VOR loadState registrieren,
+// damit ein gespeichertes palette:'rnd' / 'my-<id>' den Reload überlebt.
+try { const r = JSON.parse(localStorage.getItem(VH_RND_KEY) || 'null'); if (r) vhRegisterPalette('rnd', r); } catch (_) {}
+// Eigene Styles: localStorage 'vh-my-styles-v1' = { v: 1, items: [...] }.
+// Migration: ältere/fremde Formen (nacktes Array) werden in v1 überführt.
+const VH_MY_KEY = 'vh-my-styles-v1';
+const VH_MY_MAX = 12;
+function vhMyLoad() {
+  let raw = null; try { raw = JSON.parse(localStorage.getItem(VH_MY_KEY) || 'null'); } catch (_) {}
+  let items = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.items) ? raw.items : []);
+  items = items.filter(it => it && typeof it.id === 'string' && it.vals);
+  return { v: 1, items };
+}
+function vhMyStore(st) {
+  try { localStorage.setItem(VH_MY_KEY, JSON.stringify({ v: 1, items: st.items })); return true; } catch (_) { return false; }
+}
+try { vhMyLoad().items.forEach(it => { if (it.palette) vhRegisterPalette('my-' + it.id, it.palette); }); } catch (_) {}
+
 applyPalette('ice');
 loadState();   // überschreibt Defaults mit gespeichertem State falls vorhanden
 
@@ -5898,11 +6152,17 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
   };
   // Styles: dieselbe Quelle wie das Foot-Menü (Klick dort ausführen), danach speichern.
   const sws = [...panel.querySelectorAll('.vh-dp-sw')];
+  // Aktiver eigener Style (Kachel markiert); ein fester Style oder Zufall hebt ihn auf.
+  let activeMy = (typeof lastPalette === 'string' && lastPalette.startsWith('my-')) ? lastPalette.slice(3) : null;
   const markSw = () => {
-    sws.forEach(b => b.classList.toggle('on', b.dataset.pal === lastPalette));
+    if (activeMy && !String(lastPalette).startsWith('my-') && !vhMyLoad().items.some(x => x.id === activeMy && x.pal === lastPalette)) activeMy = null;
+    panel.querySelectorAll('.vh-dp-sw').forEach(b => b.classList.toggle('on', b.dataset.my ? b.dataset.my === activeMy : (!activeMy && b.dataset.pal === lastPalette)));
+    const rb = document.getElementById('vh-dp-rand');
+    if (rb) rb.classList.toggle('on', lastPalette === 'rnd');
   };
   sws.forEach(b => b.addEventListener('click', () => {
     const foot = document.querySelector(`.vh-foot-style[data-pal="${b.dataset.pal}"]`);
+    activeMy = null;
     if (foot) foot.click(); else { applyPalette(b.dataset.pal); lastPalette = b.dataset.pal; vhUserPalettePinned = true; }
     saveState(); markSw();
   }));
@@ -6004,11 +6264,189 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
   btn.addEventListener('click', (e) => { e.stopPropagation(); open(panel.hidden); });
   document.getElementById('vh-dp-close').addEventListener('click', () => open(false));
   window.addEventListener('keydown', (e) => {   // vor dem Esc des Transkript-Vollbilds
-    if (e.key === 'Escape' && !panel.hidden) { e.stopImmediatePropagation(); open(false); }
+    if (e.key === 'Escape' && !panel.hidden) {
+      e.stopImmediatePropagation();
+      // Esc im Namensfeld/Löschen-Dialog schließt nur die Eingabezeile
+      if (e.target && e.target.closest && e.target.closest('#vh-dp-edit')) { e.preventDefault(); closeEdit(); return; }
+      open(false);
+    }
   }, true);
   document.addEventListener('pointerdown', (e) => {
     if (!panel.hidden && !panel.contains(e.target) && !btn.contains(e.target)) open(false);
   });
+  // ── Zufall + Meine Styles (01.10.) ─────────────────────────────────────────
+  const randBtn = document.getElementById('vh-dp-rand');
+  if (randBtn) randBtn.addEventListener('click', () => { activeMy = null; vhApplyRandom(); markSw(); });
+  const myGrid = document.getElementById('vh-dp-my');
+  const myEmpty = document.getElementById('vh-dp-my-empty');
+  const saveBtn = document.getElementById('vh-dp-save');
+  const edit = document.getElementById('vh-dp-edit');
+  const editQ = document.getElementById('vh-dp-edit-q');
+  const nameIn = document.getElementById('vh-dp-name');
+  const okBtn = document.getElementById('vh-dp-edit-ok');
+  const noBtn = document.getElementById('vh-dp-edit-no');
+  const note = document.getElementById('vh-dp-note');
+  const VAL_IDS = ['size', 'particle-count', 'brightness', 'fx-intensity', 'ring-fx', 'sat-amount', 'cluster'];
+  const ICON_X = '<svg viewBox="0 0 10 10" aria-hidden="true" focusable="false"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  const ICON_PEN = '<svg viewBox="0 0 10 10" aria-hidden="true" focusable="false"><path d="M1.6 8.4l.5-2.1L6.6 1.8l1.6 1.6-4.5 4.5z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+  let editMode = null, editId = null;
+  const showNote = (txt) => { if (!note) return; note.textContent = txt || ''; note.hidden = !txt; };
+  // Vorschau: aktuelles Bild des Rings (direkt nach render, ohne preserveDrawingBuffer),
+  // Ring per Vordergrund-Pixeln finden, quadratisch zuschneiden, 120 px webp.
+  const snapThumb = () => {
+    try {
+      renderer.render(scene, camera);
+      const src = renderer.domElement, W = src.width, H = src.height;
+      const sw = 200, sh = Math.max(1, Math.round(H * sw / W));
+      const c1 = document.createElement('canvas'); c1.width = sw; c1.height = sh;
+      const x1 = c1.getContext('2d', { willReadFrequently: true }); x1.drawImage(src, 0, 0, sw, sh);
+      const d = x1.getImageData(0, 0, sw, sh).data;
+      const light = document.body.classList.contains('theme-light');
+      const xs = [], ys = [];
+      for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
+        const i = (y * sw + x) * 4;
+        const diff = light ? Math.abs(d[i] - 244) + Math.abs(d[i + 1] - 244) + Math.abs(d[i + 2] - 247) : d[i] + d[i + 1] + d[i + 2];
+        if (diff > 30) { xs.push(x); ys.push(y); }
+      }
+      let cx = sw / 2, cy = sh / 2, r = Math.min(sw, sh) * 0.4;
+      if (xs.length > 50) {
+        const med = (a) => a.slice().sort((p, q) => p - q)[a.length >> 1];
+        cx = med(xs); cy = med(ys);
+        const ds = xs.map((x, k) => Math.hypot(x - cx, ys[k] - cy)).sort((p, q) => p - q);
+        r = ds[Math.floor(ds.length * 0.97)] + 3;
+      }
+      const k = W / sw;
+      const c2 = document.createElement('canvas'); c2.width = 120; c2.height = 120;
+      const x2 = c2.getContext('2d');
+      x2.fillStyle = light ? '#f4f4f7' : '#000'; x2.fillRect(0, 0, 120, 120);
+      x2.drawImage(src, (cx - r) * k, (cy - r) * k, 2 * r * k, 2 * r * k, 0, 0, 120, 120);
+      let url = c2.toDataURL('image/webp', 0.8);
+      if (!url.startsWith('data:image/webp')) url = c2.toDataURL('image/png');
+      return url;
+    } catch (_) { return ''; }
+  };
+  const capture = (name) => {
+    const vals = {};
+    VAL_IDS.forEach(id => { const el = document.getElementById(id); if (el) vals[id] = el.value; });
+    const p = PALETTES[lastPalette];
+    const dyn = !!(p && p.origin);
+    return {
+      id: Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), name, t: Date.now(),
+      pal: dyn ? null : lastPalette, palette: dyn ? JSON.parse(JSON.stringify(p)) : null,
+      // Partikelzahl exakt: das Mobil-Profil setzt 0,11, der Regler zeigt gerastert 0,10
+      vals, n: activeN, zoom: vhZoomUser ? Math.round(vhZoomTarget * 100) / 100 : null,
+      hd: !!hdOn, akku: vhAkku, akkuCustom: isCustom(), img: snapThumb(),
+    };
+  };
+  const loadMy = (it) => {
+    const key = it.palette ? 'my-' + it.id : it.pal;
+    if (it.palette) vhRegisterPalette(key, it.palette);
+    if (key && PALETTES[key]) { applyPalette(key); lastPalette = key; vhUserPalettePinned = true; }
+    activeMy = it.id;
+    if (it.akku && VH_AKKU[it.akku]) setAkku(it.akku);
+    presetting = true;
+    VAL_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el || it.vals[id] === undefined) return;
+      el.value = String(it.vals[id]); el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    presetting = false;
+    if (it.n > 0 && it.n <= N) activeN = it.n;
+    // Zeichenbereich neu aus der Stufe ableiten lassen (Eco kappt die Partikel; der
+    // Regler-Listener setzt activeN ungekappt, sonst decken Restpunkte im hellen Theme).
+    vhDrawN = -1;
+    try { if (it.akkuCustom) localStorage.setItem(VH_AKKU_CUSTOM_KEY, '1'); else localStorage.removeItem(VH_AKKU_CUSTOM_KEY); } catch (_) {}
+    hdOn = it.hd !== false; applyHd();
+    if (it.zoom) vhSetZoomTarget(it.zoom, true);
+    else { vhZoomUser = false; vhZoomTarget = vhZoomDefault; }
+    zoomCtl.value = String(vhZoomTarget); syncOut(zoomCtl);
+    ranges.forEach(syncOut);
+    markAkku(); markSw(); saveState();
+  };
+  const renderMy = () => {
+    const st = vhMyLoad();
+    myGrid.textContent = '';
+    st.items.forEach(it => {
+      const key = it.palette ? 'my-' + it.id : it.pal;
+      const wrap = document.createElement('div'); wrap.className = 'vh-dp-my';
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'vh-dp-sw';
+      b.dataset.pal = key; b.dataset.my = it.id; b.title = it.name; b.setAttribute('aria-label', it.name);
+      if (it.img) b.style.setProperty('--img', 'url("' + it.img + '")');
+      const im = document.createElement('span'); im.className = 'vh-dp-sw-img'; im.setAttribute('aria-hidden', 'true');
+      const nm = document.createElement('span'); nm.className = 'vh-dp-sw-name'; nm.textContent = it.name;
+      b.append(im, nm);
+      b.addEventListener('click', () => { closeEdit(); const cur = vhMyLoad().items.find(x => x.id === it.id); if (cur) loadMy(cur); });
+      const x = document.createElement('button'); x.type = 'button'; x.className = 'vh-dp-my-b vh-dp-my-x';
+      x.innerHTML = ICON_X; x.title = vhT('dp.my.delx'); x.setAttribute('aria-label', vhT('dp.my.delx') + ': ' + it.name);
+      x.addEventListener('click', (e) => { e.stopPropagation(); openEdit('del', it.id); });
+      const r = document.createElement('button'); r.type = 'button'; r.className = 'vh-dp-my-b vh-dp-my-r';
+      r.innerHTML = ICON_PEN; r.title = vhT('dp.my.ren'); r.setAttribute('aria-label', vhT('dp.my.ren') + ': ' + it.name);
+      r.addEventListener('click', (e) => { e.stopPropagation(); openEdit('ren', it.id); });
+      wrap.append(b, r, x);
+      myGrid.appendChild(wrap);
+    });
+    myEmpty.hidden = st.items.length > 0;
+    markSw();
+  };
+  const defaultName = (items) => {
+    const used = new Set(items.map(i => i.name));
+    let n = items.length + 1;
+    while (used.has(vhT('dp.my.default', { n }))) n++;
+    return vhT('dp.my.default', { n });
+  };
+  const closeEdit = () => { edit.hidden = true; editMode = null; editId = null; saveBtn.classList.remove('on'); };
+  const openEdit = (mode, id) => {
+    const st = vhMyLoad();
+    showNote('');
+    if (mode === 'save' && st.items.length >= VH_MY_MAX) { closeEdit(); showNote(vhT('dp.my.full')); return; }
+    const it = id ? st.items.find(x => x.id === id) : null;
+    if (mode !== 'save' && !it) return;
+    editMode = mode; editId = id || null;
+    edit.hidden = false;
+    saveBtn.classList.toggle('on', mode === 'save');
+    if (mode === 'del') {
+      editQ.textContent = vhT('dp.my.del', { name: it.name });
+      nameIn.hidden = true; okBtn.textContent = vhT('dp.my.delbtn'); okBtn.focus();
+    } else {
+      editQ.textContent = '';
+      nameIn.hidden = false; okBtn.textContent = vhT('dp.my.ok');
+      nameIn.value = mode === 'ren' ? it.name : defaultName(st.items);
+      nameIn.focus(); nameIn.select();
+    }
+  };
+  const commit = () => {
+    const st = vhMyLoad();
+    if (editMode === 'save') {
+      if (st.items.length >= VH_MY_MAX) { closeEdit(); showNote(vhT('dp.my.full')); return; }
+      const it = capture((nameIn.value || '').trim().slice(0, 24) || defaultName(st.items));
+      if (it.palette) vhRegisterPalette('my-' + it.id, it.palette);
+      st.items.push(it);
+      if (!vhMyStore(st)) {   // Quota: ohne Vorschau erneut, sonst Hinweis
+        it.img = '';
+        if (!vhMyStore(st)) { st.items.pop(); closeEdit(); showNote(vhT('dp.my.nospace')); return; }
+      }
+      // Gespeicherter Style ist ab jetzt der aktive (Kachel markiert)
+      if (it.palette) { lastPalette = 'my-' + it.id; applyPalette(lastPalette); saveState(); }
+      activeMy = it.id;
+    } else if (editMode === 'ren') {
+      const it = st.items.find(x => x.id === editId);
+      const nm = (nameIn.value || '').trim().slice(0, 24);
+      if (it && nm) { it.name = nm; vhMyStore(st); }
+    } else if (editMode === 'del') {
+      st.items = st.items.filter(x => x.id !== editId);
+      vhMyStore(st);
+      if (activeMy === editId) activeMy = null;
+    }
+    closeEdit(); renderMy();
+  };
+  saveBtn.addEventListener('click', () => { if (editMode === 'save') closeEdit(); else openEdit('save'); });
+  okBtn.addEventListener('click', commit);
+  noBtn.addEventListener('click', closeEdit);
+  nameIn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+  });
+  window.vhMyStyles = { load: vhMyLoad, render: renderMy, apply: (id) => { const it = vhMyLoad().items.find(x => x.id === id); if (it) loadMy(it); } };
+  renderMy();
   markAkku(); markSw();
   applyHd();   // Startwert der Akku-Stufe (Pixeldichte) anwenden
   // Punkt 15: ohne eigene Wahl prüft die Seite die Bildzeit der ersten 2 s; über
