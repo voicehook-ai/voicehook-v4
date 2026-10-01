@@ -69,7 +69,19 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'tr.aria': 'Transkript-Ansicht wechseln',
       'tr.empty': 'Transkript: starte einen Call, dann erscheinen die Gesprächszüge hier.',
       'tr.music': 'Musikmodus: wechsle zu Sprache, um mit der KI zu reden.',
-      'mode.aria': 'Sprachmodus für den nächsten Call',
+      'mode.aria': 'Modus: Normal oder Live für den nächsten Call, oder Musik',
+      'mode.music': 'Musik', 'mode.musicTitle': 'Musik: der Kringel reagiert auf deine Musik, statt eines Calls',
+      'msrc.aria': 'Musikquelle', 'msrc.system': 'Systemton', 'msrc.tab': 'Tab', 'msrc.mic': 'Mikrofon',
+      'msrc.systemTitle': 'Ton des ganzen Rechners (ohne Mikrofon)', 'msrc.tabTitle': 'Ton eines Browser-Tabs, z. B. Spotify Web Player oder YouTube', 'msrc.micTitle': 'Eingebautes Mikrofon',
+      'msrc.hintSystem': 'Im nächsten Fenster "Gesamter Bildschirm" wählen und "Systemton teilen" einschalten. Es wird nur der Ton genutzt.',
+      'msrc.hintTab': 'Im nächsten Fenster den Tab mit der Musik wählen und "Tab-Audio teilen" einschalten. Es wird nur der Ton genutzt.',
+      'msrc.hintMic': 'Mit In-Ears oder Kopfhörern hört das Mikrofon die Musik nicht.',
+      'msrc.hintMobile': 'Mit Kopfhörern hört das Handy die Musik nicht.',
+      'msrc.onlyChrome': 'Systemton nur in Chrome/Edge.',
+      'msrc.onlyBt': 'Nur ein Bluetooth-Mikro gefunden: Es klingt wie durchs Telefon. Besser Systemton oder Tab.',
+      'msrc.noAudio': 'Kein Ton geteilt. Bitte "Systemton teilen" bzw. "Tab-Audio teilen" einschalten.',
+      'msrc.ended': 'Die Tonquelle wurde beendet.',
+      'msrc.retry': 'Erneut versuchen',
       'mode.normalTitle': 'Normal: Standard-Sprachpipeline',
       'mode.liveTitle': 'Live: Gemini Live, gilt für den nächsten neuen Call',
       'sys.roomReady': 'Raum {room} bereit, du bist drin, warte auf deinen Agent …',
@@ -104,7 +116,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'invite.agentIn': 'Agent ist da · leg los! (Banner bleibt zum erneuten Teilen)',
       'invite.msg': 'Kannst du bitte meinem Voice-Call auf voicehook.ai beitreten? {url}\nSkill: {skill}',
       'invite.preparing': 'Raum wird vorbereitet …',
-      'invite.snippet': 'voicehook.ai Call · als Agent beitreten (einfügen und ausführen):\n\n  {cmd}\n\nErstes Mal als Agent? Lies ZUERST den Skill: {skill}\n(--name und --model sind Pflicht: dein Anzeigename und dein genaues Modell, im Call sichtbar · --json ist Pflicht zum Steuern · senior.say/persona über stdin schicken · §0 im Skill: wie eine Voice-AI in den Raum kommt)',
+      'invite.snippet': 'voicehook.ai Call · als Agent beitreten (einfügen und ausführen):\n\n  {cmd}\n\nErstes Mal als Agent? Lies ZUERST den Skill: {skill}\n(--name und --model sind Pflicht: dein Anzeigename und dein genaues Modell, im Call sichtbar · --json ist Pflicht zum Steuern · operator.say und operator.persona als JSON-Zeile über stdin schicken · §0 im Skill: wie eine Voice-AI in den Raum kommt)',
       'inviteBtn.title': 'Klick: Agent-Snippet kopieren (in KI einfügen) · Shift+Klick: Link teilen',
       'inviteBtn.aria': 'Einladen: Snippet kopieren oder mit Shift+Klick teilen',
       'inviteBtn.label': 'Einladen', 'inviteBtn.shared': 'geteilt',
@@ -193,7 +205,19 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'tr.aria': 'Switch transcript view',
       'tr.empty': 'Transcript: start a call to see live turns.',
       'tr.music': 'Music listen mode: switch to Speech to talk with the AI.',
-      'mode.aria': 'Voice mode for the next call',
+      'mode.aria': 'Mode: Normal or Live for the next call, or Music',
+      'mode.music': 'Music', 'mode.musicTitle': 'Music: the ring reacts to your music, instead of a call',
+      'msrc.aria': 'Music source', 'msrc.system': 'System', 'msrc.tab': 'Tab', 'msrc.mic': 'Mic',
+      'msrc.systemTitle': 'Sound of the whole computer (no microphone)', 'msrc.tabTitle': 'Sound of a browser tab, e.g. Spotify Web Player or YouTube', 'msrc.micTitle': 'Built-in microphone',
+      'msrc.hintSystem': 'In the next window choose "Entire screen" and turn on "Share system audio". Only the sound is used.',
+      'msrc.hintTab': 'In the next window choose the tab with the music and turn on "Share tab audio". Only the sound is used.',
+      'msrc.hintMic': 'With in-ears or headphones the microphone cannot hear the music.',
+      'msrc.hintMobile': 'With headphones the phone cannot hear the music.',
+      'msrc.onlyChrome': 'System audio only in Chrome/Edge.',
+      'msrc.onlyBt': 'Only a Bluetooth mic found: it sounds like a phone line. Better use System or Tab.',
+      'msrc.noAudio': 'No sound shared. Please turn on "Share system audio" or "Share tab audio".',
+      'msrc.ended': 'The sound source was stopped.',
+      'msrc.retry': 'Try again',
       'mode.normalTitle': 'Normal: standard voice pipeline',
       'mode.liveTitle': 'Live: Gemini Live, applies to the next new call',
       'sys.roomReady': 'Room {room} ready, you are in, waiting for your agent …',
@@ -228,7 +252,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'invite.agentIn': 'Agent is here · go ahead! (banner stays for re-sharing)',
       'invite.msg': 'Could you please join my voice call on voicehook.ai? {url}\nSkill: {skill}',
       'invite.preparing': 'preparing room …',
-      'invite.snippet': 'voicehook.ai call · join as agent (paste and run):\n\n  {cmd}\n\nFirst-time agent? Read the skill FIRST: {skill}\n(--name and --model are required: your display name and exact model, shown in the call · --json is required for driving · push senior.say/persona via stdin · §0 of the skill: how a voice AI gets into the room)',
+      'invite.snippet': 'voicehook.ai call · join as agent (paste and run):\n\n  {cmd}\n\nFirst-time agent? Read the skill FIRST: {skill}\n(--name and --model are required: your display name and exact model, shown in the call · --json is required for driving · push operator.say and operator.persona as JSON lines via stdin · §0 of the skill: how a voice AI gets into the room)',
       'inviteBtn.title': 'Click: copy agent snippet (paste into an AI) · Shift+click: share the link',
       'inviteBtn.aria': 'invite: copy snippet or shift-click to share',
       'inviteBtn.label': 'Invite', 'inviteBtn.shared': 'shared',
@@ -274,22 +298,24 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
   Object.assign(D.de, {
     'dp.btn': 'Design', 'dp.title': 'Design', 'dp.close': 'Schließen', 'dp.styles': 'Styles', 'dp.ringsec': 'Kringel',
     'dp.zoom': 'Zoom', 'dp.size': 'Punktgröße', 'dp.particles': 'Partikel', 'dp.bright': 'Helligkeit',
-    'dp.fx': 'Effekte', 'dp.ring': 'Ring-Puls', 'dp.sat': 'Satelliten', 'dp.island': 'Inseln', 'dp.pattern': 'Fellmuster',
-    'dp.res': 'Auflösung', 'dp.akku': 'Akku',
-    'dp.akku.full': 'Voll', 'dp.akku.balanced': 'Ausgewogen', 'dp.akku.saver': 'Sparsam', 'dp.akku.minimal': 'Minimal',
-    'dp.use': 'Akkuverbrauch: {lvl} · {ms} ms pro Bild · {fps} Bilder/s (gemessen)',
-    'dp.use.wait': 'Akkuverbrauch: wird gemessen …',
+    'dp.fx': 'Bewegung', 'dp.ring': 'Ring-Puls', 'dp.sat': 'Satelliten', 'dp.island': 'Inseln', 'dp.pattern': 'Fellmuster',
+    'dp.res': 'Auflösung', 'dp.akku': 'Qualität',
+    'dp.akku.eco': 'Eco', 'dp.akku.normal': 'Normal', 'dp.akku.high': 'Hoch', 'dp.akku.ultra': 'Ultra',
+    'dp.use': 'Verbrauch: {lvl} · {ms} ms pro Bild · {fps} Bilder/s (gemessen)',
+    'dp.use.wait': 'Verbrauch: wird gemessen …',
+    'dp.akku.custom': ' · Eigene',
     'dp.lvl.low': 'niedrig', 'dp.lvl.mid': 'mittel', 'dp.lvl.high': 'hoch', 'dp.lvl.crit': 'kritisch',
     'dp.reset': 'Zurücksetzen auf Standard'
   });
   Object.assign(D.en, {
     'dp.btn': 'Design', 'dp.title': 'Design', 'dp.close': 'Close', 'dp.styles': 'Styles', 'dp.ringsec': 'Dome',
     'dp.zoom': 'Zoom', 'dp.size': 'Dot size', 'dp.particles': 'Particles', 'dp.bright': 'Brightness',
-    'dp.fx': 'Effects', 'dp.ring': 'Ring pulse', 'dp.sat': 'Satellites', 'dp.island': 'Islands', 'dp.pattern': 'Fur pattern',
-    'dp.res': 'Resolution', 'dp.akku': 'Battery',
-    'dp.akku.full': 'Full', 'dp.akku.balanced': 'Balanced', 'dp.akku.saver': 'Saver', 'dp.akku.minimal': 'Minimal',
-    'dp.use': 'Battery use: {lvl} · {ms} ms per frame · {fps} frames/s (measured)',
-    'dp.use.wait': 'Battery use: measuring …',
+    'dp.fx': 'Motion', 'dp.ring': 'Ring pulse', 'dp.sat': 'Satellites', 'dp.island': 'Islands', 'dp.pattern': 'Fur pattern',
+    'dp.res': 'Resolution', 'dp.akku': 'Quality',
+    'dp.akku.eco': 'Eco', 'dp.akku.normal': 'Normal', 'dp.akku.high': 'High', 'dp.akku.ultra': 'Ultra',
+    'dp.use': 'Usage: {lvl} · {ms} ms per frame · {fps} frames/s (measured)',
+    'dp.use.wait': 'Usage: measuring …',
+    'dp.akku.custom': ' · Custom',
     'dp.lvl.low': 'low', 'dp.lvl.mid': 'medium', 'dp.lvl.high': 'high', 'dp.lvl.crit': 'critical',
     'dp.reset': 'Reset to default'
   });
@@ -602,7 +628,7 @@ body.vh-transcript-min #vh-tr-ticker { display: block; }
 /* Agent chip (Olli 30.09.): erst sichtbar, wenn wirklich ein externer Agent-
    Teilnehmer joint. Ladekreis (.joining) nur zwischen ParticipantConnected und
    erstem Track bzw. Selbstauskunft (vh.name); ersetzt den ∆ an Ort und Stelle.
-   Label = "Name · model", gekürzt. */
+   Label = nur der Name (vh.name), Modell im title-Tooltip. */
 .vh-pres-chip[data-slot="agent"]:not(.in):not(.joining) { display: none; }
 .vh-pres-chip .vh-pres-spin { display: none; width: 9px; height: 9px; flex-shrink: 0;
   box-sizing: border-box; border-radius: 50%;
@@ -613,6 +639,7 @@ body.vh-transcript-min #vh-tr-ticker { display: block; }
 body.theme-light .vh-pres-chip .vh-pres-spin { border-color: rgba(0,0,0,0.18); border-top-color: #2a9bb0; }
 /* light theme: .in sets white text → the agent's name would vanish on the light
    chip background (mobile default theme). Keep it readable. */
+body.theme-light .vh-pres-chip:not(.in) .vh-pres-dot { color: rgba(0,0,0,0.26); }  /* inaktiver ∆ grau statt weiß auf hell (UI-Paket 6) */
 body.theme-light .vh-pres-chip.in { color: var(--vh-btn-fg); }  /* alle Chips (User-Label war im Light-Theme weiß auf hell) */
 @keyframes vh-pres-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .vh-pres-chip .vh-pres-spin { animation: none; } }
@@ -652,8 +679,7 @@ body.settings-collapsed #hue-ctl { display: none; }
 /* ── Theme-Toggle (sun/moon, oben rechts) ────────────────────────────────── */
 /* Top-right pills (theme · info · music) share size + spacing.
    Olli 2026-05-28: "alle kreise oben rechts gleich groß". */
-#btn-info,
-#btn-vh-music {
+#btn-info {
   position: fixed; top: 18px;
   width: 34px; height: 34px; padding: 0; line-height: 1;
   display: flex; align-items: center; justify-content: center;
@@ -665,10 +691,7 @@ body.settings-collapsed #hue-ctl { display: none; }
   transition: color .3s, border-color .3s, background .3s;
 }
 #btn-info { right: 58px; font-family: serif; font-style: italic; font-size: 15px; font-weight: 500; }
-#btn-vh-music { right: 98px; }
-#btn-vh-music svg { width: 15px; height: 15px; display: block; }
-#btn-vh-music.on { color: #9ddb6d; border-color: rgba(157,219,109,0.5); background: rgba(157,219,109,0.08); }
-#btn-info:hover, #btn-vh-music:hover {
+#btn-info:hover {
   color: var(--vh-btn-fg-hov); border-color: var(--vh-btn-border-hov); background: var(--vh-btn-bg-hover);
 }
 /* Visible tooltip above pills with data-tip (replaces native title flicker). */
@@ -843,8 +866,7 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
      #btn-vh-call lebt bottom-center und behält seine Pill-Form. */
   #btn-theme    { width: 38px; height: 38px; top: 14px; right: 14px; padding: 0; }
   #btn-info     { width: 38px; height: 38px; top: 14px; right: 60px;  padding: 0; font-size: 17px; }
-  #btn-vh-music { width: 38px; height: 38px; top: 14px; right: 106px; padding: 0; }
-  #btn-theme svg, #btn-vh-music svg { width: 17px; height: 17px; }
+  #btn-theme svg { width: 17px; height: 17px; }
   #vh-bottom-bar { bottom: 18px; gap: 8px; }
   #btn-vh-call   { padding: 9px 16px; font-size: 11.5px; }
   #btn-vh-delta  { padding: 9px 16px; font-size: 11.5px; }
@@ -885,7 +907,7 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
   #label .by { margin: 0 5px; }
   #tagline { bottom: 4px; }
 }
-/* Schmale Phones (320/390): mittig kollidiert das Logo mit dem Musik-Knopf
+/* Schmale Phones (320/390): mittig kollidiert das Logo mit dem Design-Knopf
    (rechts 106 px + 38 px). Logo links oben, auf Höhe der Knopfreihe. */
 @media (max-width: 440px) {
   #label { left: 16px; transform: none; top: 24px; max-width: calc(100vw - 168px); }
@@ -1001,9 +1023,45 @@ body.theme-light .vh-invite-status.warn{color:#b8641a;}
    gleicher Pill-Stil (.vh-pres-chip, aktive Wahl = .in). Nur sichtbar, wenn
    /api/live/status available=true meldet, und nur vor dem Call: ein laufender
    Raum wechselt nie den Modus (im Call zeigt der Untertitel "live"). */
-#vh-mode-row{display:flex;gap:8px;justify-content:center;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;margin-bottom:6px;flex-shrink:0;}
+/* UI-Paket 6: Segmented Control Normal | Live | Musik als EINE Pille; der Schieber
+   gleitet unter das aktive Feld. Musik läuft statt eines Calls. Touch-Ziel 40 px. */
+#vh-mode-row{position:relative;display:flex;width:max-content;max-width:100%;margin:0 auto 6px;padding:0;box-sizing:border-box;
+  font-family:ui-monospace,Menlo,monospace;font-size:11px;flex-shrink:0;border-radius:999px;
+  background:var(--vh-btn-bg);border:1px solid var(--vh-btn-border);
+  backdrop-filter:var(--vh-btn-blur);-webkit-backdrop-filter:var(--vh-btn-blur);}
 #vh-mode-row[hidden],#vh-presence.vh-in-call + #vh-mode-row{display:none;}
-#vh-mode-row .vh-pres-chip{font:inherit;padding:3px 9px;border-radius:12px;letter-spacing:0.01em;}
+#vh-mode-row .vh-seg{position:relative;z-index:1;appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  height:40px;padding:0 14px;margin:0;border:0;background:transparent;border-radius:999px;cursor:pointer;
+  font:inherit;letter-spacing:0.01em;color:var(--vh-btn-fg);opacity:0.5;transition:opacity .2s,color .2s;white-space:nowrap;}
+#vh-mode-row .vh-seg[hidden]{display:none;}
+#vh-mode-row .vh-seg svg{width:14px;height:14px;display:block;flex-shrink:0;}
+#vh-mode-row .vh-seg:hover{opacity:0.8;}
+#vh-mode-row .vh-seg[aria-checked="true"]{opacity:1;color:#fff;}
+#vh-mode-row .vh-seg:focus-visible{outline:2px solid var(--vh-teal,#6dc9d9);outline-offset:-3px;}
+#vh-mode-row .vh-seg-thumb{position:absolute;z-index:0;top:3px;bottom:3px;left:0;width:0;border-radius:999px;pointer-events:none;
+  background:rgba(255,255,255,0.13);border:1px solid rgba(109,201,217,0.55);box-sizing:border-box;
+  transition:transform .2s ease,width .2s ease;}
+#vh-mode-row.vh-seg-noanim .vh-seg-thumb{transition:none;}
+body.theme-light #vh-mode-row .vh-seg[aria-checked="true"]{color:#14141a;}
+body.theme-light #vh-mode-row .vh-seg-thumb{background:rgba(0,0,0,0.07);border-color:rgba(31,127,144,0.6);}
+@media (prefers-reduced-motion: reduce){#vh-mode-row .vh-seg-thumb{transition:none;}}
+@media (max-width:360px){#vh-mode-row .vh-seg{padding:0 11px;gap:5px;}}
+/* Musikquelle (nur im Musikmodus): kleine Wahl + Hinweis */
+#vh-music-src{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;text-align:center;margin:-1px 0 6px;flex-shrink:0;color:var(--vh-btn-fg);}
+#vh-music-src[hidden],#vh-presence.vh-in-call ~ #vh-music-src{display:none;}
+#vh-music-src .vh-msrc-opts{display:inline-flex;gap:6px;flex-wrap:wrap;justify-content:center;}
+#vh-music-src .vh-msrc-opts[hidden]{display:none;}
+#vh-music-src .vh-msrc{appearance:none;font:inherit;min-height:32px;padding:0 11px;border-radius:999px;cursor:pointer;
+  background:var(--vh-btn-bg);border:1px solid var(--vh-btn-border);color:var(--vh-btn-fg);opacity:0.6;}
+#vh-music-src .vh-msrc[hidden]{display:none;}
+#vh-music-src .vh-msrc[aria-checked="true"]{opacity:1;border-color:rgba(109,201,217,0.6);}
+body.theme-light #vh-music-src .vh-msrc[aria-checked="true"]{border-color:rgba(31,127,144,0.65);color:#14141a;}
+#vh-music-src .vh-msrc-hint{margin-top:4px;line-height:1.5;opacity:0.75;}
+#vh-music-src .vh-msrc-hint:empty{display:none;}
+#vh-music-src .vh-msrc-hint.warn{color:#f2a65a;opacity:1;}
+body.theme-light #vh-music-src .vh-msrc-hint.warn{color:#b8641a;}
+#vh-music-src .vh-msrc-hint button{appearance:none;font:inherit;background:none;border:0;padding:0 0 0 6px;cursor:pointer;color:var(--vh-teal,#6dc9d9);text-decoration:underline;text-underline-offset:2px;}
+body.theme-light #vh-music-src .vh-msrc-hint button{color:#1f7f90;}
 /* Unter dem Schalter (UI-Runde 3): übriger Gratis-Verbrauch in Euro (dezent) und nach Klick
    auf einen Modus dessen ungefährer Preis + Vorteile. Nur vor dem Call. */
 #vh-mode-info{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;line-height:1.5;text-align:center;color:var(--vh-btn-fg);margin:-2px 0 6px;flex-shrink:0;}
@@ -1074,6 +1132,10 @@ body.theme-light #vh-low-bal{color:#b8641a;border-color:rgba(184,100,26,0.5);}
 #vh-transcript .vh-tr-row{display:flex;gap:6px;align-items:flex-start;padding:2px 4px;border-radius:3px;max-width:92%;}
 #vh-transcript .vh-tr-ts{color:#444;font-size:9px;flex-shrink:0;font-variant-numeric:tabular-nums;padding-top:1px;}
 #vh-transcript .vh-tr-txt{flex:1;word-break:break-word;}
+/* UI-Paket 6: Operator-Text ab Sprechbeginn; noch nicht gesprochene Wörter gedimmt,
+   nach Abbruch nicht gesprochener Rest durchgestrichen */
+#vh-transcript .vh-tr-txt .vh-tr-pend{opacity:0.28;transition:opacity .18s;}
+#vh-transcript .vh-tr-txt .vh-tr-cut{opacity:0.45;text-decoration:line-through;text-decoration-thickness:1px;}
 #vh-transcript .vh-tr-row.user{color:var(--vh-user-ink);align-self:flex-start;}
 #vh-transcript .vh-tr-row.agent{color:var(--vh-delta-ink);align-self:flex-end;flex-direction:row-reverse;text-align:right;}
 /* `senior` = external LLM-agent (`Agent`-chip) pushing via senior.say — distinct color + boxed for clear separation from voice-ai turns */
@@ -1110,7 +1172,7 @@ body.theme-light #vh-low-bal{color:#b8641a;border-color:rgba(184,100,26,0.5);}
 <style>
 /* ── Design-Panel (Olli 01.10.): Knopf links neben dem Musikmodus, Regler live ── */
 #btn-vh-design {
-  position: fixed; top: 18px; right: 138px;
+  position: fixed; top: 18px; right: 98px;   /* UI-Paket 6: rückt auf den Platz des Musik-Knopfs */
   width: 34px; height: 34px; padding: 0; line-height: 1;
   display: flex; align-items: center; justify-content: center;
   background: var(--vh-btn-bg); border: 1px solid var(--vh-btn-border);
@@ -1151,6 +1213,8 @@ body.theme-light .vh-dp-row input[type="range"] { accent-color: #1f7f90; }
 #vh-design-panel #btn-hd { appearance: none; font: inherit; font-size: 10.5px; padding: 3px 12px; border-radius: 12px; cursor: pointer;
   background: transparent; color: inherit; border: 1px solid var(--vh-btn-border); min-width: 0; letter-spacing: 0.08em; }
 #vh-design-panel #btn-hd.on { border-color: var(--vh-teal, #6dc9d9); color: var(--vh-teal, #6dc9d9); }
+.vh-dp-row[hidden] { display: none !important; }
+.vh-dp-sec .vh-dp-custom { opacity: 0.7; font-weight: normal; }
 .vh-dp-akku { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .vh-dp-akku button { appearance: none; font: inherit; font-size: 10px; padding: 5px 2px; border-radius: 8px; cursor: pointer; min-width: 0;
   background: transparent; color: inherit; border: 1px solid var(--vh-btn-border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0; }
@@ -1170,17 +1234,15 @@ body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
   background: transparent; color: inherit; border: 1px solid var(--vh-btn-border-hov, rgba(255,255,255,0.3)); }
 .vh-dp-reset:hover { background: var(--vh-btn-bg-hover); }
 @media (max-width: 640px) {
-  #btn-vh-design { width: 38px; height: 38px; top: 14px; right: 152px; }
+  #btn-vh-design { width: 38px; height: 38px; top: 14px; right: 106px; }
   #btn-vh-design svg { width: 17px; height: 17px; }
   #vh-design-panel { top: 60px; right: 12px; left: 12px; width: auto; max-height: calc(100vh - 136px); max-height: calc(100dvh - 136px); }
   .vh-dp-row { min-height: 34px; grid-template-columns: 76px minmax(0, 1fr) 34px; }
   .vh-dp-row.vh-dp-row-btn { grid-template-columns: 76px auto; }
 }
 /* Sehr schmal: oben ist kein Platz neben dem Logo, Knopf in die zweite Reihe rechts. */
-@media (max-width: 360px) {
-  #btn-vh-design { top: 60px; right: 14px; }
-  #vh-design-panel { top: 106px; max-height: calc(100vh - 182px); max-height: calc(100dvh - 182px); }
-}
+/* UI-Paket 6: Musik-Knopf ist in die Modus-Leiste gezogen; der Design-Knopf passt
+   jetzt auch bei 320 px in die obere Reihe (Logo max. 100vw - 168 px). */
 /* Punkt 8 (Olli 01.10.): Sprechblasen bleiben im Panel, Text links, Zeitstempel
    eigene Spalte ohne Überlappung. */
 #vh-transcript .vh-tr-row { box-sizing: border-box; max-width: 100%; min-width: 0; }
@@ -1204,9 +1266,6 @@ body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
 </script>
 
 <button id="btn-info" title="voicehook info" aria-label="info" data-i18n-title="info.title" data-i18n-aria="info.aria">i</button>
-<button id="btn-vh-music" title="" data-tip="Music mode: mic on, effects up" aria-label="music mode" data-i18n-tip="music.tip" data-i18n-aria="music.aria">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-</button>
 <button id="btn-vh-design" type="button" title="Design" aria-label="Design" aria-expanded="false" aria-controls="vh-design-panel" data-i18n-title="dp.btn" data-i18n-aria="dp.btn">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2.2" fill="currentColor"/><circle cx="15" cy="12" r="2.2" fill="currentColor"/><circle cx="7" cy="18" r="2.2" fill="currentColor"/></svg>
 </button>
@@ -1231,18 +1290,18 @@ body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
     <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.size">Punktgröße</span><input id="size" type="range" min="0.02" max="0.20" step="0.005" value="0.155"><output class="vh-dp-val"></output></label>
     <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.particles">Partikel</span><input id="particle-count" type="range" min="0.1" max="1" step="0.05" value="0.2"><output class="vh-dp-val"></output></label>
     <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.bright">Helligkeit</span><input id="brightness" type="range" min="0.4" max="2.5" step="0.05" value="1.85"><output class="vh-dp-val"></output></label>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.fx">Effekte</span><input id="fx-intensity" type="range" min="0" max="1.732" step="0.02" value="1"><output class="vh-dp-val"></output></label>
+    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.fx">Bewegung</span><input id="fx-intensity" type="range" min="0" max="1.732" step="0.02" value="1"><output class="vh-dp-val"></output></label>
     <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.ring">Ring-Puls</span><input id="ring-fx" type="range" min="0" max="2.5" step="0.05" value="1"><output class="vh-dp-val"></output></label>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.sat">Satelliten</span><input id="sat-amount" type="range" min="0" max="1" step="0.05" value="0.05"><output class="vh-dp-val"></output></label>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.island">Inseln</span><input id="island" type="range" min="0" max="1" step="0.05" value="0.6"><output class="vh-dp-val"></output></label>
-    <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.pattern">Fellmuster</span><input id="pattern-density" type="range" min="0" max="1" step="0.02" value="0.5"><output class="vh-dp-val"></output></label>
+    <label class="vh-dp-row" hidden><span class="vh-dp-lbl" data-i18n="dp.sat">Satelliten</span><input id="sat-amount" type="range" min="0" max="1" step="0.05" value="0.05"><output class="vh-dp-val"></output></label>
+    <label class="vh-dp-row" hidden><span class="vh-dp-lbl" data-i18n="dp.island">Inseln</span><input id="island" type="range" min="0" max="1" step="0.05" value="0.6"><output class="vh-dp-val"></output></label>
+    <label class="vh-dp-row" id="vh-dp-pattern-row"><span class="vh-dp-lbl" data-i18n="dp.pattern">Fellmuster</span><input id="pattern-density" type="range" min="0" max="1" step="0.02" value="0.5"><output class="vh-dp-val"></output></label>
   <div class="vh-dp-row vh-dp-row-btn"><span class="vh-dp-lbl" data-i18n="dp.res">Auflösung</span><button id="btn-hd" type="button" class="on" title="HD" data-i18n-title="hd.title">HD</button></div>
-  <div class="vh-dp-sec" data-i18n="dp.akku">Akku</div>
+  <div class="vh-dp-sec"><span data-i18n="dp.akku">Qualität</span><span class="vh-dp-custom" id="vh-dp-akku-custom" hidden></span></div>
   <div class="vh-dp-akku" role="radiogroup" aria-labelledby="vh-dp-title">
-    <button type="button" data-akku="full" role="radio" data-i18n="dp.akku.full">Voll</button>
-    <button type="button" data-akku="balanced" role="radio" data-i18n="dp.akku.balanced">Ausgewogen</button>
-    <button type="button" data-akku="saver" role="radio" data-i18n="dp.akku.saver">Sparsam</button>
-    <button type="button" data-akku="minimal" role="radio" data-i18n="dp.akku.minimal">Minimal</button>
+    <button type="button" data-akku="eco" role="radio" data-i18n="dp.akku.eco">Eco</button>
+    <button type="button" data-akku="normal" role="radio" data-i18n="dp.akku.normal">Normal</button>
+    <button type="button" data-akku="high" role="radio" data-i18n="dp.akku.high">Hoch</button>
+    <button type="button" data-akku="ultra" role="radio" data-i18n="dp.akku.ultra">Ultra</button>
   </div>
   <div class="vh-dp-use" id="vh-dp-use" aria-live="polite"></div>
   <button type="button" class="vh-dp-reset" id="vh-dp-reset" data-i18n="dp.reset">Zurücksetzen auf Standard</button>
@@ -1361,9 +1420,19 @@ body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
     <span class="vh-pres-chip" data-slot="agent" title="Agent" data-i18n-title="pres.agentDesc"><span class="vh-pres-spin" aria-hidden="true"></span><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label" data-i18n="pres.agent">Agent</span></span>
     <button type="button" id="vh-tr-mode" aria-label="Transkript-Ansicht wechseln" title="Transkript" data-i18n-aria="tr.aria"></button>
   </div>
-  <div id="vh-mode-row" role="group" aria-label="Sprachmodus für den nächsten Call" data-i18n-aria="mode.aria" hidden>
-    <button type="button" class="vh-pres-chip in" data-mode="normal" aria-pressed="true" title="Normal: Standard-Sprachpipeline" data-i18n-title="mode.normalTitle"><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label">Normal</span></button>
-    <button type="button" class="vh-pres-chip" data-mode="live" aria-pressed="false" title="Live: Gemini Live, gilt für den nächsten neuen Call" data-i18n-title="mode.liveTitle"><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label">Live</span></button>
+  <div id="vh-mode-row" role="radiogroup" aria-label="Modus" data-i18n-aria="mode.aria">
+    <span class="vh-seg-thumb" aria-hidden="true"></span>
+    <button type="button" role="radio" class="vh-seg" data-mode="normal" aria-checked="true" tabindex="0" title="Normal: Standard-Sprachpipeline" data-i18n-title="mode.normalTitle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg><span>Normal</span></button>
+    <button type="button" role="radio" class="vh-seg" data-mode="live" aria-checked="false" tabindex="-1" title="Live: Gemini Live, gilt für den nächsten neuen Call" data-i18n-title="mode.liveTitle" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span>Live</span></button>
+    <button type="button" role="radio" class="vh-seg" data-mode="music" aria-checked="false" tabindex="-1" title="Musik" data-i18n-title="mode.musicTitle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span data-i18n="mode.music">Musik</span></button>
+  </div>
+  <div id="vh-music-src" hidden>
+    <div class="vh-msrc-opts" role="radiogroup" aria-label="Musikquelle" data-i18n-aria="msrc.aria">
+      <button type="button" role="radio" class="vh-msrc" data-src="system" aria-checked="false" data-i18n="msrc.system" data-i18n-title="msrc.systemTitle">Systemton</button>
+      <button type="button" role="radio" class="vh-msrc" data-src="tab" aria-checked="false" data-i18n="msrc.tab" data-i18n-title="msrc.tabTitle">Tab</button>
+      <button type="button" role="radio" class="vh-msrc" data-src="mic" aria-checked="false" data-i18n="msrc.mic" data-i18n-title="msrc.micTitle">Mikrofon</button>
+    </div>
+    <div class="vh-msrc-hint" aria-live="polite"></div>
   </div>
   <div id="vh-mode-info" hidden>
     <div class="vh-free-left" aria-live="polite" hidden></div>
@@ -1798,6 +1867,7 @@ let ultraDeep   = 0;     // Quadratisch geformt + gecapt → kurzer extremer Pus
 // Kringel-Leuchten beim Sprechen (Farbregel 01.10.): Farbe = Style-Variation des
 // sprechenden Slots, gesetzt über vhSetSpeaker(); vhGlowK folgt weich dem Ziel.
 const vhSpeakerRgb = { user: null, 'voice-ai': null, agent: null };
+let vhOpSpeakingId = null;   // UI-Paket 6: id der gerade gespielten Operator-Ausgabe (transcript.live)
 let vhGlowR = 0, vhGlowG = 0, vhGlowB = 0, vhGlowTarget = 0, vhGlowK = 0;
 let vhLayoutTick = 0;
 // Render-Loop-Steuerung (Olli 01.10.):
@@ -1820,19 +1890,42 @@ function vhLoopKick() {
 }
 document.addEventListener('visibilitychange', vhLoopKick);
 // Akku-Stufen (Design-Panel): Bildrate, Partikel-Obergrenze, Pixeldichte.
-// Minimal = sehr wenige Partikel, 4 Bilder/s, Bewegung fast still.
+// UI-Paket 6 (Oliver: Minimal war "zäh, Zeitlupe, stottert" bei 4 Bildern/s):
+// keine Stufe unter 30 Bildern/s; gespart wird über Partikel und Renderauflösung
+// (pr = Pixeldichte, < 1 rendert kleiner und skaliert hoch). Bewegung ist
+// zeitbasiert (siehe animate), also bei jeder Stufe gleich schnell.
+// Stufen (Oliver 01.10.): Eco, Normal, Hoch, Ultra. Eco = wenige Partikel, kleine
+// Renderauflösung, 30 fps; Normal = heutiger Standardlook, native fps; Hoch = mehr
+// Partikel; Ultra = Maximum. Alte gespeicherte Namen werden beim Laden umgesetzt.
 const VH_AKKU = {
-  full:     { cap: 1.00, fps: 0,  pr1: false },
-  balanced: { cap: 0.60, fps: 45, pr1: false },
-  saver:    { cap: 0.30, fps: 30, pr1: true  },
-  minimal:  { cap: 0.05, fps: 4,  pr1: true, still: true },
+  eco:    { cap: 0.10, fps: 30, pr: 0.75 },
+  normal: { cap: 1.00, fps: 0,  pr: 0    },
+  high:   { cap: 1.00, fps: 0,  pr: 0    },
+  ultra:  { cap: 1.00, fps: 0,  pr: 0    },
 };
+const VH_AKKU_OLD = { full: 'normal', balanced: 'normal', saver: 'eco', minimal: 'eco' };
 const VH_AKKU_KEY = 'vh-akku-v1';
+// Punkt 9: jede Stufe setzt sichtbar Partikel und Punktgröße (weniger, dafür
+// größere Punkte). Verstellt der Nutzer danach einen der beiden, steht die Stufe
+// auf "Eigene" (VH_AKKU_CUSTOM_KEY); Bildrate/Pixeldichte der letzten Stufe bleiben.
+const VH_AKKU_PRESET = {
+  eco:    { pc: 0.10, size: 0.180 },   // Regler-Minimum; der Deckel (cap) gilt zusätzlich
+  normal: { pc: 0.20, size: 0.155 },   // heutiger Standard
+  high:   { pc: 0.50, size: 0.150 },
+  ultra:  { pc: 1.00, size: 0.140 },
+};
+const VH_AKKU_CUSTOM_KEY = 'vh-akku-custom-v1';
+// Schwaches Gerät (Punkt 15): Touch/grob + kleiner Viewport, oder <= 4 Kerne.
+// Die Bildzeit der ersten 2 s prüft vhAkkuAutoCheck() zusätzlich.
 function vhAkkuDefault() {
-  try { return (matchMedia('(max-width: 640px)').matches || matchMedia('(pointer: coarse)').matches) ? 'saver' : 'full'; }
-  catch (_) { return 'full'; }
+  try {
+    const small = matchMedia('(max-width: 640px)').matches;
+    const coarse = matchMedia('(pointer: coarse)').matches;
+    const cores = navigator.hardwareConcurrency || 8;
+    return ((coarse && small) || small || cores <= 4) ? 'eco' : 'normal';
+  } catch (_) { return 'normal'; }
 }
-let vhAkku = (() => { try { const v = localStorage.getItem(VH_AKKU_KEY); return VH_AKKU[v] ? v : vhAkkuDefault(); } catch (_) { return vhAkkuDefault(); } })();
+let vhAkku = (() => { try { let v = localStorage.getItem(VH_AKKU_KEY); if (VH_AKKU_OLD[v]) { v = VH_AKKU_OLD[v]; localStorage.setItem(VH_AKKU_KEY, v); } return VH_AKKU[v] ? v : vhAkkuDefault(); } catch (_) { return vhAkkuDefault(); } })();
 // Gemessene Arbeitszeit je Bild (Simulation + render-Aufruf, CPU-Seite) und
 // tatsächliche Bilder pro Sekunde. Grundlage der Verbrauchsanzeige im Panel.
 const vhRingPerf = { ms: 0, fps: 0, n: 0, _t0: 0, _frames: 0 };
@@ -1840,10 +1933,12 @@ window.vhRingPerf = vhRingPerf;
 function vhFrameMs() {
   const a = VH_AKKU[vhAkku] || VH_AKKU.full;
   const fpsMs = a.fps ? 1000 / a.fps : 0;
-  return Math.max(vhSdMode ? VH_SD_FRAME_MS : 0, fpsMs);
+  return fpsMs;   // Punkt 10: SD senkt nur die Pixeldichte, nicht mehr die Bildrate
 }
+const VH_SIM_STEP_MS = 1000 / 60;
+let vhSimAcc = 0, vhSimLast = 0;
 function animate() {
-  if (!vhLoopShouldRun()) { vhLoopOn = false; return; }   // Loop endet, nichts mehr geplant
+  if (!vhLoopShouldRun()) { vhLoopOn = false; vhSimLast = 0; return; }   // Loop endet, nichts mehr geplant
   // Echte Eintrittszeit (der rAF-Zeitstempel kann bei voller Hauptschleife alt sein).
   const now = performance.now();
   const frameMs = vhFrameMs();
@@ -1855,11 +1950,18 @@ function animate() {
   } else {
     requestAnimationFrame(animate);
   }
-  // Gleiches Bewegungstempo wie bei 60 fps (max. 2 Schritte); Minimal läuft
-  // bewusst fast still (1 Schritt bei 4 Bildern/s).
-  const still = (VH_AKKU[vhAkku] || {}).still;
-  const steps = still ? 1 : Math.max(1, Math.min(2, Math.round(frameMs / 16.7)));
+  // Zeitbasiert (UI-Paket 6): ein Simulationsschritt = 16,7 ms echte Zeit. Die
+  // Zahl der Schritte je Bild folgt der vergangenen Zeit (Akkumulator), damit die
+  // Bewegung bei 30, 45, 60 oder 120 Bildern/s gleich schnell ist. Nach langer
+  // Pause (Tab im Hintergrund) kein Nachholen: höchstens 4 Schritte.
+  if (vhSimLast) vhSimAcc += Math.min(250, now - vhSimLast);
+  else vhSimAcc = VH_SIM_STEP_MS;
+  vhSimLast = now;
+  let steps = Math.floor(vhSimAcc / VH_SIM_STEP_MS);
+  vhSimAcc -= steps * VH_SIM_STEP_MS;
+  if (steps > 4) { steps = 4; vhSimAcc = 0; }
   for (let s = 0; s < steps; s++) vhSimStep();
+  vhRingPerf.rot = points.rotation.z;
   renderer.render(scene, camera);
   const t1 = performance.now();
   const buf = vhRingPerf._buf || (vhRingPerf._buf = []);
@@ -1876,9 +1978,15 @@ function animate() {
 // Effektive Partikelzahl je Bild: Slider-Wert, für Felle mindestens VH_FUR_PC
 // (feines, geschlossenes Muster), gedeckelt durch die Akku-Stufe.
 const VH_FUR_PC = 0.6;
+// UI-Paket 6 (Punkt 15, Oliver: "die brauchen einfach mehr partikel oder größere"):
+// Style-Defaults nur für Giraffe und Leopard: mehr Partikel und etwas größere Punkte,
+// damit Flecken/Rosetten ohne Reglerdrehen lesbar sind. Musterlogik unverändert,
+// Akku-Deckel (cap) geht weiter vor.
+const VH_FUR_STYLE = { giraffe: { pc: 0.95, size: 1.15 }, leopard: { pc: 0.95, size: 1.15 } };
 function vhEffectiveN() {
   const cap = Math.floor(N * (VH_AKKU[vhAkku] || VH_AKKU.full).cap);
-  const want = spatialMode ? Math.max(activeN, Math.floor(N * VH_FUR_PC)) : activeN;
+  const fs = VH_FUR_STYLE[lastPaletteForSpatial];
+  const want = spatialMode ? Math.max(activeN, Math.floor(N * ((fs && fs.pc) || VH_FUR_PC))) : activeN;
   return Math.max(1, Math.min(N, cap, want));
 }
 let vhDrawN = -1;
@@ -2004,7 +2112,8 @@ function vhSimStep() {
     // vhRingCanvasH skaliert (setViewOffset). three.js skaliert gl_PointSize mit
     // der Canvas-Höhe, deshalb Punkte mit derselben Basis-Höhe skalieren, sonst
     // sind sie relativ zum Ring um innerHeight/h zu dick (Überblendung).
-    const furMul = furSpots ? 0.80 * Math.min(1.5, Math.max(1, Math.sqrt(VH_FUR_REF_N / nA))) : 1;
+    const furStyle = furSpots ? ((VH_FUR_STYLE[lastPaletteForSpatial] || {}).size || 1) : 1;
+    const furMul = furSpots ? 0.80 * furStyle * Math.min(1.5, Math.max(1, Math.sqrt(VH_FUR_REF_N / nA))) : 1;
     // Hineinzoomen: Punkte wachsen nur mit sqrt(zoom) statt linear (Dolly +
     // sizeAttenuation), damit der Kringel auch groß fein bleibt.
     const zoomMul = zoom > 1 ? 1 / Math.sqrt(zoom) : 1;
@@ -2476,11 +2585,12 @@ const btnHd = document.getElementById('btn-hd');
 let hdOn = (() => { try { return localStorage.getItem(HD_KEY) !== '0'; } catch { return true; } })();
 function vhPixelRatio() {
   const a = VH_AKKU[vhAkku] || VH_AKKU.full;
-  return (hdOn && !a.pr1) ? Math.min(2, devicePixelRatio) : 1;
+  if (a.pr) return Math.min(a.pr, hdOn ? Math.min(2, devicePixelRatio) : 1);
+  return hdOn ? Math.min(2, devicePixelRatio) : 1;
 }
 function applyHd() {
   const ratio = vhPixelRatio();
-  vhSdMode = !hdOn;   // SD: zusätzlich Render-Loop auf 30 fps (siehe animate)
+  vhSdMode = !hdOn;   // SD: nur Pixeldichte 1 (Bildrate bleibt, UI-Paket 6)
   renderer.setPixelRatio(ratio);
   renderer.setSize(innerWidth, innerHeight);
   try { vhRingLayout(true); } catch (_) {}  // TDZ beim ersten Aufruf, danach aktiv
@@ -3482,9 +3592,9 @@ function loadState() {
   if (!s) return;
   if (s.fx)     { fxInput.value = s.fx;         intensity = fxToIntensity(parseFloat(s.fx)); }
   if (s.ring)   { ringFxInput.value = s.ring;   ringFx = parseFloat(s.ring); }
-  if (s.sat)    { satInput.value = s.sat;       satFraction = parseFloat(s.sat); }
+  // UI-Paket 6 (Punkt 11): Satelliten und Inseln sind nicht mehr im Panel; alte
+  // gespeicherte Werte werden ignoriert (interne Standards).
   if (s.pc)     { particleInput.value = s.pc;   activeN = Math.floor(N * parseFloat(s.pc)); geo.setDrawRange(0, activeN); }
-  if (s.island) { islandInput.value = s.island; islandStrength = parseFloat(s.island); rebuildFreqBins(); }
   if (s.hue !== undefined) { hueInput.value = s.hue; hueShift = parseFloat(s.hue); }
   if (s.bright) { brightnessInput.value = s.bright; colorBoost = parseFloat(s.bright); }
   if (s.size)   { sizeInput.value = s.size;         mat.size = parseFloat(s.size); }
@@ -3644,7 +3754,11 @@ function vhGlowSync() {
     const el = document.querySelector(`#vh-presence .vh-pres-chip[data-slot="${slot}"]`);
     return !!(el && el.classList.contains('speak'));
   };
-  vhSetSpeaker(['agent', 'user', 'voice-ai'].find(speaking) || null);
+  // UI-Paket 6: Spielt gerade eine Operator-Ausgabe (transcript.live), spricht der
+  // Operator über Deltas Stimme -> Agent-Farbe. Wer Ton ausgibt (Delta) geht vor dem
+  // User: das Mikro hört Deltas Stimme oft mit und färbte sonst in User-Farbe.
+  if (vhOpSpeakingId) { vhSetSpeaker('agent'); return; }
+  vhSetSpeaker(['agent', 'voice-ai', 'user'].find(speaking) || null);
 }
 function vhHexRgb(hex) {
   const n = parseInt(String(hex).replace('#', ''), 16);
@@ -4119,17 +4233,39 @@ if (btnDelta) btnDelta.addEventListener('click', async () => {
 });
 function vhLiveWanted() { try { return localStorage.getItem(VH_LIVE_KEY) === 'live'; } catch (_) { return false; } }
 function vhLiveOn() { return vhLiveAvailable && vhLiveWanted(); }
-function vhLiveRender() {
+// UI-Paket 6: Segmented Control Normal | Live | Musik. Live nur, wenn der Server
+// es anbietet; Musik schließt beide Call-Modi aus (läuft statt eines Calls).
+function vhSegActive() {
+  if (window.vhMusicIsOn && window.vhMusicIsOn()) return 'music';
+  return vhLiveOn() ? 'live' : 'normal';
+}
+function vhSegThumb(anim) {
+  if (!vhModeRow) return;
+  const th = vhModeRow.querySelector('.vh-seg-thumb');
+  const b = vhModeRow.querySelector('.vh-seg[aria-checked="true"]');
+  if (!th || !b || !b.offsetWidth) return;
+  if (!anim) vhModeRow.classList.add('vh-seg-noanim');
+  th.style.width = b.offsetWidth + 'px';
+  th.style.transform = `translateX(${b.offsetLeft}px)`;
+  if (!anim) { void th.offsetWidth; vhModeRow.classList.remove('vh-seg-noanim'); }
+}
+function vhLiveRender(anim) {
   if (!vhModeRow) return;
   vhModeInfoRender();
-  vhModeRow.hidden = !vhLiveAvailable;
-  const live = vhLiveOn();
-  vhModeRow.querySelectorAll('[data-mode]').forEach((b) => {
-    const on = (b.dataset.mode === 'live') === live;
-    b.classList.toggle('in', on);
-    b.setAttribute('aria-pressed', String(on));
+  vhModeRow.hidden = false;
+  const liveBtn = vhModeRow.querySelector('[data-mode="live"]');
+  if (liveBtn) liveBtn.hidden = !vhLiveAvailable;
+  const act = vhSegActive();
+  vhModeRow.querySelectorAll('.vh-seg').forEach((b) => {
+    const on = b.dataset.mode === act;
+    b.setAttribute('aria-checked', String(on));
+    b.tabIndex = on ? 0 : -1;
   });
+  vhSegThumb(!!anim);
+  try { window.vhMusicSrcRender && window.vhMusicSrcRender(); } catch (_) {}
 }
+window.addEventListener('resize', () => vhSegThumb(false));
+try { document.fonts && document.fonts.ready.then(() => vhSegThumb(false)); } catch (_) {}
 function vhLiveSet(mode) {
   try { localStorage.setItem(VH_LIVE_KEY, mode === 'live' ? 'live' : 'normal'); } catch (_) {}
   vhLiveRender();
@@ -4190,14 +4326,41 @@ function vhLiveMark() {
   if (!t) return;
   t.textContent = vhT('live.tag'); t.title = vhT('live.title'); t.classList.add('vh-cost-on');
 }
-if (vhModeRow) vhModeRow.addEventListener('click', (e) => {
-  const b = e.target && e.target.closest && e.target.closest('[data-mode]');
-  if (!b || vhCallLive()) return;  // laufender Raum wechselt den Modus nicht
-  const m = b.dataset.mode === 'live' ? 'live' : 'normal';
-  const wasOpen = vhModeDetail === m && vhLiveWanted() === (m === 'live');
+async function vhSegPick(mode) {
+  if (vhCallLive()) return;  // laufender Raum wechselt den Modus nicht
+  if (mode === 'music') {
+    vhModeDetail = null;
+    const pr = window.vhMusicSet ? window.vhMusicSet(true) : null;   // Musik an sofort, Dialog danach
+    vhLiveRender(true);
+    await pr;
+    return;
+  }
+  const musicWas = !!(window.vhMusicIsOn && window.vhMusicIsOn());
+  if (musicWas && window.vhMusicSet) await window.vhMusicSet(false);
+  const m = mode === 'live' ? 'live' : 'normal';
+  const wasOpen = !musicWas && vhModeDetail === m && vhLiveWanted() === (m === 'live');
   vhModeDetail = wasOpen ? null : m;  // zweiter Klick auf denselben Modus klappt zu
-  vhLiveSet(m);
+  try { localStorage.setItem(VH_LIVE_KEY, m === 'live' ? 'live' : 'normal'); } catch (_) {}
+  vhLiveRender(true);
   vhLiveErrShow('');
+}
+if (vhModeRow) vhModeRow.addEventListener('click', (e) => {
+  const b = e.target && e.target.closest && e.target.closest('.vh-seg');
+  if (!b) return;
+  vhSegPick(b.dataset.mode);
+});
+// Pfeiltasten wie bei einer Radiogruppe: Auswahl wandert und wird sofort aktiv.
+if (vhModeRow) vhModeRow.addEventListener('keydown', (e) => {
+  const keys = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1, Home: 'first', End: 'last' };
+  if (!(e.key in keys)) return;
+  const btns = Array.from(vhModeRow.querySelectorAll('.vh-seg')).filter((b) => !b.hidden);
+  if (!btns.length) return;
+  e.preventDefault();
+  const cur = Math.max(0, btns.indexOf(document.activeElement));
+  const k = keys[e.key];
+  const next = k === 'first' ? 0 : k === 'last' ? btns.length - 1 : (cur + k + btns.length) % btns.length;
+  btns[next].focus();
+  vhSegPick(btns[next].dataset.mode);
 });
 vhLiveRender();
 vhLiveRefresh();
@@ -4257,7 +4420,7 @@ async function vhStartCall() {
     if (currentStream) { try { currentStream.getTracks().forEach(t => t.stop()); } catch (_) {} currentStream = null; }
 
     const { Room, RoomEvent, Track } = window.LivekitClient;
-    await vhMicRefreshPref(); lkRoom = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: vhMicCaptureDefaults() });
+    await vhMusicOffForCall(); await vhMicRefreshPref(); lkRoom = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: vhMicCaptureDefaults() });
     vhWireRoomEvents(lkRoom, RoomEvent, Track);
 
     await lkRoom.connect(tok.url, tok.token);
@@ -4459,7 +4622,7 @@ async function vhInviteJoinAsHost() {
     if (!tok || !tok.token || !tok.url) throw new Error('invalid token response');
 
     const { Room, RoomEvent, Track } = window.LivekitClient;
-    await vhMicRefreshPref(); lkRoom = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: vhMicCaptureDefaults() });
+    await vhMusicOffForCall(); await vhMicRefreshPref(); lkRoom = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: vhMicCaptureDefaults() });
     vhWireRoomEvents(lkRoom, RoomEvent, Track);
     vhTrLog('system', vhT('sys.roomReady', { room }));
 
@@ -4500,6 +4663,82 @@ function vhTrLog(role, text) {
   vhTranscript.appendChild(row);
   vhTranscript.scrollTop = vhTranscript.scrollHeight;
   if (role && role !== 'system') vhTrTick(role, text);
+  return row;
+}
+// ── Operator-Text ab Sprechbeginn (UI-Paket 6) ──────────────────────────────
+// Worker: transcript.live phase=start (erster Audio-Frame, voller Text) / end.
+// Die Zeile erscheint sofort; Wörter werden im Sprechtempo aufgedeckt (noch nicht
+// gesprochene gedimmt). Das spätere `transcript` role=operator (tatsächlich
+// gesprochen) ersetzt die Zeile: gesprochener Teil normal, Rest durchgestrichen.
+const VH_TR_CPS = 14;           // geschätztes Sprechtempo (Zeichen/s) für den Wort-Reveal
+const vhOpLive = [];            // offene Live-Zeilen in Sprechreihenfolge
+function vhOpRender(e, nShown) {
+  const txt = e.row.querySelector('.vh-tr-txt'); if (!txt) return;
+  txt.textContent = '';
+  const shown = e.words.slice(0, nShown).join(' ');
+  const rest = e.words.slice(nShown).join(' ');
+  txt.appendChild(document.createTextNode(shown));
+  if (rest) { const sp = document.createElement('span'); sp.className = 'vh-tr-pend'; sp.textContent = (shown ? ' ' : '') + rest; txt.appendChild(sp); }
+}
+function vhOpStart(id, text) {
+  if (!text || vhOpLive.some(e => e.id === id)) return;
+  const row = vhTrLog('operator', text);
+  if (!row) return;
+  row.classList.add('vh-tr-live');
+  const e = { id, text, row, words: String(text).split(/\s+/).filter(Boolean), n: 0, timer: null, ended: false, interrupted: false, final: false };
+  vhOpLive.push(e);
+  // Reveal: jedes Wort nach (Zeichen bis einschließlich Wort) / Tempo
+  let acc = 0; const t0 = performance.now();
+  const at = e.words.map(w => (acc += w.length + 1) / VH_TR_CPS * 1000);
+  const step = () => {
+    if (e.final) return;
+    const dt = performance.now() - t0;
+    let n = 1; while (n < at.length && at[n - 1] <= dt) n++;
+    if (n !== e.n) { e.n = n; vhOpRender(e, n); }
+    if (n < e.words.length && !e.ended) e.timer = setTimeout(step, 60);
+  };
+  step();
+  vhOpSpeakingId = id;
+  vhPresenceSet('agent', 'speak');
+  vhGlowSync();
+}
+function vhOpFinalize(e, spoken) {
+  if (e.final) return;
+  e.final = true; if (e.timer) clearTimeout(e.timer);
+  const full = String(e.text).trim(); const sp = String(spoken == null ? full : spoken).trim();
+  const txt = e.row.querySelector('.vh-tr-txt'); e.row.classList.remove('vh-tr-live');
+  if (txt) {
+    let rest = '';
+    if (sp && sp.length < full.length) rest = full.startsWith(sp) ? full.slice(sp.length).trim() : e.words.slice(sp.split(/\s+/).length).join(' ');
+    txt.textContent = sp || '';
+    if (rest || !sp) { const c = document.createElement('span'); c.className = 'vh-tr-cut'; c.textContent = (sp ? ' ' : '') + (rest || full); txt.appendChild(c); }
+  }
+  const i = vhOpLive.indexOf(e); if (i >= 0) vhOpLive.splice(i, 1);
+}
+function vhOpEnd(id, interrupted) {
+  const e = vhOpLive.find(x => x.id === id);
+  if (vhOpSpeakingId === id) {
+    vhOpSpeakingId = null;
+    const el = document.querySelector('#vh-presence .vh-pres-chip[data-slot="agent"]');
+    if (el) el.classList.remove('speak');
+    vhGlowSync();
+  }
+  if (!e) return;
+  e.ended = true; e.interrupted = !!interrupted;
+  if (!interrupted) { vhOpFinalize(e, e.text); return; }
+  // Abbruch: auf das gesprochene Stück aus `transcript` warten; kommt keins, war nichts gesprochen
+  setTimeout(() => { if (!e.final) vhOpFinalize(e, ''); }, 1500);
+}
+// `transcript` role=operator: gehört zur ältesten offenen Live-Zeile -> ersetzen statt neu
+function vhOpTranscript(text) {
+  const e = vhOpLive[0];
+  if (!e) return false;
+  vhOpFinalize(e, text);
+  return true;
+}
+function vhOpReset() {
+  vhOpLive.splice(0).forEach(e => { if (e.timer) clearTimeout(e.timer); e.final = true; e.row.classList.remove('vh-tr-live'); });
+  vhOpSpeakingId = null;
 }
 // Minimiert-Modus: letzten gesprochenen Satz einzeilig kurz einblenden.
 const vhTrTicker = document.getElementById('vh-tr-ticker');
@@ -4546,7 +4785,7 @@ function vhPresenceSlotForP(p) {
   if (p && p.attributes && p.attributes['vh.role'] === 'agent') return 'agent';
   return vhPresenceSlotFor(p && p.identity);
 }
-// Chip label for an external agent: self-report "Name · model" from attributes
+// Chip label for an external agent: self-report name (vh.name; model vh.model only in the tooltip)
 // (vh.name / vh.model), else participant.name, else a readable identity brand.
 const vhAgentLabelById = {};
 function vhAgentLabelFor(p) {
@@ -4555,11 +4794,13 @@ function vhAgentLabelFor(p) {
   let nm = String(a['vh.name'] || '').trim();
   if (!nm && p.name && p.name !== p.identity) nm = String(p.name).trim();
   if (!nm) nm = vhBrandFromIdentity(p.identity);
-  const model = String(a['vh.model'] || '').trim();
-  return model ? `${nm} · ${model}` : nm;
+  return nm;
 }
+// Modell nur im Tooltip (Oliver 01.10.: "Claude · claude-opus-5-5" war zu lang).
+const vhAgentModelById = {};
+function vhAgentModelFor(p) { return String((p && p.attributes && p.attributes['vh.model']) || '').trim(); }
 function vhRememberAgentLabel(p) {
-  if (p && p.identity) vhAgentLabelById[p.identity] = vhAgentLabelFor(p);
+  if (p && p.identity) { vhAgentLabelById[p.identity] = vhAgentLabelFor(p); vhAgentModelById[p.identity] = vhAgentModelFor(p); }
   // Ladekreis nur solange der gerade gejointe Agent noch keine Selbstauskunft hat.
   const a = (p && p.attributes) || {};
   vhAgentJoiningSet(!(String(a['vh.name'] || '').trim() || (p && p.name && p.name !== p.identity)));
@@ -4607,7 +4848,8 @@ function vhPresenceSet(slot, state, id) {
     return;
   }
   if (id) {
-    el.title = `${VH_SLOT_DESCS[slot] || slot}  ·  ${vhT('pres.identity')}: ${id}`;
+    const mdl = slot === 'agent' ? vhAgentModelById[id] : '';
+    el.title = (mdl ? `${vhAgentLabelById[id] || vhBrandFromIdentity(id)} · ${mdl}\n` : '') + `${VH_SLOT_DESCS[slot] || slot}  ·  ${vhT('pres.identity')}: ${id}`;
     // For the agent slot, derive a human-readable brand from identity (Claude / Hermes / Cursor / …)
     // so the user sees WHICH external LLM joined, not just generic "Agent".
     if (slot === 'agent') {
@@ -4650,6 +4892,7 @@ function vhPresenceReset() {
   });
   try { document.getElementById('vh-transcript-wrap').classList.remove('vh-agent-in'); } catch (_) {}
   try { vhAgentJoiningSet(false); } catch (_) {}
+  try { vhOpReset(); } catch (_) {}
   vhGlowSync();
 }
 
@@ -4908,7 +5151,9 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
     const local = room.localParticipant;
     // mark each speaking participant in presence
     speakers.forEach(p => {
-      const slot = (p === local || (local && p.identity === local.identity)) ? 'user' : vhPresenceSlotForP(p);
+      let slot = (p === local || (local && p.identity === local.identity)) ? 'user' : vhPresenceSlotForP(p);
+      // Operator spricht über Deltas Stimme: Agent-Chip leuchtet, nicht der Delta-Chip
+      if (slot === 'voice-ai' && vhOpSpeakingId) { vhPresenceSet('agent', 'speak'); return; }
       // Issue #3: pass identity so the slot-ownership tracker stays in sync
       if (slot) vhPresenceSet(slot, 'speak', p.identity);
     });
@@ -4943,7 +5188,18 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
           role = 'senior';
           text = text.replace(/^\[SAY\]\s*/, '');
         }
+        if (role === 'operator' && vhOpTranscript(text)) return;
         vhTrLog(role, text);
+      } catch (_) {}
+      return;
+    }
+    if (topic === 'transcript.live') {
+      try {
+        const o = JSON.parse(new TextDecoder().decode(payload));
+        if (o && o.role === 'operator' && o.id) {
+          if (o.phase === 'start') vhOpStart(String(o.id), String(o.text || ''));
+          else if (o.phase === 'end') vhOpEnd(String(o.id), !!o.interrupted);
+        }
       } catch (_) {}
       return;
     }
@@ -5313,7 +5569,12 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
   };
   // Styles: dieselbe Quelle wie das Foot-Menü (Klick dort ausführen), danach speichern.
   const sws = [...panel.querySelectorAll('.vh-dp-sw')];
-  const markSw = () => sws.forEach(b => b.classList.toggle('on', b.dataset.pal === lastPalette));
+  const patRow = document.getElementById('vh-dp-pattern-row');
+  const markSw = () => {
+    sws.forEach(b => b.classList.toggle('on', b.dataset.pal === lastPalette));
+    // Punkt 11: Fellmuster nur bei Fell-Styles
+    if (patRow) patRow.hidden = !(typeof spatialMode !== 'undefined' && spatialMode);
+  };
   sws.forEach(b => b.addEventListener('click', () => {
     const foot = document.querySelector(`.vh-foot-style[data-pal="${b.dataset.pal}"]`);
     if (foot) foot.click(); else { applyPalette(b.dataset.pal); lastPalette = b.dataset.pal; vhUserPalettePinned = true; }
@@ -5322,24 +5583,54 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
   document.querySelectorAll('.vh-foot-style[data-pal]').forEach(b => b.addEventListener('click', () => setTimeout(() => { saveState(); markSw(); }, 0)));
   // Akku-Stufe
   const akkuBtns = [...panel.querySelectorAll('[data-akku]')];
-  const markAkku = () => akkuBtns.forEach(b => { const on = b.dataset.akku === vhAkku; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
-  const setAkku = (k) => {
+  const customEl = document.getElementById('vh-dp-akku-custom');
+  const isCustom = () => { try { return localStorage.getItem(VH_AKKU_CUSTOM_KEY) === '1'; } catch (_) { return false; } };
+  const markAkku = () => {
+    const cu = isCustom();
+    akkuBtns.forEach(b => { const on = !cu && b.dataset.akku === vhAkku; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
+    if (customEl) { customEl.hidden = !cu; customEl.textContent = vhT('dp.akku.custom'); }
+  };
+  let presetting = false;
+  const setAkku = (k, opts) => {
     if (!VH_AKKU[k]) return;
     vhAkku = k;
-    try { localStorage.setItem(VH_AKKU_KEY, k); } catch (_) {}
+    if (!(opts && opts.auto)) { try { localStorage.setItem(VH_AKKU_KEY, k); } catch (_) {} }
+    try { localStorage.removeItem(VH_AKKU_CUSTOM_KEY); } catch (_) {}
+    // Punkt 9: Regler springen sichtbar auf das Preset der Stufe
+    const pr = VH_AKKU_PRESET[k];
+    if (pr) {
+      presetting = true;
+      [['particle-count', pr.pc], ['size', pr.size]].forEach(([id, v]) => {
+        const el = document.getElementById(id); if (!el) return;
+        el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      presetting = false;
+    }
     applyHd();   // Pixeldichte folgt der Stufe
     vhRingPerf.n = 0; vhRingPerf._t0 = 0; vhRingPerf._frames = 0; vhRingPerf.fps = 0; vhRingPerf._buf = [];
     markAkku(); showUse();
   };
+  window.vhSetAkku = setAkku;
   akkuBtns.forEach(b => b.addEventListener('click', () => setAkku(b.dataset.akku)));
+  ['particle-count', 'size'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => {
+      if (presetting) return;
+      try { localStorage.setItem(VH_AKKU_CUSTOM_KEY, '1'); } catch (_) {}
+      markAkku();
+    });
+  });
   // Verbrauchsanzeige aus der GEMESSENEN Arbeitszeit je Bild x Bilder/s
   // (Anteil der Rechenzeit pro Sekunde). Schwellen: <6 % niedrig, <15 % mittel,
   // <30 % hoch, sonst kritisch.
   const showUse = () => {
     if (!useEl) return;
     if (!vhRingPerf.fps || vhRingPerf.n < 10) { useEl.textContent = vhT('dp.use.wait'); useEl.dataset.lvl = ''; return; }
-    const duty = vhRingPerf.ms * vhRingPerf.fps / 1000;
-    const lvl = duty < 0.06 ? 'low' : duty < 0.15 ? 'mid' : duty < 0.30 ? 'high' : 'crit';
+    // Punkt 10: Last = gemessene Bildzeit x Ziel-Bildrate der Stufe (Voll: gemessene
+    // Rate). Anteil an einer Sekunde, Schwellen <8 % niedrig, <20 % mittel, <40 % hoch.
+    const tgt = (VH_AKKU[vhAkku] || {}).fps || vhRingPerf.fps;
+    const duty = vhRingPerf.ms * Math.min(tgt, vhRingPerf.fps + 2) / 1000;
+    const lvl = duty < 0.08 ? 'low' : duty < 0.20 ? 'mid' : duty < 0.40 ? 'high' : 'crit';
     const loc = (window.VH_LANG === 'de') ? 'de-DE' : 'en-US';
     useEl.dataset.lvl = lvl;
     useEl.innerHTML = '';
@@ -5385,14 +5676,214 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
   });
   markAkku(); markSw();
   applyHd();   // Startwert der Akku-Stufe (Pixeldichte) anwenden
+  // Punkt 15: ohne eigene Wahl prüft die Seite die Bildzeit der ersten 2 s; über
+  // 12 ms je Bild (schwaches Gerät) startet sie auf Eco. Eigene Wahl hat Vorrang.
+  let stored = null; try { stored = localStorage.getItem(VH_AKKU_KEY); } catch (_) {}
+  if (!stored && vhAkku === 'normal') setTimeout(() => {
+    let st2 = null; try { st2 = localStorage.getItem(VH_AKKU_KEY); } catch (_) {}
+    if (st2 || vhAkku !== 'normal' || isCustom()) return;
+    if (vhRingPerf.n >= 20 && vhRingPerf.ms > 12) { setAkku('eco', { auto: true }); window.vhAkkuAuto = 'eco'; }
+  }, 2000);
 })();
 
+// ── Musikquelle (UI-Paket 6) ─────────────────────────────────────────────
+// Oliver: Mit In-Ears hört das Mac-Mikro nichts, ein BT-Headset-Mikro schaltet auf
+// HFP ("wie durch ein Telefon in 8bit"). Darum: Systemton (Chrome ab 141 auf macOS,
+// Windows, ChromeOS), Browser-Tab oder eingebautes Mikro ohne Sprachfilter.
+// Bei System/Tab wird NIE getUserMedia geöffnet. Wahl in localStorage.
+const VH_MSRC_KEY = 'vh-music-src-v1';
+const VH_BT_RX = /airpods|buds|headset|hands-?free|bluetooth|\bbt\b/i;
+const VH_BUILTIN_RX = /macbook|built-?in|integriert|internal|eingebaut/i;
+function vhMusicCaps() {
+  const ua = navigator.userAgent || '';
+  const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const gdm = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && !mobile;
+  let chromium = 0;
+  try {
+    const br = (navigator.userAgentData && navigator.userAgentData.brands) || [];
+    const hit = br.find(b => /Chromium|Google Chrome|Microsoft Edge/.test(b.brand));
+    if (hit) chromium = parseInt(hit.version, 10) || 0;
+  } catch (_) {}
+  if (!chromium) { const m = ua.match(/Chrom(?:e|ium)\/(\d+)/); if (m && !/Firefox|FxiOS/.test(ua)) chromium = parseInt(m[1], 10) || 0; }
+  let plat = '';
+  try { plat = (navigator.userAgentData && navigator.userAgentData.platform) || ''; } catch (_) {}
+  if (!plat) plat = /Mac OS X|Macintosh/.test(ua) ? 'macOS' : /Windows/.test(ua) ? 'Windows' : /CrOS/.test(ua) ? 'Chrome OS' : /Linux/.test(ua) ? 'Linux' : '';
+  const sysPlat = /macOS|Windows|Chrome ?OS/i.test(plat);
+  return {
+    mobile,
+    system: gdm && chromium >= 141 && sysPlat,
+    tab: gdm && chromium > 0,          // Tab-Audio: nur Chromium (Safari/Firefox liefern keinen Ton)
+    chromium: chromium > 0,
+  };
+}
+function vhMusicSrcOptions() {
+  const c = vhMusicCaps();
+  const o = [];
+  if (c.system) o.push('system');
+  if (c.tab) o.push('tab');
+  o.push('mic');
+  return o;
+}
+function vhMusicSrc() {
+  const opts = vhMusicSrcOptions();
+  let v = '';
+  try { v = localStorage.getItem(VH_MSRC_KEY) || ''; } catch (_) {}
+  return opts.includes(v) ? v : opts[0];
+}
+let vhMsrcMsg = null;   // {text, retry} Fehler/Hinweis aus dem letzten Versuch
+function vhMusicSrcRender() {
+  const box = document.getElementById('vh-music-src');
+  if (!box) return;
+  const on = !!(window.vhMusicIsOn && window.vhMusicIsOn());
+  box.hidden = !on;
+  if (!on) return;
+  const c = vhMusicCaps();
+  const opts = vhMusicSrcOptions();
+  const cur = vhMusicSrc();
+  box.querySelectorAll('.vh-msrc').forEach((b) => {
+    b.hidden = !opts.includes(b.dataset.src);
+    const sel = b.dataset.src === cur;
+    b.setAttribute('aria-checked', String(sel));
+    b.tabIndex = sel ? 0 : -1;
+  });
+  // Einzige Quelle: Wahl ausblenden, nur der Hinweis bleibt.
+  const optsEl = box.querySelector('.vh-msrc-opts');
+  if (optsEl) optsEl.hidden = opts.length < 2;
+  const hint = box.querySelector('.vh-msrc-hint');
+  if (!hint) return;
+  hint.textContent = ''; hint.classList.remove('warn');
+  if (vhMsrcMsg) {
+    hint.classList.add('warn');
+    hint.appendChild(document.createTextNode(vhMsrcMsg.text));
+    if (vhMsrcMsg.retry) {
+      const r = document.createElement('button'); r.type = 'button'; r.textContent = vhT('msrc.retry');
+      r.addEventListener('click', () => vhMusicCapture(vhMusicSrc()));
+      hint.appendChild(r);
+    }
+    return;
+  }
+  const parts = [];
+  if (cur === 'system') parts.push(vhT('msrc.hintSystem'));
+  else if (cur === 'tab') parts.push(vhT('msrc.hintTab'));
+  else parts.push(vhT(c.mobile ? 'msrc.hintMobile' : 'msrc.hintMic'));
+  if (!c.system && !c.mobile) parts.push(vhT('msrc.onlyChrome'));
+  hint.textContent = parts.join(' ');
+}
+window.vhMusicSrcRender = vhMusicSrcRender;
+function vhMusicUse(stream, label) {
+  if (currentStream && currentStream !== stream) { try { currentStream.getTracks().forEach(t => t.stop()); } catch (_) {} }
+  const audioCtx = new AudioContext({ latencyHint: 'interactive' });
+  const src = audioCtx.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
+  const an = audioCtx.createAnalyser();
+  an.fftSize = 2048; an.smoothingTimeConstant = 0.0;
+  src.connect(an);
+  analyser = an; freqData = new Uint8Array(an.frequencyBinCount);
+  currentStream = stream; micActive = true;
+  window.vhMusicStream = { stream, label };   // für Tests/Diagnose: aktive Quelle
+  const at = stream.getAudioTracks()[0];
+  if (at) at.addEventListener('ended', () => {
+    if (currentStream !== stream) return;
+    vhMsrcMsg = { text: vhT('msrc.ended'), retry: true }; vhMusicSrcRender();
+  });
+}
+// Systemton/Tab: getDisplayMedia. Video sofort stoppen; läuft der Ton danach nicht
+// weiter (manche Browser beenden dann die ganze Aufnahme), Video behalten, nie anzeigen.
+async function vhMusicDisplay(src) {
+  const opts = src === 'system'
+    ? { video: true, audio: true, systemAudio: 'include', windowAudio: 'system', selfBrowserSurface: 'exclude', monitorTypeSurfaces: 'include' }
+    : { video: { displaySurface: 'browser' }, audio: { suppressLocalAudioPlayback: false }, selfBrowserSurface: 'exclude', preferCurrentTab: false };
+  const st = await navigator.mediaDevices.getDisplayMedia(opts);
+  const at = st.getAudioTracks();
+  if (!at.length) { st.getTracks().forEach(t => t.stop()); return null; }
+  const vids = st.getVideoTracks();
+  vids.forEach(t => t.stop());
+  await new Promise(r => setTimeout(r, 250));
+  if (at[0].readyState !== 'live') {
+    // Ton starb mit dem Video: einmal neu holen und Video behalten (nicht anzeigen)
+    const st2 = await navigator.mediaDevices.getDisplayMedia(opts);
+    if (!st2.getAudioTracks().length) { st2.getTracks().forEach(t => t.stop()); return null; }
+    window.vhMusicVideoKept = true;
+    return st2;
+  }
+  window.vhMusicVideoKept = false;
+  return st;
+}
+// Mikro: eingebautes bevorzugen, BT-Headsets meiden, keine Sprachfilter.
+async function vhMusicMic() {
+  const c = vhMusicCaps();
+  const raw = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+  let devs = [];
+  try { devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications'); } catch (_) {}
+  const pick = (list) => list.find(d => VH_BUILTIN_RX.test(d.label) && !VH_BT_RX.test(d.label)) || list.find(d => d.label && !VH_BT_RX.test(d.label));
+  let dev = pick(devs);
+  let st;
+  if (dev) st = await navigator.mediaDevices.getUserMedia({ audio: { ...raw, deviceId: { exact: dev.deviceId } }, video: false });
+  else {
+    // Ohne Labels (noch keine Freigabe): erst Standard holen, dann mit Labels neu wählen.
+    st = await navigator.mediaDevices.getUserMedia({ audio: raw, video: false });
+    try { devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications'); } catch (_) {}
+    dev = pick(devs);
+    const curId = st.getAudioTracks()[0] && st.getAudioTracks()[0].getSettings && st.getAudioTracks()[0].getSettings().deviceId;
+    if (dev && dev.deviceId !== curId) {
+      st.getTracks().forEach(t => t.stop());
+      st = await navigator.mediaDevices.getUserMedia({ audio: { ...raw, deviceId: { exact: dev.deviceId } }, video: false });
+    }
+  }
+  const onlyBt = !dev && devs.length > 0 && devs.every(d => VH_BT_RX.test(d.label));
+  return { stream: st, label: dev ? dev.label : '', onlyBt: onlyBt && !c.mobile, onlyBtMobile: onlyBt && c.mobile };
+}
+async function vhMusicCapture(src) {
+  vhMsrcMsg = null; vhMusicSrcRender();
+  try {
+    if (src === 'system' || src === 'tab') {
+      const st = await vhMusicDisplay(src);
+      if (!window.vhMusicIsOn || !window.vhMusicIsOn()) { if (st) st.getTracks().forEach(t => t.stop()); return; }
+      if (!st) { vhMsrcMsg = { text: vhT('msrc.noAudio'), retry: true }; vhMusicSrcRender(); return; }
+      vhMusicUse(st, src);
+    } else {
+      const r = await vhMusicMic();
+      if (!window.vhMusicIsOn || !window.vhMusicIsOn()) { r.stream.getTracks().forEach(t => t.stop()); return; }
+      vhMusicUse(r.stream, r.label || 'mic');
+      if (r.onlyBt || r.onlyBtMobile) { vhMsrcMsg = { text: vhT('msrc.onlyBt'), retry: false }; vhMusicSrcRender(); }
+    }
+  } catch (e) {
+    const denied = e && (e.name === 'NotAllowedError' || e.name === 'AbortError');
+    vhMsrcMsg = { text: src === 'mic' ? vhT('err.mic') : vhT('msrc.noAudio'), retry: true };
+    if (!denied) console.warn('[vh-music] Quelle', src, e && e.name);
+    vhMusicSrcRender();
+  }
+}
+// Quellenwahl: neue Quelle sofort übernehmen (Klick = Nutzergeste für den Dialog).
+(() => {
+  const box = document.getElementById('vh-music-src');
+  if (!box) return;
+  const pickSrc = (k) => {
+    try { localStorage.setItem(VH_MSRC_KEY, k); } catch (_) {}
+    vhMusicSrcRender();
+    if (window.vhMusicIsOn && window.vhMusicIsOn()) vhMusicCapture(k);
+  };
+  box.addEventListener('click', (e) => {
+    const b = e.target && e.target.closest && e.target.closest('.vh-msrc');
+    if (b && b.getAttribute('aria-checked') !== 'true') pickSrc(b.dataset.src);
+  });
+  box.addEventListener('keydown', (e) => {
+    const d = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+    if (!d) return;
+    const btns = Array.from(box.querySelectorAll('.vh-msrc')).filter(b => !b.hidden);
+    const i = btns.indexOf(document.activeElement); if (i < 0) return;
+    e.preventDefault();
+    const n = btns[(i + d + btns.length) % btns.length]; n.focus(); pickSrc(n.dataset.src);
+  });
+})();
+async function vhMusicOffForCall() {
+  if (window.vhMusicIsOn && window.vhMusicIsOn()) { try { await window.vhMusicSet(false); } catch (_) {} try { vhLiveRender(true); } catch (_) {} }
+}
+
 // ── Top-right Quick-Actions (2026-05-28) ──────────────────────────────────
-// #btn-vh-music: music profile + max all FX sliders + mic on (no LK call)
+// Musikmodus (Feld der Modus-Leiste): music profile + FX hoch + Tonquelle (kein LK-Call)
 // #btn-vh-call:  mint room, connect as host, copy /r/<slug> URL to clipboard
 //                so an external agent (or invitee) can join via the URL.
 (() => {
-  const musicBtn = document.getElementById('btn-vh-music');
   const callBtn  = document.getElementById('btn-vh-call');
 
   const _maxRange = (id) => {
@@ -5433,28 +5924,31 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
     _setRange(id, el.getAttribute('value'));
   };
 
-  if (musicBtn) musicBtn.addEventListener('click', async () => {
-    // Toggle off → revert sliders to defaults + back to speech profile + mic off.
-    if (musicBtn.classList.contains('on')) {
-      ['fx-intensity','island','brightness','ring-fx','sat-amount','particle-count','size']
-        .forEach(_restoreRange);
-      try { applyProfile('speech'); } catch (e) { console.error('[vh-music] revert profile', e); }
-      // Im Call: Mic NICHT stoppen, sondern den Call-Analyser zurückhängen (Punkt F).
-      if (typeof lkConnected !== 'undefined' && lkConnected) { try { vhCallAnalyserRestore(); } catch (e) { console.error('[vh-music] restore call audio', e); } }
-      else if (micActive) { try { stopAudio(); } catch (e) { console.error('[vh-music] stopMic', e); } }
-      musicBtn.classList.remove('on');
-      return;
-    }
-    // Toggle on.
+  // UI-Paket 6: Musik ist ein Feld der Modus-Leiste (kein Knopf oben rechts mehr)
+  // und läuft STATT eines Calls. Zustand hier, Anzeige in vhLiveRender().
+  let musicOn = false;
+  const musicOff = () => {
+    if (!musicOn) return;
+    ['fx-intensity','island','brightness','ring-fx','sat-amount','particle-count','size']
+      .forEach(_restoreRange);
+    try { applyProfile('speech'); } catch (e) { console.error('[vh-music] revert profile', e); }
+    if (typeof lkConnected !== 'undefined' && lkConnected) { try { vhCallAnalyserRestore(); } catch (e) { console.error('[vh-music] restore call audio', e); } }
+    else if (micActive) { try { stopAudio(); } catch (e) { console.error('[vh-music] stopMic', e); } }
+    musicOn = false;
+  };
+  const musicStart = async () => {
     try { applyProfile('music'); } catch (e) { console.error('[vh-music] profile', e); }
     ['fx-intensity','island'].forEach(_maxRange);
     ['brightness','ring-fx','sat-amount'].forEach(_halfGlow);
     _setRange('particle-count', 0.55);
     const sizeEl = document.getElementById('size');
     if (sizeEl) _setRange('size', sizeEl.getAttribute('value') || 0.155);
-    if (!micActive) { try { await startMic(); } catch (e) { console.error('[vh-music] mic', e); } }
-    musicBtn.classList.add('on');
-  });
+    musicOn = true;
+    try { vhMusicSrcRender(); } catch (_) {}
+    await vhMusicCapture(vhMusicSrc());
+  };
+  window.vhMusicIsOn = () => musicOn;
+  window.vhMusicSet = async (on) => { if (on) { if (!musicOn) await musicStart(); } else musicOff(); try { vhMusicSrcRender(); } catch (_) {} };
 
   const callLbl = callBtn ? callBtn.querySelector('.lbl') : null;
   const _setCallUi = (state, msg) => {
@@ -5565,7 +6059,7 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
         }
       } catch (_) {}
       const { Room, RoomEvent, Track } = window.LivekitClient;
-      await vhMicRefreshPref(); lkRoom = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: vhMicCaptureDefaults() });
+      await vhMusicOffForCall(); await vhMicRefreshPref(); lkRoom = new Room({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: vhMicCaptureDefaults() });
       vhWireRoomEvents(lkRoom, RoomEvent, Track);
       await lkRoom.connect(tok.url, tok.token);
       await lkRoom.localParticipant.setMicrophoneEnabled(true);

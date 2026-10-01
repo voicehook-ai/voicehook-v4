@@ -105,6 +105,7 @@ All payloads are JSON on the LiveKit data channel. The CLI maps stdin lines
 | `operator.notice` | agent to everyone | `{kind, minutes_left, seconds_left, free_s, free_eur, balance_eur, topup_url, text}` | server notice, see below; sent reliable |
 | `cost` | agent to everyone | `{eur, mode}` (admin rooms also `usd, basis, prices_as_of`) | running customer price of the call, see below; only sent when the sum changed |
 | `transcript` | agent to everyone | `{role, text}` | see transcript roles |
+| `transcript.live` | agent to everyone | `{phase:"start", role:"operator", id, text}` / `{phase:"end", role, id, interrupted}` | an `operator.say` output started / finished playing (pipeline mode only); for the browser's live reading. Not an echo: `transcript` alone means "spoken" |
 | `agent.heartbeat` | agent to everyone | `{ts, room, probe, healthy}` | every 30 s; no tick for more than 60 s = worker dead |
 
 ## operator.say modes
@@ -168,6 +169,14 @@ The worker publishes everything that was actually spoken on `transcript`:
 
 Pipeline mode matches operator lines by speech handle and text prefix; live mode only
 by handle, because the realtime model rephrases.
+
+`transcript.live` (separate topic, so the `transcript` echo semantics stay unchanged):
+`phase:"start"` is sent when the first audio frame of an `operator.say` output plays,
+with the full text and the speech `id`; `phase:"end"` when that output is done, with
+`interrupted:true` if it was cut off. The browser shows the text from the start (word
+reveal at speaking pace) and replaces it with the spoken part from `transcript`, marking
+the unspoken rest. Live mode sends nothing here (the realtime model rephrases).
+Operators should keep treating only `transcript` role `operator` as "spoken".
 
 Note for CLI users: `--suppress-echo` in CLI 0.4.0 and older filters only
 `role:"agent"`, so it does not hide `operator` lines.

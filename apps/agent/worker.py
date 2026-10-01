@@ -772,6 +772,45 @@ async def entrypoint(ctx: JobContext) -> None:
                 logger.debug("[cost publish] %s", e)
         asyncio.create_task(_send_cost())
 
+    # Operator-Text ab Sprechbeginn (UI-Paket 6): Sobald die Wiedergabe einer
+    # Operator-Ausgabe startet (agent_state -> speaking, erster Audio-Frame), geht
+    # der volle Text auf `transcript.live` (phase=start), am Ende phase=end mit
+    # interrupted. `transcript` bleibt unverändert "tatsächlich gesprochen".
+    from .relay import TOPIC_TRANSCRIPT_LIVE
+
+    live_sent: set[str] = set()
+
+    def _pub_live(obj: dict) -> None:
+        payload = json.dumps(obj).encode()
+
+        async def _send() -> None:
+            try:
+                await ctx.room.local_participant.publish_data(payload=payload, topic=TOPIC_TRANSCRIPT_LIVE)
+            except Exception as e:  # noqa: BLE001
+                logger.debug("[transcript.live publish] %s", e)
+        asyncio.create_task(_send())
+
+    @session.on("agent_state_changed")
+    def _on_agent_state(ev) -> None:  # noqa: ANN001
+        if getattr(ev, "new_state", None) != "speaking":
+            return
+        h = session.current_speech
+        text = handlers.operator_text_for(h) if handlers.operator_text_for else None
+        sid = str(getattr(h, "id", "") or "")
+        if not text or not sid or sid in live_sent:
+            return
+        live_sent.add(sid)
+        _pub_live({"phase": "start", "role": "operator", "id": sid, "text": text})
+
+        def _done(hh) -> None:  # noqa: ANN001
+            live_sent.discard(sid)
+            _pub_live({"phase": "end", "role": "operator", "id": sid,
+                       "interrupted": bool(getattr(hh, "interrupted", False))})
+        try:
+            h.add_done_callback(_done)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("[transcript.live done-callback] %s", e)
+
     # Alles tatsächlich Gesprochene (Eigenantworten + Operator-Sätze, beide Modi)
     # -> Browser-Transkript; bei Abbruch nur der gesprochene Teil (synchronized transcript)
     @session.on("conversation_item_added")

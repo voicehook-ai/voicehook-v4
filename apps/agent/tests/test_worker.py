@@ -230,3 +230,78 @@ def test_live_cost_still_booked_into_month_budget(monkeypatch):
                      "basis": {"rt_audio_in_tokens": 1000, "rt_audio_out_tokens": 500,
                                "rt_text_in_tokens": 0, "rt_text_out_tokens": 0},
                      "prices_as_of": "2026-09-30"}]
+
+
+# ----- UI-Paket 6: Operator-Text ab Sprechbeginn (transcript.live) ---------------
+def test_transcript_live_start_and_end_for_operator_speech(monkeypatch):
+    """Sprechbeginn einer Operator-Ausgabe -> transcript.live phase=start mit vollem
+    Text; Ende -> phase=end. Eigenantworten senden nichts; `transcript` bleibt wie es war."""
+    import asyncio
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    import agent.worker as w
+
+    monkeypatch.delenv("VOICEHOOK_PIPELINE", raising=False)
+    monkeypatch.setenv("VOICEHOOK_STT_GATE", "0")
+    from agent import freetier
+    freetier.register_room("r1", "normal", [], exempt=True)
+    session = _Emitter()
+    session.start = AsyncMock()
+    session.aclose = AsyncMock()
+    session.current_speech = None
+    cbs = []
+    op = SimpleNamespace(id="speech_op1", interrupted=False, done=lambda: False,
+                         add_done_callback=lambda f: cbs.append(f))
+    own = SimpleNamespace(id="speech_own", interrupted=False, done=lambda: False,
+                          add_done_callback=lambda f: cbs.append(f))
+    session.say = MagicMock(return_value=op)
+    session.interrupt = MagicMock()
+    monkeypatch.setattr(w, "build_session", lambda: session)
+    got = {}
+    real = w.build_relay_handlers
+
+    def _cap(*a, **kw):
+        got["h"] = real(*a, **kw)
+        return got["h"]
+    monkeypatch.setattr(w, "build_relay_handlers", _cap)
+    room = _Emitter()
+    room.name = "r1"
+    room.remote_participants = {}
+    room.local_participant = SimpleNamespace(identity="voice-ai", publish_data=AsyncMock())
+    ctx = SimpleNamespace(connect=AsyncMock(), room=room, job=SimpleNamespace(id="j1"),
+                          shutdown=MagicMock(), delete_room=AsyncMock())
+
+    @dataclass_pkt
+    class _P:
+        topic: str
+        data: bytes
+
+    async def _go():
+        await w.entrypoint(ctx)
+        await got["h"].on_say(_P("operator.say", json.dumps({"text": "Hallo Oliver, hier ist der Plan."}).encode()))
+        session.current_speech = own                       # Eigenantwort: kein transcript.live
+        session.emit("agent_state_changed", SimpleNamespace(old_state="thinking", new_state="speaking"))
+        session.current_speech = op
+        session.emit("agent_state_changed", SimpleNamespace(old_state="listening", new_state="speaking"))
+        session.emit("agent_state_changed", SimpleNamespace(old_state="listening", new_state="speaking"))  # kein Doppel
+        await asyncio.sleep(0)
+        op.interrupted = True
+        for f in list(cbs):
+            f(op)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+    asyncio.run(_go())
+    live = [json.loads(c.kwargs["payload"]) for c in room.local_participant.publish_data.call_args_list
+            if c.kwargs.get("topic") == "transcript.live"]
+    assert live == [
+        {"phase": "start", "role": "operator", "id": "speech_op1", "text": "Hallo Oliver, hier ist der Plan."},
+        {"phase": "end", "role": "operator", "id": "speech_op1", "interrupted": True},
+    ]
+    tr = [c for c in room.local_participant.publish_data.call_args_list if c.kwargs.get("topic") == "transcript"]
+    assert tr == []                                        # Echo-Topic unberührt (kommt erst nach dem Sprechen)
+
+
+from dataclasses import dataclass as dataclass_pkt  # noqa: E402
