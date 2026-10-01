@@ -127,7 +127,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'menu.mic': 'Mikrofon', 'menu.style': 'Style',
       'style.ice': 'Eis', 'style.earth': 'Erde', 'style.fire': 'Feuer', 'style.water': 'Wasser',
       'style.air': 'Luft', 'style.forest': 'Wald', 'style.zebra': 'Zebra', 'style.giraffe': 'Giraffe',
-      'style.leopard': 'Leopard', 'style.tiger': 'Tiger',
+      'style.leopard': 'Leopard', 'style.tiger': 'Tiger', 'style.glacier': 'Gletscher',
       'hd.title': 'Kringel in voller Auflösung (HD) oder sparsam (SD: einfache Pixeldichte, 30 Bilder pro Sekunde)',
       'mic.default': 'System-Standard', 'mic.show': 'Mikros anzeigen …',
       'mic.showTitle': 'Einmal Mikro-Zugriff erlauben, dann erscheinen alle Geräte',
@@ -263,7 +263,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'menu.mic': 'Microphone', 'menu.style': 'Style',
       'style.ice': 'Ice', 'style.earth': 'Earth', 'style.fire': 'Fire', 'style.water': 'Water',
       'style.air': 'Air', 'style.forest': 'Forest', 'style.zebra': 'Zebra', 'style.giraffe': 'Giraffe',
-      'style.leopard': 'Leopard', 'style.tiger': 'Tiger',
+      'style.leopard': 'Leopard', 'style.tiger': 'Tiger', 'style.glacier': 'Glacier',
       'hd.title': 'Dome in full resolution (HD) or light (SD: single pixel density, 30 frames per second)',
       'mic.default': 'System default', 'mic.show': 'Show microphones …',
       'mic.showTitle': 'Allow mic access once, then all devices appear',
@@ -1327,6 +1327,7 @@ body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
       <button type="button" class="vh-dp-sw" data-pal="giraffe" style="--c:linear-gradient(120deg,#e9c896,#8a5a2a,#3a2410)" data-i18n-title="style.giraffe" data-i18n-aria="style.giraffe" title="giraffe" aria-label="giraffe"></button>
       <button type="button" class="vh-dp-sw" data-pal="leopard" style="--c:linear-gradient(120deg,#e6b428,#b88420,#1a1006)" data-i18n-title="style.leopard" data-i18n-aria="style.leopard" title="leopard" aria-label="leopard"></button>
       <button type="button" class="vh-dp-sw" data-pal="tiger" style="--c:linear-gradient(120deg,#ff8c1a,#a04010,#0a0a0a)" data-i18n-title="style.tiger" data-i18n-aria="style.tiger" title="tiger" aria-label="tiger"></button>
+      <button type="button" class="vh-dp-sw" data-pal="glacier" style="--c:linear-gradient(120deg,#e8fbff,#2fb2dc,#1650c8)" data-i18n-title="style.glacier" data-i18n-aria="style.glacier" title="glacier" aria-label="glacier"></button>
   </div>
   <div class="vh-dp-sec" data-i18n="dp.ringsec">Kringel</div>
     <label class="vh-dp-row"><span class="vh-dp-lbl" data-i18n="dp.zoom">Zoom</span><input id="zoom-ctl" type="range" min="0.5" max="4" step="0.01" value="1"><output class="vh-dp-val"></output><span class="vh-dp-sub" data-i18n="dp.zoom.sub"></span></label>
@@ -1531,6 +1532,7 @@ body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
   <button data-pal="giraffe" style="--c:linear-gradient(120deg,#e9c896,#8a5a2a,#3a2410)" title="giraffe"></button>
   <button data-pal="leopard" style="--c:linear-gradient(120deg,#e6b428,#b88420,#1a1006)" title="leopard"></button>
   <button data-pal="tiger"  style="--c:linear-gradient(120deg,#ff8c1a,#a04010,#0a0a0a)" title="tiger"></button>
+  <button data-pal="glacier" style="--c:linear-gradient(120deg,#e8fbff,#2fb2dc,#1650c8)" title="glacier"></button>
 </div>
 <div id="hue-ctl">
   <span>hue</span>
@@ -3010,6 +3012,12 @@ btnRand.addEventListener('click', () => {
 // ── Preset-Paletten: 5 elementare Themes mit eigenen Satellit-Farben ─────────
 // Donut: hueStart/hueRange/satFloor.   Satellites: satH/satS/satL.
 const PALETTES = {
+  // Gletscher: Schollen-Muster (vhBuildSpatialLUT 'glacier'), Farben aus Eishoehlen-Foto.
+  glacier: { hueStart: 0.55, hueRange: 0.05, satFloor: 0.6, litMul: 0.9,
+            satH: 0.53, satS: 0.6, satL: 0.85, mR: 0.7, mG: 0.9, mB: 1.0,
+            spatial: 'glacier', furSoftness: 0.15,
+            discrete: { hues: [0.529, 0.529, 0.54, 0.568, 0.612, 0.593], sats: [1.0, 0.77, 0.712, 0.778, 0.802, 0.789],
+                        lits: [0.955, 0.778, 0.524, 0.459, 0.435, 0.112], weights: [0.1667, 0.1667, 0.1667, 0.1667, 0.1667, 0.1667] } },
   // Eis: cyan-blau, dunkler · sandgelbe Satelliten als Wärme-Akzent · Maus = warm orange (Sonne auf Eis)
   ice:    { hueStart: 0.55, hueRange:  0.13, satFloor: 0.65, litMul: 0.78,
             satH: 0.13, satS: 0.85, satL: 0.55 },
@@ -3106,6 +3114,7 @@ const PALETTES = {
 // wechseln alle drei beim Style-Wechsel gemeinsam. Werte = Dark-Theme; Light
 // dunkelt per CSS (--vh-*-ink) ab.
 const VH_SPEAKER_COLORS = {
+  glacier: { user: '#9be3f2', delta: '#2fb2dc', agent: '#e8fbff' },  // Hellcyan · Cyan · Eisweiß
   ice:     { user: '#5fd6e8', delta: '#7aa7ff', agent: '#e4d79a' },  // Cyan · Eisblau · Sand-Akzent
   earth:   { user: '#58b86e', delta: '#4a8fe0', agent: '#d9b26a' },  // Grün · Ozean · Sand
   fire:    { user: '#ff6a3d', delta: '#ffc93c', agent: '#c86bff' },  // Glut · Flamme · Violett
@@ -3192,6 +3201,7 @@ const VH_STYLE_BRIGHT = {
   water:   { d: 2.20, l: 1.85 }, air:    { d: 0.80, l: 1.40 }, forest:  { d: 1.35, l: 1.85 },
   zebra:   { d: 1.85, l: 1.85 }, giraffe:{ d: 1.85, l: 1.85 }, leopard: { d: 1.85, l: 1.85 },
   tiger:   { d: 1.85, l: 1.85 },
+  glacier: { d: 1.60, l: 1.60 },
 };
 const brightnessInput = document.getElementById('brightness');
 let vhBrightRel = parseFloat(brightnessInput.value);
@@ -3431,6 +3441,29 @@ function vhBuildSpatialLUT() {
       const v = (1 - m) * Math.sin(ph) - m * Math.cos(2 * ph);
       const thr = 0.12 + (vhFbm(q.x * 1.4 + 7.7, q.y * 1.4 + 2.2) - 0.5) * 0.7;
       spatialBucketLUT[i] = v > thr ? 1 : 0;                     // 1 schwarz, 0 weiß
+    }
+  } else if (spatialMode === 'glacier') {
+    // Gletscher (Olli 01.10., nach Eishoehlen-Foto): grosse, etwa fuenfeckige
+    // Schollen mit leuchtenden Bruchkanten und dunklen Rissen; je Scholle ein
+    // eigener Blauton, Verlauf Kante hell -> Mitte tief. Buckets: 0 Lichtkante,
+    // 1 Hellcyan, 2 Cyan, 3 Gletscherblau, 4 Tiefblau, 5 Navy-Riss.
+    const f = vhRingCells(6, 2, 0.22);
+    for (let i = 0; i < N; i++) {
+      const nn = f.nearest2(i);
+      const e = nn.d2 - nn.d1;
+      const hc = vhHash01(nn.cell * 11 + 5);
+      const gap = 0.03 + 0.03 * vhHash01(nn.cell * 3 + 1);
+      let b;
+      if (e < gap) b = 5;
+      else if (e < gap + 0.05) b = 0;
+      else if (e < gap + 0.13) b = 1;
+      else {
+        const base = hc < 0.33 ? 2 : (hc < 0.66 ? 3 : 4);
+        const tt = (e - gap - 0.13) / 0.35;
+        b = tt < 0.35 ? Math.max(2, base - 1) : (tt < 0.8 ? base : Math.min(4, base + 1));
+      }
+      if (b >= buckets) b = buckets - 1;
+      spatialBucketLUT[i] = b;
     }
   } else if (spatialMode === 'voronoi') {
     // Giraffe (Olli 01.10.): große polygonale Flecken mit hellen Trennlinien
@@ -6258,6 +6291,7 @@ body.settings-collapsed #vh-build{display:none !important;}
       <button type="button" class="vh-foot-style" data-pal="giraffe" role="menuitem" data-i18n="style.giraffe">Giraffe</button>
       <button type="button" class="vh-foot-style" data-pal="leopard" role="menuitem" data-i18n="style.leopard">Leopard</button>
       <button type="button" class="vh-foot-style" data-pal="tiger"   role="menuitem" data-i18n="style.tiger">Tiger</button>
+      <button type="button" class="vh-foot-style" data-pal="glacier" role="menuitem" data-i18n="style.glacier">Gletscher</button>
       <!-- Punkt H: HD-Umschalter des Kringels (lag im seit 2026-05-28 unerreichbaren #fx-ctl) -->
       <button type="button" class="vh-foot-style" id="vh-foot-hd" role="menuitemcheckbox" aria-checked="true" title="Kringel in voller Auflösung (HD) oder sparsam (SD)" data-i18n-title="hd.title">HD</button>
     </div>
