@@ -13,18 +13,23 @@ Gezählt wird je Merkmal; das Limit greift, sobald EINES der Merkmale es erreich
 Gespeichert werden nur SHA-256-Hashes der Merkmale, nie IP oder ID im Klartext.
 
 Env (Minuten pro Tag, 0 = aus):
-  VOICEHOOK_FREE_MIN_PER_DAY_LIVE    Default 20
-  VOICEHOOK_FREE_MIN_PER_DAY_NORMAL  Default 0 (aus; offen, ob Normal mitzählt)
-Annahme: Live- und Normal-Minuten zählen getrennt (je Modus ein Zähler).
+  VOICEHOOK_FREE_MIN_PER_DAY_NORMAL  Default 20
+  VOICEHOOK_FREE_MIN_PER_DAY_LIVE    Default 10
+Live- und Normal-Minuten zählen getrennt (je Modus ein Zähler). Reihenfolge im Call
+(Oliver 01.10.): erst die Gratis-Minuten, dann das Guthaben eines Wallets; ein
+Raum kann deshalb gleichzeitig in free_rooms stehen und an ein Wallet gebunden sein.
 
 Datei: $VOICEHOOK_STATE_DIR/freetier.sqlite. Der HTTP-Server prüft beim Anlegen des
 Raums (402 free_limit) und merkt sich Raum -> Merkmale; der Worker liest das EINMAL
 beim Start und bucht im Takt die Minuten, solange ein Mensch da ist.
 
 free_rooms wird _KEEP_DAYS (7) Tage gehalten, länger als jede Raumzuordnung im
-Server (Token-TTL max. 1 Tag). Der Live-Worker ist fail-closed: Live-Raum ohne
-Wallet und ohne free_rooms-Eintrag wird abgelehnt (Review 01.10. #2). Admin-Räume
-stehen mit exempt=1 drin (nicht gezählt, aber bekannt).
+Server (Token-TTL max. 1 Tag). Der Worker ist in BEIDEN Modi fail-closed, solange
+das Gratis-Kontingent des Modus an ist: Raum ohne Wallet und ohne free_rooms-Eintrag
+wird abgelehnt (Review 01.10. #2, Normal seit PR #93). Admin-/Operator-Räume stehen
+mit exempt=1 drin (nicht gezählt, aber bekannt): admin/live-room, und Normal-Räume,
+die jemand mit einer gültigen HMAC-Einladung betritt, die der Server nicht selbst
+ausgestellt hat (call-starten, register_room_if_absent).
 """
 
 from __future__ import annotations
@@ -40,8 +45,8 @@ import time
 from collections.abc import Iterable
 from pathlib import Path
 
-DEFAULT_MIN_LIVE = 20.0
-DEFAULT_MIN_NORMAL = 0.0
+DEFAULT_MIN_LIVE = 10.0
+DEFAULT_MIN_NORMAL = 20.0
 ANON_HEADER = "x-anon-id"
 _ANON_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 _KEEP_DAYS = 7
@@ -215,6 +220,27 @@ def register_room(
         except BaseException:
             conn.execute("ROLLBACK")
             raise
+    finally:
+        conn.close()
+
+
+def register_room_if_absent(room: str, mode: str, now: float | None = None) -> bool:
+    """Raum als Operator-Raum (exempt, ungezählt) merken, wenn er noch keinen Eintrag
+    hat; bestehende Einträge bleiben unverändert. True = neu angelegt.
+
+    Für Räume, die nur mit gültiger HMAC-Einladung betreten werden, die der Server
+    selbst nie ausgestellt hat (call-starten: Operator mintet mit INVITE_SECRET).
+    Wer das Secret hat, ist Admin; ohne Eintrag würde der Worker den Raum seit
+    PR #93 abweisen (fail-closed auch im Normalmodus)."""
+    now = time.time() if now is None else now
+    conn = connect()
+    try:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO free_rooms (room, mode, keys, created_at, exempt) VALUES (?, ?, '', ?, 1)",
+            (room, mode, now),
+        )
+        conn.commit()
+        return cur.rowcount > 0
     finally:
         conn.close()
 

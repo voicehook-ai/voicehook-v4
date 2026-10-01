@@ -270,6 +270,7 @@ def _run_worker(monkeypatch, *, live_mode, initial):
     else:
         monkeypatch.delenv("VOICEHOOK_PIPELINE", raising=False)
         monkeypatch.setenv("VOICEHOOK_STT_GATE", "0")
+        freetier.register_room("r1", "normal", [], exempt=True)  # fail-closed seit PR #93
     session = _Emitter()
     session.start = AsyncMock()
     session.aclose = AsyncMock()

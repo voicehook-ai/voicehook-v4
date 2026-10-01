@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import agent.worker as w
-from agent import budget
+from agent import budget, freetier
 from agent.billing import db, pricing
 
 from .test_worker import _Emitter, _metric
@@ -87,6 +87,7 @@ def test_live_call_charges_factor_1_5_and_skips_month_budget(monkeypatch):
 def test_room_without_wallet_is_not_charged(monkeypatch):
     acc = _account(1000)
     db.bind_room("anderer-raum", acc, "normal")
+    freetier.register_room("r1", "normal", [], exempt=True)  # bekannt, aber nicht gezählt
     ctx, _, _ = _run(monkeypatch, live_mode=False, metrics=[_metric("STTMetrics", audio_duration=600.0)])
     assert db.balance_ueur(acc) == 10_000_000
     ctx.shutdown.assert_not_called()

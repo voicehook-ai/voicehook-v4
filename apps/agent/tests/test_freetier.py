@@ -61,11 +61,11 @@ def _use(anon=None, ip="1.1.1.1", minutes=20.0, mode="live"):
 
 
 # ----- Konfiguration ------------------------------------------------------------
-def test_defaults_live_20_normal_off(monkeypatch):
-    assert freetier.limit_minutes("live") == 20
-    assert freetier.limit_minutes("normal") == 0 and not freetier.enabled("normal")
+def test_defaults_normal_20_live_10(monkeypatch):
+    assert freetier.limit_minutes("live") == 10                   # Oliver 01.10.
+    assert freetier.limit_minutes("normal") == 20 and freetier.enabled("normal")
     monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_LIVE", "kaputt")
-    assert freetier.limit_minutes("live") == 20                   # nie unbegrenzt durch Tippfehler
+    assert freetier.limit_minutes("live") == 10                   # nie unbegrenzt durch Tippfehler
     monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_LIVE", "0")
     assert not freetier.enabled("live")
 
@@ -79,7 +79,7 @@ def test_identity_keys_hashed_and_invalid_anon_ignored():
 
 # ----- HTTP: 402 free_limit -----------------------------------------------------
 def test_live_room_under_limit_ok_and_registers_room(client):
-    _use(ANON_A, minutes=19.9)
+    _use(ANON_A, minutes=9.9)
     r = _live(client, ANON_A)
     assert r.status_code == 200                                   # Positivkontrolle
     mode, keys = freetier.room_keys(r.json()["room"])
@@ -90,7 +90,7 @@ def test_live_room_at_limit_is_402_free_limit(client):
     _use(ANON_A, minutes=20)
     r = _live(client, ANON_A)
     assert r.status_code == 402
-    assert r.json()["detail"] == {"error": "free_limit", "topup_url": "/aufladen", "free_min_per_day": 20.0}
+    assert r.json()["detail"] == {"error": "free_limit", "topup_url": "/aufladen", "free_min_per_day": 10.0}
 
 
 def test_limit_hits_when_either_anon_or_ip_reached(client):
@@ -137,14 +137,15 @@ def test_empty_wallet_with_gating_off_falls_back_to_free_limit(client):
     assert _live(client, ANON_A, wallet=wl["wallet_token"]).status_code == 402
 
 
-def test_normal_off_by_default_and_on_via_env(client, monkeypatch):
+def test_normal_on_by_default_and_off_via_env(client, monkeypatch):
     _use(ANON_A, minutes=60, mode="normal")
     h = {"x-anon-id": ANON_A, "x-forwarded-for": "1.1.1.1"}
-    ok = client.post("/api/host-call", json={"identity": "u"}, headers=h)
-    assert ok.status_code == 200 and freetier.room_keys(ok.json()["room"]) is None
-    monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_NORMAL", "20")
     r = client.post("/api/host-call", json={"identity": "u"}, headers=h)
     assert r.status_code == 402 and r.json()["detail"]["error"] == "free_limit"
+    assert r.json()["detail"]["free_min_per_day"] == 20.0
+    monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_NORMAL", "0")
+    ok = client.post("/api/host-call", json={"identity": "u"}, headers=h)
+    assert ok.status_code == 200 and freetier.room_keys(ok.json()["room"]) is None
 
 
 def test_live_and_normal_counted_separately(client, monkeypatch):
@@ -187,8 +188,8 @@ def test_worker_ends_free_call_at_limit_with_announcement(monkeypatch):
     keys = freetier.identity_keys(ANON_A, "1.1.1.1")
     freetier.register_room("free-1", "live", keys)
     ctx, session = _run_free(monkeypatch, room="free-1", humans=1, wait_s=1.0)
-    session.generate_reply.assert_called_once()
-    assert w.FREE_LIMIT_ANNOUNCEMENT in session.generate_reply.call_args.kwargs["instructions"]
+    said = [c.kwargs["instructions"] for c in session.generate_reply.call_args_list]
+    assert sum(w.FREE_LIMIT_ANNOUNCEMENT in t for t in said) == 1   # (davor ggf. die 5-min-Warnung)
     ctx.shutdown.assert_called_once_with(reason="call_guard:free_limit")
     ctx.delete_room.assert_awaited_once_with("free-1")
     assert freetier.used_seconds(keys, "live") >= 0.3
@@ -199,7 +200,7 @@ def test_worker_normal_mode_announces_via_say(monkeypatch):
     monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_NORMAL", str(0.2 / 60))
     freetier.register_room("free-n", "normal", freetier.identity_keys(ANON_A, "1.1.1.1"))
     ctx, session = _run_free(monkeypatch, room="free-n", humans=1, wait_s=0.8, live_mode=False)
-    session.say.assert_called_once_with(w.FREE_LIMIT_ANNOUNCEMENT, allow_interruptions=False)
+    session.say.assert_any_call(w.FREE_LIMIT_ANNOUNCEMENT, allow_interruptions=False)
     ctx.shutdown.assert_called_once_with(reason="call_guard:free_limit")
 
 
@@ -226,16 +227,33 @@ def test_worker_parallel_rooms_share_ip_quota(monkeypatch):
     ctx.shutdown.assert_called_once_with(reason="call_guard:free_limit")
 
 
-def test_worker_paid_room_is_not_tracked(monkeypatch):
+def test_worker_paid_room_uses_free_first_then_wallet_keeps_running(monkeypatch):
+    """Oliver 01.10.: erst Gratis aufbrauchen, dann Guthaben. Gratis leer + Wallet
+    gedeckt -> kein Ende, kein free_limit."""
     monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_LIVE", str(0.1 / 60))
     db.record_stripe_session("cs_wk", "", 1000)
     acc = db.claim_session("cs_wk")[1]
     db.bind_room("paid-1", acc, "live")
     keys = freetier.identity_keys(ANON_A, "1.1.1.1")
-    freetier.register_room("paid-1", "live", keys)               # selbst wenn ein Eintrag da wäre
-    ctx, _ = _run_free(monkeypatch, room="paid-1", humans=1, wait_s=0.4)
+    freetier.register_room("paid-1", "live", keys)
+    ctx, session = _run_free(monkeypatch, room="paid-1", humans=1, wait_s=0.4)
     ctx.shutdown.assert_not_called()
-    assert freetier.used_seconds(keys, "live") == 0
+    assert freetier.used_seconds(keys, "live") >= 0.1               # Gratis zuerst verbraucht
+    said = [c.kwargs.get("instructions", "") for c in session.generate_reply.call_args_list]
+    assert not any(w.FREE_LIMIT_ANNOUNCEMENT in t for t in said)
+
+
+def test_worker_paid_room_empty_wallet_ends_at_free_limit(monkeypatch):
+    """Gegenprobe: Wallet leer, aber Gratis-Rest -> Raum startet (nicht wallet_empty),
+    läuft bis zum Gratis-Limit und endet dann mit free_limit."""
+    monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_LIVE", str(0.2 / 60))
+    db.record_stripe_session("cs_wk2", "", 1000)
+    acc = db.claim_session("cs_wk2")[1]
+    db.bind_room("paid-2", acc, "live")
+    db.charge(acc, 10**9, room="x", mode="live", usd=0)
+    freetier.register_room("paid-2", "live", freetier.identity_keys(ANON_B, "4.4.4.4"))
+    ctx, _ = _run_free(monkeypatch, room="paid-2", humans=1, wait_s=0.8)
+    ctx.shutdown.assert_called_once_with(reason="call_guard:free_limit")
 
 
 def test_worker_admin_room_exempt_is_not_limited(monkeypatch):

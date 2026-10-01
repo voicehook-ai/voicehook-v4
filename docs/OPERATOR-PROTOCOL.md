@@ -52,6 +52,7 @@ All payloads are JSON on the LiveKit data channel. The CLI maps stdin lines
 | `operator.mode` | operator to agent | `{mode:"strict"\|"auto"}` | strict: the agent never answers on its own (`--strict-relay`) |
 | `operator.interrupt` | operator to agent | `{}` | stop everything; unspoken rest comes back as `operator.revise` |
 | `operator.inject` | operator to agent | `{text, role?}` | synthetic chat-context entry, not spoken |
+| `operator.notice` | agent to everyone | `{kind, minutes_left, seconds_left, free_s, balance_eur, topup_url, text}` | server notice, see below; sent reliable |
 | `transcript` | agent to everyone | `{role, text}` | see transcript roles |
 | `agent.heartbeat` | agent to everyone | `{ts, room, probe, healthy}` | every 30 s; no tick for more than 60 s = worker dead |
 
@@ -68,6 +69,30 @@ All payloads are JSON on the LiveKit data channel. The CLI maps stdin lines
 The `operator.revise` text reads
 `REVISE: Noch NICHT gesprochen: [1] ... Deine neue Aussage: [neu] ...` and asks for one
 summary as `operator.say` with `mode:"overwrite"`.
+
+## operator.notice
+
+Sent by the voicebot to everyone in the room (operator CLI and browser), at most once per
+call per `kind`. The CLI prints it as a system line with `"topic": "operator.notice"` and
+the `text` field.
+
+`kind:"low_balance"`: free minutes plus credit will last about `minutes_left` more minutes
+at the current usage (free rest in seconds, plus balance divided by the real cost of the
+last 3 minutes, gross incl. factor and VAT). Fired when that drops to 5 minutes or less.
+
+| field | type | meaning |
+|---|---|---|
+| `kind` | `"low_balance"` | notice type |
+| `minutes_left` | int | rounded up |
+| `seconds_left` | int | estimate in seconds |
+| `free_s` | int or null | free seconds left today; `0` = free part used up, `null` = room has no free part |
+| `balance_eur` | float or null | wallet balance; `null` = room has no wallet |
+| `topup_url` | string | `https://voicehook.ai/aufladen` |
+| `text` | string | what the voicebot says at the same moment: "Noch etwa fünf Minuten, lade Guthaben auf voicehook.ai auf." |
+
+Operator: do not repeat the sentence; mention top-up once in your next `say`. Browser:
+show a visible hint with a link to `topup_url`. The call ends when free minutes and credit
+are both used up (free first, then credit), with its own short announcement.
 
 ## Transcript roles
 

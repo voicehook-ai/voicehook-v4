@@ -224,7 +224,42 @@ def _mint(room: str, identity: str, invite: str, ttl_seconds: int, *, agent_name
     verdict = verify_invite(invite, room)
     if not verdict.valid:
         raise HTTPException(status_code=403, detail=f"invalid invite: {verdict.reason}")
+    _adopt_operator_room(room)
     return _issue(room, identity, ttl_seconds, agent_name=agent_name)
+
+
+def _room_mode(room: str) -> str:
+    return "live" if _agent_for(room) == LIVE_AGENT_NAME else "normal"
+
+
+def _room_has_payer(room: str) -> bool:
+    """Weiß der Worker, wer diesen Raum zahlt? Gratis-Eintrag (auch exempt), Wallet-
+    Bindung, oder Gratis-Kontingent des Modus aus (dann läuft er wie früher ungezählt).
+    Lesefehler -> False (fail-closed, wie der Worker)."""
+    mode = _room_mode(room)
+    if not freetier.enabled(mode):
+        return True
+    try:
+        return freetier.room_keys(room) is not None or billing_routes.db.room_binding(room) is not None
+    except Exception as e:  # noqa: BLE001
+        logger.error("[free] payer lookup room=%s failed: %s", room, e)
+        return False
+
+
+def _adopt_operator_room(room: str) -> None:
+    """Gültige HMAC-Einladung für einen Normal-Raum, den der Server nie angelegt hat:
+    die hat nur ausgestellt, wer INVITE_SECRET hält (call-starten, `agent.cli invite`),
+    also ein Operator. Raum als exempt merken, sonst lehnt der Worker ihn seit PR #93
+    ab (fail-closed auch im Normalmodus). Server-Räume (host-call, invite-room,
+    live-room) haben ihren Eintrag schon und bleiben unverändert; Live-Räume ohne
+    Eintrag bleiben abgelehnt."""
+    if _room_mode(room) != "normal" or _room_has_payer(room):
+        return
+    try:
+        if freetier.register_room_if_absent(room, "normal"):
+            logger.info("[free] operator room=%s adopted via HMAC invite (exempt)", room)
+    except Exception as e:  # noqa: BLE001
+        logger.error("[free] adopt room=%s failed: %s", room, e)
 
 
 def _issue(room: str, identity: str, ttl_seconds: int, *, agent_name: str | None = "voice-ai") -> TokenResponse:
@@ -313,10 +348,17 @@ def issue_token_get(
             room=room, identity=identity, ttl_seconds=ttl_seconds,
             agent_name=None, name=op_name or None, attributes=attrs,
         )
-        # auto-ensure voice-ai is present (presence-idempotent) — see docstring (#42)
-        threading.Thread(
-            target=_ensure_agent_dispatched, args=(room, "voice-ai"), daemon=True
-        ).start()
+        # auto-ensure voice-ai is present (presence-idempotent) — see docstring (#42).
+        # Nur für Räume, deren Zahler der Worker kennt (PR #93): ein neuer, selbst
+        # ausgedachter Slug startet keinen Gratis-Agent mehr; der Operator kann den
+        # Raum betreten, voice-ai kommt erst mit dem Gastgeber (host-call/invite-room
+        # oder HMAC-Link) dazu.
+        if _room_has_payer(room):
+            threading.Thread(
+                target=_ensure_agent_dispatched, args=(room, "voice-ai"), daemon=True
+            ).start()
+        else:
+            logger.warning("[free] operator join room=%s has no payer, no dispatch", room)
         return TokenResponse(token=token, url=livekit_url, room=room, identity=identity)
     return _mint(room, identity, invite, ttl_seconds)
 
@@ -334,15 +376,8 @@ _HOST_WINDOW = 600       # seconds (per IP)
 
 
 def _client_ip(request: Request) -> str:
-    """Client-IP hinter Caddy. Das LETZTE X-Forwarded-For-Element hat der nächste
-    Proxy (Caddy) selbst gesetzt; frühere Elemente kann der Client fälschen.
-    Caddy ohne trusted_proxies (infra/caddy/Caddyfile.tmpl) verwirft eingehende
-    X-Forwarded-For-Werte ohnehin, das letzte Element bleibt aber auch dann richtig,
-    wenn dort später trusted_proxies gesetzt wird (Review 01.10. #4)."""
-    parts = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
-    if parts:
-        return parts[-1]
-    return request.client.host if request.client else "unknown"
+    """Client-IP hinter Caddy (letztes X-Forwarded-For-Element), siehe billing_routes.client_ip."""
+    return billing_routes.client_ip(request)
 
 
 @app.get("/api/free/remaining")
@@ -378,18 +413,77 @@ class HostCallRequest(BaseModel):
 @app.post("/api/host-call", response_model=TokenResponse)
 def host_call(req: HostCallRequest, request: Request) -> TokenResponse:
     """Start a fresh call. Server-generated room (no hijack), direct mint +
-    voice-ai dispatch. Stopgap per-IP rate limit until free-tier gate (#17-19)."""
-    wallet = billing_routes.wallet_for_call(request, "normal")  # Gating an: 402 ohne Guthaben
+    voice-ai dispatch. Zahlt: erst Gratis-Minuten, dann Wallet (402 wenn beides leer)."""
     ip = _client_ip(request)
-    free_keys = billing_routes.free_keys_for_call(request, "normal", ip, wallet)  # 402 free_limit
+    wallet, free_keys = billing_routes.payer_for_call(request, "normal", ip)
     if not _host_rate_ok(ip):
         raise HTTPException(status_code=429, detail="rate limited — try again later")
     room = gen_slug()
-    if wallet:  # vor dem Dispatch binden, damit der Worker das Konto sofort sieht
-        billing_routes.db.bind_room(room, wallet, "normal", req.ttl_seconds)
-    elif free_keys is not None:  # Gratis-Raum: Worker zählt die Minuten auf diese Merkmale
-        freetier.register_room(room, "normal", free_keys)
+    billing_routes.register_new_room(room, "normal", wallet, free_keys, req.ttl_seconds)
     return _issue(room, req.identity, req.ttl_seconds)
+
+
+class InviteRoomResponse(TokenResponse):
+    invite_url: str
+    expires_in: int
+
+
+@app.post("/api/invite-room", response_model=InviteRoomResponse)
+def invite_room(req: HostCallRequest, request: Request) -> InviteRoomResponse:
+    """"Agent einladen" im Normalmodus: neuer Raum mit denselben Prüfungen wie
+    /api/host-call (Gratis-Minuten, dann Wallet, 402, IP-Ratenlimit), Slug vom Server.
+
+    Unterschied zu host-call: der Token des Gastgebers trägt keinen Agent-Claim
+    (der Join selbst dispatcht nicht), voice-ai wird wie beim Operator-Join
+    (invite=1) einmal explizit dispatcht. invite_url ist der Link für den externen
+    Agent (CLI: `voicehook-agent join <invite_url>`), mit HMAC-Einladung, damit auch
+    ein Mensch per Link genau in diesen Raum kommt.
+    """
+    ip = _client_ip(request)
+    wallet, free_keys = billing_routes.payer_for_call(request, "normal", ip)
+    if not _host_rate_ok(ip):
+        raise HTTPException(status_code=429, detail="rate limited, try again later")
+    api_key = os.environ.get("LIVEKIT_API_KEY")
+    api_secret = os.environ.get("LIVEKIT_API_SECRET")
+    livekit_url = os.environ.get("LIVEKIT_URL", "wss://rtc.voicehook.ai")
+    if not api_key or not api_secret:
+        raise HTTPException(status_code=503, detail="server missing LiveKit credentials")
+    room = gen_slug()
+    billing_routes.register_new_room(room, "normal", wallet, free_keys, req.ttl_seconds)
+    token = mint_livekit_token(
+        api_key=api_key, api_secret=api_secret,
+        room=room, identity=req.identity, ttl_seconds=req.ttl_seconds, agent_name=None,
+    )
+    threading.Thread(target=_ensure_agent_dispatched, args=(room, "voice-ai"), daemon=True).start()
+    invite = mint_invite(room, req.ttl_seconds)
+    base = os.environ.get("VOICEHOOK_PUBLIC_URL", "https://voicehook.ai").rstrip("/")
+    return InviteRoomResponse(
+        token=token, url=livekit_url, room=room, identity=req.identity,
+        invite_url=f"{base}/r/{room}?invite={invite}", expires_in=req.ttl_seconds,
+    )
+
+
+_mask_email = billing_routes.mask_email  # auch in /api/login/verify
+
+
+@app.get("/api/me")
+def me(request: Request) -> dict:
+    """Was hat dieser Browser noch? Gratis-Sekunden heute je Modus (X-Anon-Id + IP,
+    gezählt wie host-call) und, mit gültigem X-Wallet-Token, Guthaben und die
+    maskierte Konto-Mail. Ohne/ungültiges Token: balance_eur und email_masked null.
+    Nur lesen, nie buchen."""
+    keys = freetier.identity_keys(request.headers.get(freetier.ANON_HEADER), _client_ip(request))
+    free = {f"{m}_s": max(0, int(freetier.remaining_seconds(keys, m))) if freetier.enabled(m) else 0
+            for m in ("normal", "live")}
+    acc = billing_routes.db.account_for_token(billing_routes.wallet_token(request))
+    row = billing_routes.db.account(acc) if acc else None
+    return {
+        "free": free,
+        "balance_eur": billing_routes.pricing.ueur_to_eur(int(row["balance_ueur"])) if row else None,
+        "email_masked": _mask_email(row["email"]) if row else None,
+        "email_verified": bool(row["email_verified_at"]) if row else None,
+        "topup_url": billing_routes.TOPUP_PATH,
+    }
 
 
 class LiveRoomRequest(BaseModel):
@@ -480,20 +574,16 @@ def public_live_room(req: HostCallRequest, request: Request) -> PublicLiveRoomRe
         raise HTTPException(status_code=404, detail="not found")
     if not _live_configured():
         raise HTTPException(status_code=503, detail="live mode not available")
-    wallet = billing_routes.wallet_for_call(request, "live")  # Gating an: 402 ohne Guthaben
+    ip = _client_ip(request)
+    wallet, free_keys = billing_routes.payer_for_call(request, "live", ip)  # 402 ohne Gratis/Guthaben
     # Monatsbudget gilt nur für Gratis/Demo; zahlende Kunden scheitern nie daran (Review #7).
     if not wallet and budget.exhausted():
         raise HTTPException(status_code=402, detail="live mode is used up for this month")
-    ip = _client_ip(request)
-    free_keys = billing_routes.free_keys_for_call(request, "live", ip, wallet)  # 402 free_limit
     if not _host_rate_ok(ip):
         raise HTTPException(status_code=429, detail="rate limited, try again later")
     room = gen_slug()
     _set_room_agent(room, LIVE_AGENT_NAME, req.ttl_seconds)
-    if wallet:
-        billing_routes.db.bind_room(room, wallet, "live", req.ttl_seconds)
-    elif free_keys is not None:
-        freetier.register_room(room, "live", free_keys)
+    billing_routes.register_new_room(room, "live", wallet, free_keys, req.ttl_seconds)
     tok = _issue(room, req.identity, req.ttl_seconds)  # _agent_for -> Live-Worker
     invite = mint_invite(room, req.ttl_seconds)
     base = os.environ.get("VOICEHOOK_PUBLIC_URL", "https://voicehook.ai").rstrip("/")

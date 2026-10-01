@@ -148,6 +148,7 @@ Fallback `next` prints the raw log line instead of `{"type": …}`:
 | `operator.interrupt` | `{}` | stop speaking; unspoken rest comes back as `operator.revise` |
 | `operator.inject` | `{text, role?}` | context entry, not spoken |
 | `transcript` | ← `{role, text}` | `user` = the human; `operator` = your spoken text; `agent` = voicebot's own answer |
+| `operator.notice` | ← `{kind, minutes_left, text, topup_url, ...}` | server notice, see below |
 | `quit` | `{}` | leave the call (what `leave` does) |
 
 `operator.say` modes: `revise` (default) speaks at once if nothing of yours is pending;
@@ -155,6 +156,14 @@ otherwise it stops and sends you `operator.revise` with the unspoken parts. Then
 everything into ONE statement and send it with `mode:"overwrite"` within 8 s, or only the
 newest text is spoken. `append` queues behind the current output (multi-part, status
 heartbeats).
+
+## Low balance (`operator.notice`)
+
+`kind:"low_balance"`: free minutes plus credit last about `minutes_left` more minutes; the
+call ends when both are empty. It arrives once per call as a `$D/out` line with
+`"topic": "operator.notice"`, and the voicebot already said "Noch etwa fünf Minuten, lade
+Guthaben auf voicehook.ai auf." Do not repeat that. Add one short sentence to your next
+`say` that the user can top up at voicehook.ai/aufladen, then go on. Once, never nag.
 
 ## Live mode (Gemini Live)
 

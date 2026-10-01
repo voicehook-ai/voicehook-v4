@@ -266,6 +266,7 @@ def test_gating_off_by_default_calls_work_without_wallet(client):
 
 
 def test_gating_normal_on_402_without_or_empty_wallet(client, monkeypatch):
+    monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_NORMAL", "0")   # Gating greift nur ohne Gratis
     monkeypatch.setenv("VOICEHOOK_REQUIRE_CREDITS_NORMAL", "1")
     r = client.post("/api/host-call", json={"identity": "u"})
     assert r.status_code == 402
@@ -281,6 +282,7 @@ def test_gating_normal_on_402_without_or_empty_wallet(client, monkeypatch):
 
 
 def test_gating_live_independent_of_normal(client, monkeypatch):
+    monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_LIVE", "0")
     monkeypatch.setenv("VOICEHOOK_REQUIRE_CREDITS_LIVE", "1")
     assert client.post("/api/host-call", json={"identity": "u"}).status_code == 200
     assert client.post("/api/live-room", json={"identity": "u"}).status_code == 402

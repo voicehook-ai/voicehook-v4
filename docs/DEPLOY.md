@@ -118,7 +118,7 @@ meldet `/api/billing/config` `checkout_available: false`, die Seite zeigt "bald 
 
 Konto = Wallet (Token im Browser + Wiederherstellungs-Link), nie die E-Mail: ein Checkout ohne
 gültiges Wallet-Token legt immer ein neues Konto an. Zahlen tut nur, wer den Raum über
-`/api/host-call` oder `/api/live-room` mit `X-Wallet-Token` anlegt; `/api/token` (Beitritt per
+`/api/host-call`, `/api/invite-room` oder `/api/live-room` mit `X-Wallet-Token` anlegt; `/api/token` (Beitritt per
 Einladung) bindet nie ein Wallet. Die Bindung Raum -> Wallet gilt nur bis zum Call-Ende (der Worker
 schließt sie) und höchstens die Token-TTL; danach antworten Joins in diesen Raum mit 410 und der
 Worker lehnt ihn ab. Ein Fehlbetrag aus Erstattung/Rückbuchung wird bei der nächsten Gutschrift auf
@@ -128,15 +128,18 @@ dasselbe Konto zuerst verrechnet. Der Wiederherstellungs-Link gilt genau einmal 
 |---|---|---|
 | `STRIPE_SECRET_KEY` | leer | Stripe-Secret-Key (Checkout-Session anlegen) |
 | `STRIPE_WEBHOOK_SECRET` | leer | Signing-Secret des Webhook-Endpunkts |
-| `VOICEHOOK_REQUIRE_CREDITS_NORMAL` | `0` | `1` = `/api/host-call` ohne Wallet mit Saldo > 0 -> 402 |
-| `VOICEHOOK_REQUIRE_CREDITS_LIVE` | `0` | `1` = `/api/live-room` ohne Wallet mit Saldo > 0 -> 402 |
+| `VOICEHOOK_REQUIRE_CREDITS_NORMAL` | `0` | `1` = `/api/host-call` / `/api/invite-room` ohne Wallet mit Saldo > 0 -> 402; greift nur, wenn das Gratis-Kontingent Normal aus ist (`0`) |
+| `VOICEHOOK_REQUIRE_CREDITS_LIVE` | `0` | `1` = `/api/live-room` ohne Wallet mit Saldo > 0 -> 402; greift nur, wenn das Gratis-Kontingent Live aus ist |
+| `RESEND_API_KEY` | leer | Resend-API-Key für die Login-Mails; leer = Login aus (`/api/login` -> 503 `login_unavailable`) |
+| `MAIL_FROM` | `voicehook <login@voicehook.ai>` | Absender der Login-Mail (Domain muss in Resend verifiziert sein) |
+| `VH_LOW_BALANCE_WARN_SECONDS` | `300` | Worker: ab dieser Restzeit (Gratis + Guthaben) einmal pro Call Hinweis + Ansage |
 | `VOICEHOOK_PRICE_FACTOR_NORMAL` / `_LIVE` | `3` / `1.5` | Abbuchung = Anbieterkosten x Faktor |
 | `VOICEHOOK_VAT_RATE` | `0.19` | MwSt obendrauf |
 | `VOICEHOOK_USD_EUR` | `0.8807` | Kurs USD -> EUR (EZB 30.09.2026) |
 | `VOICEHOOK_TOPUP_AMOUNTS_EUR` | `10,20,50` | Vorschlagsbeträge |
 | `VOICEHOOK_TOPUP_MIN_EUR` / `_MAX_EUR` | `10` / `200` | Spanne des Drehreglers (Minimum nie unter 10) |
-| `VOICEHOOK_FREE_MIN_PER_DAY_LIVE` | `20` | Gratis-Gesprächsminuten pro UTC-Tag für Live-Räume ohne Wallet; `0` = aus |
-| `VOICEHOOK_FREE_MIN_PER_DAY_NORMAL` | `0` | dasselbe für Normal-Räume; `0` = aus (offen, ob Normal mitzählt) |
+| `VOICEHOOK_FREE_MIN_PER_DAY_NORMAL` | `20` | Gratis-Gesprächsminuten pro UTC-Tag für Normal-Räume; `0` = aus |
+| `VOICEHOOK_FREE_MIN_PER_DAY_LIVE` | `10` | dasselbe für Live-Räume; `0` = aus |
 | `VH_FREE_TICK_SECONDS` | `5` | Takt, in dem der Worker Gratis-Minuten bucht (nur Worker) |
 | `VOICEHOOK_APPROX_EUR_PER_HOUR_NORMAL` / `_LIVE` | `1.70` / `8.80` | nur Anzeige: ungefährer Kundenpreis pro Stunde (inkl. Marge und MwSt) am Normal/Live-Schalter, via `/api/billing/config` `approx_eur_per_hour` |
 
@@ -148,14 +151,60 @@ Signing-Secret als `STRIPE_WEBHOOK_SECRET` setzen, danach Agent neu starten (Env
 
 ### Gratis-Kontingent (ohne Login)
 
-Räume ohne Wallet bekommen höchstens `VOICEHOOK_FREE_MIN_PER_DAY_*` Gesprächsminuten pro UTC-Tag
+Reihenfolge im Call: erst Gratis-Minuten, dann Guthaben. Hat der Ersteller heute noch Gratis-Minuten
+und zusätzlich ein gedecktes Wallet, steht der Raum in beiden Tabellen; der Worker zählt erst die
+Gratis-Minuten herunter und bucht danach vom Wallet, ohne den Call zu beenden. Der Call endet erst,
+wenn beides leer ist. Reichen Gratis-Rest + Guthaben (Guthaben / Verbrauch der letzten 3 Minuten)
+noch höchstens 5 Minuten, schickt der Worker einmal pro Call `operator.notice`
+`{kind:"low_balance", minutes_left, ...}` an alle im Raum und sagt "Noch etwa fünf Minuten, lade
+Guthaben auf voicehook.ai auf." `GET /api/me` liefert der Oberfläche Gratis-Rest und Guthaben.
+
+Gratis gibt es höchstens `VOICEHOOK_FREE_MIN_PER_DAY_*` Gesprächsminuten pro UTC-Tag und Modus
 (Zeit mit mindestens einem Menschen im Raum). Gezählt wird je Merkmal des Raum-Erstellers: anonyme
 ID aus dem Header `X-Anon-Id` (8 bis 128 Zeichen `A-Za-z0-9_-`, sonst ignoriert) und Client-IP
 (letztes Element von `X-Forwarded-For`, das Caddy selbst setzt; IPv6 je /64-Netz). Erreicht EINES der Merkmale das Limit, antworten
-`/api/host-call` bzw. `/api/live-room` mit 402 `{error: free_limit, topup_url: /aufladen}`; ein
+`/api/host-call`, `/api/invite-room` bzw. `/api/live-room` ohne gedecktes Wallet mit 402 `{error: free_limit, topup_url: /aufladen}`; ein
 laufender Gratis-Call endet mit der Ansage "Deine Gratisminuten für heute sind um. Lade Guthaben
 auf." Gespeichert werden nur SHA-256-Hashes der Merkmale in `/opt/voicehook/state/freetier.sqlite`
-(älter als 7 Tage wird gelöscht). Räume mit Wallet sind ausgenommen. Die Obergrenze pro Live-Call
-(`VH_MAX_CALL_SECONDS=1200` im Live-Dienst) gilt zusätzlich. Der Live-Worker ist fail-closed: ein
-Live-Raum ohne Wallet und ohne Gratis-Eintrag wird abgelehnt (Admin-Räume stehen als Ausnahme drin).
-Das Live-Monatsbudget gilt nur für Gratis/Demo-Räume, Wallet-Räume sind davon ausgenommen.
+(älter als 7 Tage wird gelöscht). Mit gedecktem Wallet endet der Call am Gratis-Limit nicht, das
+Wallet zahlt weiter. Die Obergrenze pro Live-Call
+(`VH_MAX_CALL_SECONDS=1200` im Live-Dienst) gilt zusätzlich. Der Worker ist in beiden Modi
+fail-closed, solange das Gratis-Kontingent des Modus an ist: ein Raum ohne Wallet und ohne
+Gratis-Eintrag wird abgelehnt (`free_room_unknown`). Ausnahmen stehen als exempt drin: Admin-Live-Räume
+und Normal-Räume, die jemand mit einer gültigen HMAC-Einladung betritt, die der Server nicht selbst
+ausgestellt hat (call-starten mintet sie mit `INVITE_SECRET`). `GET /api/token?invite=1`
+(Operator-Join, voicehook-agent CLI) gibt weiter ein Token, dispatcht voice-ai aber nur in Räume
+mit bekanntem Zahler; ein selbst ausgedachter neuer Slug bekommt keinen Gratis-Agent mehr.
+Das Live-Monatsbudget zählt alles, was nicht das Guthaben zahlt: Gratis/Demo-Räume ganz, Wallet-Räume
+ihren Gratis-Teil. Beendet wird am Budget nur ein Raum ohne Wallet; ist das Budget schon erschöpft,
+zahlt bei Wallet-Räumen das Guthaben von Anfang an (kein Gratis-Teil).
+
+### Login per Magic-Link
+
+`POST /api/login {email}` schickt über Resend einen Link `https://voicehook.ai/aufladen#login=<token>`
+(einmal, 15 Minuten; Ratenlimit 5 je IP in 10 min (IPv6 je /64), 3 je Adresse und IP in 15 min,
+10 je Adresse in 60 min; fehlgeschlagener Mailversand zählt nicht). Die Antwort enthält eine
+`login_nonce`, die nur dieser Browser kennt. Die Seite ruft mit dem Link
+`GET /api/login/verify?token=...&nonce=...` auf und bekommt ein Wallet-Token für das Konto mit dieser
+jetzt bestätigten Adresse. Ohne passende Nonce (Link in einem anderen Browser geöffnet) wird der
+Link nicht verbraucht: 409 `confirm_required` mit maskierter Adresse; erst nach "Anmelden als ...?"
+und erneutem Aufruf mit `confirm=1` wird eingeloggt, ein Wallet dieses Browsers aber nie verknüpft
+(Schutz gegen Rest-Login-CSRF: ein vom Angreifer an seine Adresse angeforderter Link schaltet einen
+fremden Browser nicht mehr still in sein Konto). Jeder Login widerruft die älteren Recovery-Codes des
+Kontos. Das Wallet des Browsers (`X-Wallet-Token`) wird nur verknüpft, wenn es exakt das
+Token ist, mit dem der Link angefordert wurde (Hash in `login_links.requester_hash`, Schutz gegen
+Login-CSRF); sonst bleibt es unberührt und die Antwort sagt `wallet_linked: false`. Die Stripe-Mail ist nur eine unbestätigte Kontakt-Mail und verknüpft allein nie.
+Wird eine Adresse zum ersten Mal bestätigt, verlieren alle anderen Tokens der so übernommenen Konten
+ihre Gültigkeit (wer bei Stripe eine fremde Adresse eintippt, behält keinen Zugriff); weitere
+unbestätigte Konten mit derselben Kontakt-Mail werden samt Saldo zusammengeführt. Einrichtung:
+Resend-Konto, Domain `voicehook.ai` dort verifizieren (SPF/DKIM), `RESEND_API_KEY` und optional
+`MAIL_FROM` in `/opt/voicehook/.env`, Agent neu starten.
+
+**Übergang beim Deploy (24 h):** Backend und Web (`aufladen.html`) gemeinsam ausrollen. Bis alle
+Browser die neue Seite haben (Cache, offene Tabs; spätestens nach 24 h), schickt eine alte Seite keine
+Nonce und kennt kein 409: ein Login-Link endet dort mit einem Fehler statt einer Rückfrage, der Nutzer
+lädt die Seite neu und klickt den Link erneut (der Link bleibt bei 409 gültig, 15 min). Links, die vor
+dem Deploy angefordert wurden, haben keine Nonce (Spalte `login_links.nonce_hash` wird beim Start
+ergänzt, Altbestand NULL) und gehen nur über die Rückfrage (`confirm=1`). In den ersten 24 h im Log
+auf gehäufte `GET /api/login/verify` mit 409 achten; danach ist der Übergang vorbei, es ist nichts
+zurückzubauen.

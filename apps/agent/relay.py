@@ -20,6 +20,9 @@ Topics handled here:
 - operator.mode       — switch strict/auto generation ({"mode":"strict"|"auto"})
 - operator.interrupt  — alles stoppen, ungesprochene Aussagen per operator.revise melden
 - operator.inject     — synthetic user-turn (test harness; operator reads transcript)
+- operator.notice     (Agent -> alle) Hinweis des Servers, z. B. {kind:"low_balance",
+                        minutes_left,...}: Gratis+Guthaben reichen noch ~5 min. Der
+                        Worker sendet ihn einmal pro Call und sagt LOW_BALANCE_ANNOUNCEMENT.
 
 PR-12 adds: every operator.say also publishes {role:"agent",text:...} on the
 `transcript` topic so the browser UI can render it (v3 parity).
@@ -51,6 +54,9 @@ TOPIC_MODE = "operator.mode"
 TOPIC_INTERRUPT = "operator.interrupt"
 TOPIC_INJECT = "operator.inject"
 TOPIC_REVISE = "operator.revise"   # agent -> operator: ungesprochene Aussagen zurück
+TOPIC_NOTICE = "operator.notice"   # agent -> alle: Hinweis (low_balance), Browser + Operator
+
+LOW_BALANCE_ANNOUNCEMENT = "Noch etwa fünf Minuten, lade Guthaben auf voicehook.ai auf."
 
 HOLD_S = 8.0  # Olli-Regel "Stille ist der Killer, ab 8s ansagen": so lange wartet ein
              # zurückgehaltenes say auf das zusammengefasste overwrite des Brains
@@ -149,6 +155,35 @@ def _publish_transcript_safe(room: Room | None, role: str, text: str) -> None:
         except Exception as e:  # noqa: BLE001
             logger.warning("[transcript publish] %s", e)
     asyncio.create_task(_send())
+
+
+async def publish_notice(room: Room | None, payload: dict) -> bool:
+    """operator.notice an alle im Raum (Operator-CLI + Browser), zuverlässig zugestellt.
+    Fehler werden geloggt, nie geworfen."""
+    if room is None:
+        return False
+    try:
+        await room.local_participant.publish_data(
+            payload=json.dumps(payload).encode(), topic=TOPIC_NOTICE, reliable=True
+        )
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[operator.notice publish] %s", e)
+        return False
+
+
+def speak_notice(session: AgentSession, text: str, *, live: bool = False) -> None:
+    """Kurze Systemansage (z. B. low_balance) ohne auf das Ende zu warten; der Nutzer
+    darf sie unterbrechen. Live: Realtime-Modell hat kein say(), wörtliche Anweisung."""
+    logger.info("[operator.notice]%s say %s", " (live)" if live else "", text)
+    try:
+        if live:
+            session.generate_reply(instructions=f"Sag jetzt wörtlich und nur das: {text}",
+                                   allow_interruptions=True)
+        else:
+            session.say(text, allow_interruptions=True)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[operator.notice say] %s", e)
 
 
 def unspoken_rest(full: str, spoken: str) -> str:
