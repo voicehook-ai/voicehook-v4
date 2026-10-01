@@ -132,7 +132,7 @@ class _Emitter:
             fn(ev)
 
 
-def _run_entrypoint_with_metrics(monkeypatch, *, live_mode, metrics):
+def _run_entrypoint_with_metrics(monkeypatch, *, live_mode, metrics, exempt=True):
     """Treibt entrypoint mit Fake-Raum/Session und liefert die gesendeten cost-Payloads."""
     import asyncio
     import json
@@ -147,7 +147,10 @@ def _run_entrypoint_with_metrics(monkeypatch, *, live_mode, metrics):
         monkeypatch.delenv("VOICEHOOK_PIPELINE", raising=False)
         monkeypatch.setenv("VOICEHOOK_STT_GATE", "0")
         from agent import freetier
-        freetier.register_room("r1", "normal", [], exempt=True)  # fail-closed seit PR #93
+        if exempt:
+            freetier.register_room("r1", "normal", [], exempt=True)  # fail-closed seit PR #93
+        else:  # Gratis-Raum eines Kunden: gezählt, nicht exempt
+            freetier.register_room("r1", "normal", freetier.identity_keys("anon-cost-0001", "7.7.7.7"))
     session = _Emitter()
     session.start = AsyncMock()
     session.aclose = AsyncMock()
@@ -175,16 +178,35 @@ def _metric(kind, **kw):
     return type(kind, (), kw)()
 
 
-def test_cost_topic_sends_basis_and_only_on_change(monkeypatch):
-    sent = _run_entrypoint_with_metrics(monkeypatch, live_mode=False, metrics=[
-        _metric("TTSMetrics", characters_count=100),
-        _metric("VADMetrics"),                              # kein Betrag -> keine Meldung
-        _metric("TTSMetrics", characters_count=0),          # Betrag 0 -> keine Meldung
-        _metric("STTMetrics", audio_duration=60.0),
-    ])
+_COST_METRICS = [
+    _metric("TTSMetrics", characters_count=100),
+    _metric("VADMetrics"),                              # kein Betrag -> keine Meldung
+    _metric("TTSMetrics", characters_count=0),          # Betrag 0 -> keine Meldung
+    _metric("STTMetrics", audio_duration=60.0),
+]
+
+
+def _eur_normal(*usds):
+    from agent.billing import pricing
+    return round(sum(pricing.charge_ueur(u, "normal") for u in usds) / 1e6, 4)
+
+
+def test_cost_topic_customer_room_sends_euro_without_usd(monkeypatch):
+    """Oliver 01.10.: Kundenpreis in EUR (Faktor + MwSt); Rohkosten nie im Kundenraum,
+    sonst wäre die Marge ablesbar."""
+    sent = _run_entrypoint_with_metrics(monkeypatch, live_mode=False, metrics=_COST_METRICS, exempt=False)
     assert len(sent) == 2                                   # Positivkontrolle: echte Änderungen kommen an
-    assert sent[0] == {"usd": 0.003, "mode": "pipeline", "basis": {"tts_chars": 100},
-                       "prices_as_of": "2026-09-30"}
+    assert sent[0] == {"eur": _eur_normal(0.003), "mode": "pipeline"}
+    assert sent[0]["eur"] == 0.0094                         # 0,003 USD x 0,8807 x 3 x 1,19
+    assert sent[1] == {"eur": _eur_normal(0.003, 0.0077), "mode": "pipeline"}
+    assert all("usd" not in p and "basis" not in p for p in sent)
+
+
+def test_cost_topic_admin_room_adds_raw_usd_and_basis(monkeypatch):
+    sent = _run_entrypoint_with_metrics(monkeypatch, live_mode=False, metrics=_COST_METRICS)
+    assert len(sent) == 2
+    assert sent[0] == {"eur": _eur_normal(0.003), "mode": "pipeline", "usd": 0.003,
+                       "basis": {"tts_chars": 100}, "prices_as_of": "2026-09-30"}
     assert sent[1]["usd"] == 0.0107
     assert sent[1]["basis"] == {"tts_chars": 100, "stt_audio_s": 60.0}
 
@@ -202,7 +224,9 @@ def test_live_cost_still_booked_into_month_budget(monkeypatch):
     sent = _run_entrypoint_with_metrics(monkeypatch, live_mode=True, metrics=[rt])
     expected = (1000 * 3.00 + 500 * 12.00) / 1e6
     assert budget.spent_usd() == __import__("pytest").approx(expected)
-    assert sent == [{"usd": round(expected, 5), "mode": "live",
+    from agent.billing import pricing
+    assert sent == [{"eur": round(pricing.charge_ueur(expected, "live") / 1e6, 4), "mode": "live",
+                     "usd": round(expected, 5),
                      "basis": {"rt_audio_in_tokens": 1000, "rt_audio_out_tokens": 500,
                                "rt_text_in_tokens": 0, "rt_text_out_tokens": 0},
                      "prices_as_of": "2026-09-30"}]

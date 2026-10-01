@@ -1,0 +1,10 @@
+Contact: mailto:support@voicehook.ai
+Expires: 2027-09-30T23:59:59.000Z
+Preferred-Languages: de, en
+Canonical: https://voicehook.ai/.well-known/security.txt
+
+# voicehook.ai: Meldung von Sicherheitslücken / security disclosure
+#
+# Bitte meldet Sicherheitslücken an support@voicehook.ai.
+# Please report vulnerabilities to support@voicehook.ai.
+# Coordinated disclosure is appreciated.

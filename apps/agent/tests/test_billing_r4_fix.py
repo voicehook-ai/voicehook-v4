@@ -180,7 +180,7 @@ def test_worker_refuses_unknown_normal_room(monkeypatch):
 
 
 def test_worker_unknown_normal_room_runs_when_normal_free_tier_off(monkeypatch):
-    monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_NORMAL", "0")            # wie vor PR #93
+    monkeypatch.setenv("VH_FREE_EUR_PER_DAY", "0")            # wie vor PR #93
     ctx, session = _run_free(monkeypatch, room="ghost-off", humans=1, wait_s=0.05, live_mode=False)
     ctx.shutdown.assert_not_called()
     session.start.assert_awaited_once()
@@ -257,5 +257,5 @@ def test_live_budget_exhausted_paid_room_skips_free_and_charges_wallet(monkeypat
                             metrics=[_metric("RealtimeModelMetrics", **_RT)])
     usd = (1000 * 3.00 + 500 * 12.00) / 1e6
     assert db.balance_ueur(acc) == 10_000_000 - round(usd * pricing.DEFAULT_USD_EUR * 1.5 * 1.19 * 1e6)
-    assert freetier.used_seconds(keys, "live") == 0
+    assert freetier.used_ueur(keys) == 0
     ctx.shutdown.assert_not_called()                                       # zahlender Kunde läuft

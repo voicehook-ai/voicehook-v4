@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22%3E%3Cpath d=%22M20 4.5 37 35.5H3Z%22 fill=%22none%22 stroke=%22%236dc9d9%22 stroke-width=%223.5%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E">
+<title>voicehook · Anmelden</title>
+<style>
+/* Stil 1:1 aus web/aufladen.html (Tokens, Theme, Brand-Kopf, Knöpfe, Formular). */
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+[hidden]{ display:none !important; }
+:root{
+  --vh-bg-0:#000000; --vh-fg-0:#f4f4f7; --vh-fg-2:#8a8a93; --vh-fg-3:#55555f;
+  --vh-teal:#6dc9d9; --vh-teal-glow:#a3eaf5; --vh-warm:#f2a65a;
+  --vh-mono:"Geist Mono","JetBrains Mono","SF Mono",Menlo,monospace;
+  --vh-btn-bg:rgba(0,0,0,.42); --vh-btn-bg-hover:rgba(0,0,0,.58);
+  --vh-btn-border:rgba(255,255,255,.10); --vh-btn-border-hov:rgba(255,255,255,.30);
+  --vh-btn-fg:rgba(255,255,255,.85); --vh-btn-fg-hov:#fff;
+  --vh-panel:rgba(255,255,255,.03); --vh-bg-glow:#0d1015;
+  --vh-cta-fg:#000;
+}
+body.theme-light{
+  --vh-bg-0:#f4f4f7; --vh-fg-0:#0b0b0f; --vh-fg-2:#5c5c66; --vh-fg-3:#888892;
+  --vh-teal:#1f8fa3; --vh-teal-glow:#6dc9d9; --vh-warm:#b8641a;
+  --vh-btn-bg:rgba(255,255,255,.55); --vh-btn-bg-hover:rgba(255,255,255,.78);
+  --vh-btn-border:rgba(0,0,0,.10); --vh-btn-border-hov:rgba(0,0,0,.32);
+  --vh-btn-fg:rgba(0,0,0,.78); --vh-btn-fg-hov:#000;
+  --vh-panel:rgba(0,0,0,.03); --vh-bg-glow:#ffffff;
+  --vh-cta-fg:#fff;
+}
+html{ min-height:100%; }
+body{
+  min-height:100vh; min-height:100dvh;
+  background:radial-gradient(ellipse at 50% 30%, var(--vh-bg-glow) 0%, var(--vh-bg-0) 70%) fixed, var(--vh-bg-0);
+  color:var(--vh-fg-0); font-family:var(--vh-mono);
+  display:flex; flex-direction:column; align-items:center;
+  padding:calc(64px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));
+}
+.brand{
+  position:fixed; top:calc(22px + env(safe-area-inset-top,0px)); left:50%; transform:translateX(-50%);
+  font-size:13px; letter-spacing:.02em; color:var(--vh-fg-0); font-weight:500; z-index:5; white-space:nowrap;
+}
+.brand a{ color:inherit; text-decoration:none; }
+.vh-dlt{display:block;width:.75em;height:.75em;fill:none;stroke:currentColor;stroke-width:3.5;stroke-linejoin:round;overflow:visible;}
+.brand,.brand a{ display:flex; align-items:center; }
+.brand{ padding-top:3px; }
+.brand a .tld{ white-space:pre; }
+.brand .dlt{ color:var(--vh-teal); font-size:18px; line-height:1; display:inline-flex; margin-right:6px; font-weight:400; }
+.brand .tld,.brand .by{ color:var(--vh-fg-3); font-weight:400; } .brand .by{ margin:0 6px; }
+#btn-theme{
+  position:fixed; top:calc(14px + env(safe-area-inset-top,0px)); right:14px; width:38px; height:38px; z-index:6;
+  display:flex; align-items:center; justify-content:center; cursor:pointer; border-radius:50%;
+  background:var(--vh-btn-bg); border:1px solid var(--vh-btn-border); color:var(--vh-btn-fg);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); transition:all .15s;
+}
+#btn-theme:hover{ background:var(--vh-btn-bg-hover); border-color:var(--vh-btn-border-hov); color:var(--vh-btn-fg-hov); }
+#btn-theme svg{ width:17px; height:17px; }
+.wrap{
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:24px; width:100%; max-width:420px;
+}
+h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; color:var(--vh-fg-2); text-align:center; }
+.cta{
+  appearance:none; border:none; cursor:pointer; width:100%; max-width:340px; min-height:48px;
+  background:var(--vh-teal); color:var(--vh-cta-fg); font-family:var(--vh-mono); font-size:15px; font-weight:600;
+  padding:15px 0; border-radius:12px; letter-spacing:.02em; transition:filter .15s, transform .06s;
+}
+.cta:hover{ filter:brightness(1.08); }
+.cta:active{ transform:translateY(1px); }
+.cta:disabled{ opacity:.45; cursor:not-allowed; filter:none; transform:none; }
+.cta.ghost{ background:transparent; color:var(--vh-fg-0); border:1px solid var(--vh-btn-border-hov); }
+.msg{ font-size:12px; line-height:1.5; text-align:center; max-width:340px; color:var(--vh-fg-2); }
+.msg.warn{ color:var(--vh-warm); }
+.row{ display:flex; gap:8px; }
+.row .cta{ font-size:13px; padding:12px 0; }
+.login{ width:100%; max-width:340px; display:flex; flex-direction:column; align-items:center; gap:10px; }
+.login form{ width:100%; display:flex; gap:8px; }
+.login input{ flex:1 1 auto; min-width:0; font-family:var(--vh-mono); font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid var(--vh-btn-border-hov); background:transparent; color:var(--vh-fg-0); }
+.login form .cta{ width:auto; padding:0 14px; font-size:13px; min-height:44px; white-space:nowrap; }
+.em{ text-transform:none; letter-spacing:.02em; color:var(--vh-fg-0); }
+.tagline{ margin-top:28px; font-size:11px; color:var(--vh-fg-3); letter-spacing:.04em; white-space:nowrap; }
+/* Anbieter-Knöpfe: .cta.ghost aus aufladen.html, Marken-Icon links vom Text. */
+.providers{ width:100%; max-width:340px; display:flex; flex-direction:column; gap:10px; }
+.prov{ display:flex; align-items:center; justify-content:center; gap:10px; font-size:14px; padding:12px 14px; }
+.prov svg{ width:18px; height:18px; flex:0 0 18px; }
+.prov .gh{ fill:currentColor; }
+.prov{ flex-wrap:wrap; row-gap:2px; }
+.prov .soon{ flex-basis:100%; text-align:center; font-size:11px; font-weight:400; color:var(--vh-fg-2); }
+.or{ width:100%; max-width:340px; display:flex; align-items:center; gap:10px; font-size:11px; color:var(--vh-fg-3); letter-spacing:.04em; }
+.or::before,.or::after{ content:""; flex:1; height:1px; background:var(--vh-btn-border); }
+@media (max-width:480px){ .wrap{ gap:20px; } }
+</style>
+</head>
+<body>
+<script>
+  // Theme wie voice.html: localStorage 'vh-theme-v1' hat Vorrang, sonst mobil hell, Desktop dunkel.
+  (function(){
+    let pref; try { pref = localStorage.getItem('vh-theme-v1'); } catch {}
+    if (!pref) pref = matchMedia('(max-width: 640px)').matches ? 'light' : 'dark';
+    if (pref === 'light') document.body.classList.add('theme-light');
+  })();
+</script>
+<div class="brand"><a href="/"><span class="dlt"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span>by</span><span class="tld"> voicehook</span></a><span class="by">·</span><span id="t-brand">Anmelden</span></div>
+<button id="btn-theme" type="button" aria-label="Theme"></button>
+
+<main class="wrap" id="view-login">
+  <h1 id="t-h1">Anmelden</h1>
+  <div class="providers">
+    <button class="cta ghost prov" id="btn-google" type="button" data-provider="google">
+      <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      <span class="lbl"></span><span class="soon" hidden></span>
+    </button>
+    <button class="cta ghost prov" id="btn-github" type="button" data-provider="github">
+      <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="gh" d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>
+      <span class="lbl"></span><span class="soon" hidden></span>
+    </button>
+  </div>
+  <div class="or" id="t-or">oder per E-Mail-Link</div>
+  <div class="login" id="login-box">
+    <form id="login-form" novalidate>
+      <input type="email" id="login-email" autocomplete="email" inputmode="email" required>
+      <button class="cta ghost" id="login-go" type="submit"></button>
+    </form>
+    <div class="msg" id="login-msg" aria-live="polite" hidden></div>
+  </div>
+  <div class="msg" id="msg" aria-live="polite" hidden></div>
+</main>
+
+<main class="wrap" id="view-ask" hidden>
+  <h1 id="ask-h1"></h1>
+  <div class="msg" id="ask-txt"></div>
+  <div class="row" style="width:100%;max-width:360px">
+    <button class="cta ghost" id="ask-no" type="button"></button>
+    <button class="cta" id="ask-yes" type="button"></button>
+  </div>
+</main>
+
+<div class="tagline">Talk with your agents</div>
+
+<script>
+(function(){
+'use strict';
+const LANG = (navigator.language || 'de').toLowerCase().startsWith('de') ? 'de' : 'en';
+document.documentElement.lang = LANG;
+const T = {
+  de: { brand:'Anmelden', h1:'Anmelden', google:'Mit Google fortfahren', github:'Mit GitHub fortfahren',
+        soon:'bald verfügbar', or:'oder per E-Mail-Link', loginPh:'deine@email.de', loginSend:'Link senden',
+        loginHint:'Wir schicken dir einen Anmelde-Link.', loginSent:'Link gesendet. Öffne ihn aus deinem Postfach.',
+        loginBad:'Bitte eine gültige E-Mail eingeben', loginUnavail:'E-Mail-Link bald verfügbar',
+        loginRate:'Zu viele Versuche. Bitte warte ein paar Minuten.', loginMailFail:'Die E-Mail ließ sich nicht senden. Bitte versuch es später noch einmal.',
+        err:'Das hat nicht geklappt. Bitte versuch es noch einmal.', redirecting:'Weiter zu {p} …',
+        verifying:'Anmeldung wird geprüft …', loggedInAs:e=>'Angemeldet als '+e, loggedIn:'Angemeldet',
+        loginExpired:'Dieser Anmelde-Link ist abgelaufen oder wurde schon benutzt. Bitte melde dich noch einmal an.',
+        askH:e=>'Anmelden als '+e+'?', askTxt:'In diesem Browser ist schon ein Guthaben gespeichert. „Anmelden“ wechselt zu diesem Konto, „Abbrechen“ lässt alles wie es ist.',
+        askYes:'Anmelden', askNo:'Abbrechen', askKept:'Abgebrochen. Dieser Browser bleibt im bisherigen Konto.',
+        e_denied:'Anmeldung abgebrochen.', e_state:'Die Anmeldung ist abgelaufen. Bitte versuch es noch einmal.',
+        e_provider:'Der Anbieter hat nicht geantwortet. Bitte versuch es noch einmal.',
+        e_email_unverified:'Bei diesem Konto ist keine bestätigte E-Mail hinterlegt. Bestätige sie beim Anbieter oder nimm den E-Mail-Link.',
+        theme:'Hell oder dunkel' },
+  en: { brand:'Log in', h1:'Log in', google:'Continue with Google', github:'Continue with GitHub',
+        soon:'coming soon', or:'or with an email link', loginPh:'you@example.com', loginSend:'Send link',
+        loginHint:'We will send you a login link.', loginSent:'Link sent. Open it from your inbox.',
+        loginBad:'Please enter a valid email', loginUnavail:'Email link coming soon',
+        loginRate:'Too many attempts. Please wait a few minutes.', loginMailFail:'The email could not be sent. Please try again later.',
+        err:'That did not work. Please try again.', redirecting:'Continuing to {p} …',
+        verifying:'Checking your login …', loggedInAs:e=>'Logged in as '+e, loggedIn:'Logged in',
+        loginExpired:'This login link has expired or was already used. Please log in again.',
+        askH:e=>'Log in as '+e+'?', askTxt:'This browser already holds credit. “Log in” switches to this account, “Cancel” leaves everything as it is.',
+        askYes:'Log in', askNo:'Cancel', askKept:'Cancelled. This browser stays in its previous account.',
+        e_denied:'Login cancelled.', e_state:'The login expired. Please try again.',
+        e_provider:'The provider did not respond. Please try again.',
+        e_email_unverified:'This account has no verified email. Verify it with the provider or use the email link.',
+        theme:'Light or dark' },
+}[LANG];
+const $ = id => document.getElementById(id);
+const TOKEN_KEY = 'vh-wallet-v1';
+const NONCE_KEY = 'vh_login_nonce';  // gleicher Schlüssel wie der Mail-Flow (aufladen.html)
+const getNonce = () => { try { return localStorage.getItem(NONCE_KEY) || ''; } catch { return ''; } };
+const setNonce = n => { try { if (n) localStorage.setItem(NONCE_KEY, n); else localStorage.removeItem(NONCE_KEY); } catch {} };
+const getToken = () => { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } };
+const setToken = t => { try { localStorage.setItem(TOKEN_KEY, t); } catch {} };
+const PNAME = { google:'Google', github:'GitHub' };
+
+// next: nur relativer Pfad dieser Seite (beginnt mit genau einem "/", kein "//"
+// oder "/\", keine Steuerzeichen, nicht /login selbst). Sonst /aufladen.
+// Gleiche Regel wie oauth_routes.safe_next (Open-Redirect).
+const DEFAULT_NEXT = '/aufladen';
+function safeNext(v){
+  if (typeof v !== 'string' || !v || v.length > 512 || v[0] !== '/' || v.startsWith('//') || v.includes('\\') || /[\u0000-\u001f\u007f]/.test(v)) return DEFAULT_NEXT;
+  const p = v.split('?')[0].split('#')[0];
+  if (p === '/login' || p.startsWith('/login/') || p === '/login.html') return DEFAULT_NEXT;
+  return v;
+}
+const NEXT = safeNext(new URLSearchParams(location.search).get('next'));
+
+// ---- statische Texte ----
+$('t-brand').textContent = T.brand; $('t-h1').textContent = T.h1; $('t-or').textContent = T.or;
+document.title = 'voicehook · ' + T.brand;
+$('login-email').placeholder = T.loginPh; $('login-email').setAttribute('aria-label', T.loginPh);
+$('login-go').textContent = T.loginSend;
+$('ask-yes').textContent = T.askYes; $('ask-no').textContent = T.askNo;
+for (const p of ['google', 'github']) $('btn-' + p).querySelector('.lbl').textContent = T[p];
+
+// ---- Theme-Schalter (gleicher Schlüssel wie voice.html) ----
+const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+const ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const btnTheme = $('btn-theme'); btnTheme.setAttribute('aria-label', T.theme); btnTheme.title = T.theme;
+const paintTheme = () => { btnTheme.innerHTML = document.body.classList.contains('theme-light') ? ICON_SUN : ICON_MOON; };
+btnTheme.addEventListener('click', () => {
+  const light = document.body.classList.toggle('theme-light');
+  try { localStorage.setItem('vh-theme-v1', light ? 'light' : 'dark'); } catch {}
+  paintTheme();
+});
+paintTheme();
+
+function setMsg(el, text, warn){ el.textContent = text; el.className = 'msg' + (warn ? ' warn' : ''); el.hidden = !text; }
+const showMsg = (t, w) => setMsg($('msg'), t, w);
+const loginMsg = (t, w) => setMsg($('login-msg'), t, w);
+function headers(){ const h = { 'Content-Type':'application/json' }; const t = getToken(); if (t) h['X-Wallet-Token'] = t; return h; }
+
+// ---- Anbieter (GET /api/auth/providers -> {google, github, email}) ----
+function setProvider(p, on){
+  const b = $('btn-' + p); if (!b) return;
+  b.disabled = !on; b.dataset.on = on ? '1' : '';
+  const s = b.querySelector('.soon'); s.textContent = T.soon; s.hidden = !!on;
+}
+function setEmail(on){
+  $('login-email').disabled = !on; $('login-go').disabled = !on;
+  if (!on) loginMsg(T.loginUnavail); else loginMsg(T.loginHint);
+}
+
+// POST /api/auth/<p>/start {next} MIT X-Wallet-Token (falls vorhanden) ->
+// {authorize_url, login_nonce}. Nonce in localStorage (wie beim Mail-Link), dann
+// zum Anbieter. Der Callback führt zurück auf /login?next=…#login=<token>.
+async function startProvider(p){
+  const b = $('btn-' + p); if (!b || b.disabled) return;
+  b.disabled = true; showMsg(T.redirecting.replace('{p}', PNAME[p]));
+  try {
+    const r = await fetch('/api/auth/' + p + '/start', { method:'POST', headers:headers(), body:JSON.stringify({ next:NEXT }) });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d && typeof d.authorize_url === 'string' && /^https:\/\//.test(d.authorize_url)) {
+      if (typeof d.login_nonce === 'string' && d.login_nonce) setNonce(d.login_nonce);
+      location.href = d.authorize_url; return;
+    }
+    if (r.status === 503) { setProvider(p, false); showMsg(''); return; }
+    showMsg(r.status === 429 ? T.loginRate : T.err, true);
+  } catch { showMsg(T.err, true); }
+  b.disabled = false;
+}
+$('btn-google').addEventListener('click', () => startProvider('google'));
+$('btn-github').addEventListener('click', () => startProvider('github'));
+
+// ---- E-Mail-Link (Vertrag PR #93, unverändert aus aufladen.html) ----
+$('login-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const input = $('login-email'), go = $('login-go'), email = input.value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) { loginMsg(T.loginBad, true); return; }
+  go.disabled = true;
+  try {
+    const r = await fetch('/api/login', { method:'POST', headers:headers(), body:JSON.stringify({ email }) });
+    if (r.ok) {
+      const d = await r.json().catch(() => ({}));
+      if (d && typeof d.login_nonce === 'string' && d.login_nonce) setNonce(d.login_nonce);
+      loginMsg(T.loginSent); input.disabled = true; return;
+    }
+    if (r.status === 503) { setEmail(false); return; }
+    loginMsg(r.status === 400 ? T.loginBad : r.status === 429 ? T.loginRate : r.status === 502 ? T.loginMailFail : T.err, true);
+  } catch { loginMsg(T.err, true); }
+  go.disabled = false;
+});
+
+// ---- #login=<token> einlösen (OAuth-Callback; Logik wie aufladen.html) ----
+// GET /api/login/verify?token=&nonce= -> 200 {wallet_token, email_masked, ...}
+// 409 confirm_required {email_masked}: kein/falscher Nonce (Link aus einem anderen
+// Browser), noch NICHT verbraucht -> erst fragen, bei Ja &confirm=1.
+// 400 invalid_or_expired. Erfolg -> Wallet speichern, weiter auf next.
+function setWithEmail(el, text, email){
+  el.textContent = '';
+  const i = email ? text.indexOf(email) : -1;
+  if (i < 0) { el.textContent = text; return; }
+  const sp = document.createElement('span'); sp.className = 'em'; sp.textContent = email;
+  el.append(text.slice(0, i), sp, text.slice(i + email.length));
+}
+async function verifyCall(token, confirm){
+  const n = confirm ? '' : getNonce();
+  const u = '/api/login/verify?token=' + encodeURIComponent(token) + (n ? '&nonce=' + encodeURIComponent(n) : '') + (confirm ? '&confirm=1' : '');
+  const r = await fetch(u, { headers:headers() });
+  const d = await r.json().catch(() => ({}));
+  return { r, d };
+}
+function backToLogin(text, warn){ $('view-ask').hidden = true; $('view-login').hidden = false; showMsg(text, warn); }
+function askLogin(email, onYes){
+  setWithEmail($('ask-h1'), T.askH(email || '?'), email);
+  $('ask-txt').textContent = getToken() ? T.askTxt : ''; $('ask-txt').hidden = !getToken();
+  $('view-login').hidden = true; $('view-ask').hidden = false;
+  $('ask-yes').disabled = false;
+  $('ask-yes').onclick = () => { $('ask-yes').disabled = true; onYes(); };
+  $('ask-no').onclick = () => backToLogin(getToken() ? T.askKept : '');
+  $('ask-yes').focus();
+}
+async function verifyLogin(token, confirmed){
+  showMsg(T.verifying);
+  let r, d;
+  try { ({ r, d } = await verifyCall(token, confirmed)); } catch { return backToLogin(T.err, true); }
+  if (r.status === 400) return backToLogin(T.loginExpired, true);
+  if (r.status === 409) {
+    const c = (d && typeof d.detail === 'object' && d.detail) || d || {};
+    if (c.error === 'confirm_required' && !confirmed) return askLogin(c.email_masked, () => verifyLogin(token, true));
+    return backToLogin(T.err, true);
+  }
+  if (!r.ok || !d || !d.wallet_token) return backToLogin(T.err, true);
+  setNonce('');
+  setToken(d.wallet_token);
+  $('view-ask').hidden = true; $('view-login').hidden = false;
+  setWithEmail($('msg'), d.email_masked ? T.loggedInAs(d.email_masked) : T.loggedIn, d.email_masked);
+  $('msg').className = 'msg'; $('msg').hidden = false;
+  location.replace(NEXT);
+}
+
+async function init(){
+  // Token/Fehler sofort aus der Adresszeile (vor jedem await); next bleibt stehen.
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const login = hash.get('login'), error = hash.get('error');
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  if (login) verifyLogin(login);
+  else if (error) showMsg(T['e_' + error] || T.err, true);
+  let cfg = null;
+  try { const r = await fetch('/api/auth/providers'); if (r.ok) cfg = await r.json(); } catch {}
+  cfg = cfg || {};
+  setProvider('google', cfg.google === true); setProvider('github', cfg.github === true);
+  setEmail(cfg.email === true);
+}
+init();
+})();
+</script>
+</body>
+</html>

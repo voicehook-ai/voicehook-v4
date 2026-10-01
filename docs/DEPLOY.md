@@ -132,15 +132,22 @@ dasselbe Konto zuerst verrechnet. Der Wiederherstellungs-Link gilt genau einmal 
 | `VOICEHOOK_REQUIRE_CREDITS_LIVE` | `0` | `1` = `/api/live-room` ohne Wallet mit Saldo > 0 -> 402; greift nur, wenn das Gratis-Kontingent Live aus ist |
 | `RESEND_API_KEY` | leer | Resend-API-Key für die Login-Mails; leer = Login aus (`/api/login` -> 503 `login_unavailable`) |
 | `MAIL_FROM` | `voicehook <login@voicehook.ai>` | Absender der Login-Mail (Domain muss in Resend verifiziert sein) |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | leer | OAuth-Client "Mit Google fortfahren" auf `/login`; fehlt einer der beiden Werte: Knopf ausgegraut, `/api/auth/google/*` -> 503 |
+| `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` | leer | dasselbe für "Mit GitHub fortfahren" (`/api/auth/github/*`) |
+| `VOICEHOOK_PUBLIC_URL` | `https://voicehook.ai` | Basis für Stripe-Rücksprung, Login-Link und OAuth-Callback (`<URL>/api/auth/<anbieter>/callback`) |
 | `VH_LOW_BALANCE_WARN_SECONDS` | `300` | Worker: ab dieser Restzeit (Gratis + Guthaben) einmal pro Call Hinweis + Ansage |
 | `VOICEHOOK_PRICE_FACTOR_NORMAL` / `_LIVE` | `3` / `1.5` | Abbuchung = Anbieterkosten x Faktor |
 | `VOICEHOOK_VAT_RATE` | `0.19` | MwSt obendrauf |
 | `VOICEHOOK_USD_EUR` | `0.8807` | Kurs USD -> EUR (EZB 30.09.2026) |
 | `VOICEHOOK_TOPUP_AMOUNTS_EUR` | `10,20,50` | Vorschlagsbeträge |
 | `VOICEHOOK_TOPUP_MIN_EUR` / `_MAX_EUR` | `10` / `200` | Spanne des Drehreglers (Minimum nie unter 10) |
-| `VOICEHOOK_FREE_MIN_PER_DAY_NORMAL` | `20` | Gratis-Gesprächsminuten pro UTC-Tag für Normal-Räume; `0` = aus |
-| `VOICEHOOK_FREE_MIN_PER_DAY_LIVE` | `10` | dasselbe für Live-Räume; `0` = aus |
-| `VH_FREE_TICK_SECONDS` | `5` | Takt, in dem der Worker Gratis-Minuten bucht (nur Worker) |
+| `VH_FREE_EUR_PER_DAY` | `1.0` | Gratis-Verbrauch in Euro (Kundenpreis inkl. Faktor und MwSt) pro UTC-Tag und Identität, Normal und Live gemeinsam; `0` = aus; kaputter Wert (kein Zahlwert, negativ, inf/nan) = 0 € Gratis bei weiter aktiver Prüfung (ohne Wallet 402), nie unbegrenzt |
+| `VH_FREE_TICK_SECONDS` | `5` | Prüftakt der Restzeit-Warnung im Worker (bucht nichts) |
+
+Entfallen: `VOICEHOOK_FREE_MIN_PER_DAY_NORMAL` / `_LIVE` (Gratis-Minuten) werden ignoriert und
+können aus der Env-Datei gelöscht werden. Die alte Sekunden-Tabelle `free_usage` in
+`freetier.sqlite` bleibt liegen, wird nicht mehr gelesen und nach 7 Tagen leer geräumt; die neue
+Tabelle `free_usage_eur` legt der Dienst beim Start selbst an (idempotent).
 | `VOICEHOOK_APPROX_EUR_PER_HOUR_NORMAL` / `_LIVE` | `1.70` / `8.80` | nur Anzeige: ungefährer Kundenpreis pro Stunde (inkl. Marge und MwSt) am Normal/Live-Schalter, via `/api/billing/config` `approx_eur_per_hour` |
 
 Stripe-Dashboard: Webhook-Endpunkt `https://voicehook.ai/api/stripe/webhook` mit den Events
@@ -151,25 +158,30 @@ Signing-Secret als `STRIPE_WEBHOOK_SECRET` setzen, danach Agent neu starten (Env
 
 ### Gratis-Kontingent (ohne Login)
 
-Reihenfolge im Call: erst Gratis-Minuten, dann Guthaben. Hat der Ersteller heute noch Gratis-Minuten
-und zusätzlich ein gedecktes Wallet, steht der Raum in beiden Tabellen; der Worker zählt erst die
-Gratis-Minuten herunter und bucht danach vom Wallet, ohne den Call zu beenden. Der Call endet erst,
-wenn beides leer ist. Reichen Gratis-Rest + Guthaben (Guthaben / Verbrauch der letzten 3 Minuten)
+Reihenfolge im Call: erst der Gratis-Topf, dann Guthaben. Hat der Ersteller heute noch Gratis-Rest
+und zusätzlich ein gedecktes Wallet, steht der Raum in beiden Tabellen; der Worker bucht erst aus
+dem Gratis-Topf und danach vom Wallet, ohne den Call zu beenden. Das Kostenereignis, das die Grenze
+überschreitet, leert den Topf bis 0, der Überhang geht ans Wallet. Der Call endet erst, wenn beides
+leer ist. Reichen Gratis-Rest + Guthaben ((Gratis-Rest + Guthaben) / Verbrauch der letzten 3 Minuten)
 noch höchstens 5 Minuten, schickt der Worker einmal pro Call `operator.notice`
 `{kind:"low_balance", minutes_left, ...}` an alle im Raum und sagt "Noch etwa fünf Minuten, lade
 Guthaben auf voicehook.ai auf." `GET /api/me` liefert der Oberfläche Gratis-Rest und Guthaben.
 
-Gratis gibt es höchstens `VOICEHOOK_FREE_MIN_PER_DAY_*` Gesprächsminuten pro UTC-Tag und Modus
-(Zeit mit mindestens einem Menschen im Raum). Gezählt wird je Merkmal des Raum-Erstellers: anonyme
+Gratis gibt es `VH_FREE_EUR_PER_DAY` (1 €) Verbrauch pro UTC-Tag, Normal und Live gemeinsam.
+Gebucht wird nur aus echten Kostenereignissen des Workers (Spracherkennung, Sprachmodell,
+Sprachausgabe bzw. Live-Turns), als Kundenpreis: Anbieterkosten x Faktor (Normal 3, Live 1,5) plus
+MwSt, dieselbe Rechnung wie beim Guthaben. Stille ohne Kosten zählt nichts herunter (früher zählte
+die Wanduhr, sobald ein Mensch im Raum war). Gezählt wird je Merkmal des Raum-Erstellers: anonyme
 ID aus dem Header `X-Anon-Id` (8 bis 128 Zeichen `A-Za-z0-9_-`, sonst ignoriert) und Client-IP
 (letztes Element von `X-Forwarded-For`, das Caddy selbst setzt; IPv6 je /64-Netz). Erreicht EINES der Merkmale das Limit, antworten
-`/api/host-call`, `/api/invite-room` bzw. `/api/live-room` ohne gedecktes Wallet mit 402 `{error: free_limit, topup_url: /aufladen}`; ein
-laufender Gratis-Call endet mit der Ansage "Deine Gratisminuten für heute sind um. Lade Guthaben
-auf." Gespeichert werden nur SHA-256-Hashes der Merkmale in `/opt/voicehook/state/freetier.sqlite`
+`/api/host-call`, `/api/invite-room` bzw. `/api/live-room` ohne gedecktes Wallet mit 402 `{error: free_limit, topup_url: /aufladen, free_eur_per_day}`; ein
+laufender Gratis-Call endet mit der Ansage "Dein Gratis-Verbrauch für heute ist um. Lade Guthaben
+auf." `GET /api/me` und `GET /api/free/remaining` liefern `free: {eur_left, eur_per_day}` (Euro, 2
+Nachkommastellen, abgerundet). Gespeichert werden nur SHA-256-Hashes der Merkmale in `/opt/voicehook/state/freetier.sqlite`
 (älter als 7 Tage wird gelöscht). Mit gedecktem Wallet endet der Call am Gratis-Limit nicht, das
 Wallet zahlt weiter. Die Obergrenze pro Live-Call
 (`VH_MAX_CALL_SECONDS=1200` im Live-Dienst) gilt zusätzlich. Der Worker ist in beiden Modi
-fail-closed, solange das Gratis-Kontingent des Modus an ist: ein Raum ohne Wallet und ohne
+fail-closed, solange das Gratis-Kontingent an ist: ein Raum ohne Wallet und ohne
 Gratis-Eintrag wird abgelehnt (`free_room_unknown`). Ausnahmen stehen als exempt drin: Admin-Live-Räume
 und Normal-Räume, die jemand mit einer gültigen HMAC-Einladung betritt, die der Server nicht selbst
 ausgestellt hat (call-starten mintet sie mit `INVITE_SECRET`). `GET /api/token?invite=1`
@@ -208,3 +220,46 @@ dem Deploy angefordert wurden, haben keine Nonce (Spalte `login_links.nonce_hash
 ergänzt, Altbestand NULL) und gehen nur über die Rückfrage (`confirm=1`). In den ersten 24 h im Log
 auf gehäufte `GET /api/login/verify` mit 409 achten; danach ist der Übergang vorbei, es ist nichts
 zurückzubauen.
+
+### Login-Seite `/login` (Google, GitHub, E-Mail-Link)
+
+Seite `/login` (Caddy schreibt auf `web/login.html` um). Alle "Anmelden"-Links auf `voice.html` und
+`/aufladen` führen auf `/login?next=<relativer Pfad der Ausgangsseite>`; nach dem Login geht es dorthin
+zurück. `next` gilt nur als relativer Pfad (beginnt mit `/`, nicht `//` oder `/\`, keine
+Steuerzeichen, nicht `/login`), sonst `/aufladen` (Schutz gegen Open-Redirect, Server und Seite prüfen
+beide). `GET /api/auth/providers` -> `{google, github, email}` sagt der Seite, welche Wege eingerichtet
+sind; der Rest steht ausgegraut mit "bald verfügbar" da.
+
+Ablauf Google/GitHub: `POST /api/auth/<anbieter>/start {next}` (mit `X-Wallet-Token`, falls vorhanden;
+Ratenlimit 5 je IP in 10 min, eigener Zähler) -> `{authorize_url, login_nonce}`. Der Server legt einen
+einmaligen `state` (10 min, nur als Hash in `oauth_states`) mit PKCE-Verifier (S256), `next`, Nonce- und
+Wallet-Hash an. Der Anbieter ruft `GET /api/auth/<anbieter>/callback?code&state` auf: `state` wird
+verbraucht, der Code getauscht, dann zählt nur eine bestätigte Adresse (Google: `email_verified=true`
+aus userinfo; GitHub: `/user/emails` mit `primary` und `verified`). Daraus entsteht ein normaler
+Login-Link (wie aus der Mail), gebunden an die Nonce und das Wallet aus `start`, und der Browser geht
+per 302 auf `/login?next=...#login=<token>`. Ab da gilt unverändert der Magic-Link-Vertrag oben
+(`/api/login/verify` mit Nonce 200, sonst 409 `confirm_required` mit Rückfrage). Konto-Identität bleibt
+die bestätigte E-Mail: gleiche Adresse über Mail, Google oder GitHub = dasselbe Konto. Die Anbieter-ID
+(Google `sub`, GitHub `id`) wird nur in `oauth_identities` vermerkt. Fehler enden auf
+`/login#error=<denied|state|provider|email_unverified>`.
+
+#### OAuth-Apps anlegen
+
+**Google** (Google Cloud Console, APIs & Services):
+1. OAuth-Zustimmungsbildschirm: Typ "Extern", App-Name voicehook, Support-Mail, Domain `voicehook.ai`;
+   Scopes `openid` und `email` (keine weiteren). Danach veröffentlichen ("In Produktion").
+2. Anmeldedaten -> OAuth-Client-ID -> Anwendungstyp "Webanwendung".
+   Autorisierte Weiterleitungs-URI: `https://voicehook.ai/api/auth/google/callback`
+   (exakt so, ohne Schrägstrich am Ende; für die Testbox zusätzlich `<VOICEHOOK_PUBLIC_URL>/api/auth/google/callback`).
+3. Client-ID -> `GOOGLE_OAUTH_CLIENT_ID`, Clientschlüssel -> `GOOGLE_OAUTH_CLIENT_SECRET`.
+
+**GitHub** (Settings -> Developer settings -> OAuth Apps -> New OAuth App, bei der Organisation):
+1. Homepage URL `https://voicehook.ai`,
+   Authorization callback URL `https://voicehook.ai/api/auth/github/callback`.
+2. Scope fragt der Server selbst an: `user:email` (nur Adressen lesen). PKCE (S256) wird mitgeschickt.
+3. Client ID -> `GITHUB_OAUTH_CLIENT_ID`, "Generate a new client secret" -> `GITHUB_OAUTH_CLIENT_SECRET`.
+
+Beide Paare in `/opt/voicehook/.env` (Secrets aus dem orb, nie ins Repo), Agent neu starten (Env wird
+beim Start gelesen). Prüfen: `curl -s https://voicehook.ai/api/auth/providers` zeigt `true` für den Anbieter.
+Hinweis Logs: der Callback-Query (`code`, `state`) steht wie jede URL im Caddy- und uvicorn-Access-Log;
+der Code ist einmalig und ohne PKCE-Verifier wertlos, der Server selbst loggt weder Code noch Token.

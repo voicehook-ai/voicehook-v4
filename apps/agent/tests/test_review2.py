@@ -35,7 +35,7 @@ def _env(monkeypatch):
     monkeypatch.setenv("LIVEKIT_URL", "wss://rtc.test")
     monkeypatch.setenv("GOOGLE_API_KEY", "test")
     for k in ("VOICEHOOK_REQUIRE_CREDITS_NORMAL", "VOICEHOOK_REQUIRE_CREDITS_LIVE",
-              "VOICEHOOK_FREE_MIN_PER_DAY_LIVE", "VOICEHOOK_FREE_MIN_PER_DAY_NORMAL",
+              "VH_FREE_EUR_PER_DAY",
               "VOICEHOOK_LIVE_PUBLIC", "VH_FREE_TICK_SECONDS", "VOICEHOOK_PRICE_FACTOR_NORMAL",
               "VOICEHOOK_PRICE_FACTOR_LIVE", "VOICEHOOK_VAT_RATE", "VOICEHOOK_USD_EUR"):
         monkeypatch.delenv(k, raising=False)
@@ -132,7 +132,7 @@ def test_live_worker_refuses_room_without_wallet_and_free_entry(monkeypatch):
 
 
 def test_live_fail_closed_off_when_free_tier_disabled(monkeypatch):
-    monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_LIVE", "0")         # Limit aus = bewusst frei
+    monkeypatch.setenv("VH_FREE_EUR_PER_DAY", "0")         # Limit aus = bewusst frei
     ctx, _ = _run_free(monkeypatch, room="ghost2", humans=1, wait_s=0.1)
     ctx.shutdown.assert_not_called()
 
@@ -173,7 +173,7 @@ def test_ipv6_counted_per_64():
 
 
 def test_ipv6_rotation_in_same_64_hits_limit(client):
-    freetier.add_seconds(freetier.identity_keys(None, "2001:db8:aa:bb::1"), "live", 20 * 60)
+    freetier.add_ueur(freetier.identity_keys(None, "2001:db8:aa:bb::1"), 1_000_000)
     r = client.post("/api/live-room", json={"identity": "u"},
                     headers={"x-forwarded-for": "2001:db8:aa:bb:1234::77"})
     assert r.status_code == 402

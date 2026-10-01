@@ -32,7 +32,7 @@ def _env(monkeypatch):
               "VOICEHOOK_PRICE_FACTOR_NORMAL", "VOICEHOOK_PRICE_FACTOR_LIVE",
               "VOICEHOOK_VAT_RATE", "VOICEHOOK_USD_EUR", "VOICEHOOK_TOPUP_AMOUNTS_EUR",
               "VOICEHOOK_TOPUP_MIN_EUR", "VOICEHOOK_TOPUP_MAX_EUR",
-              "VOICEHOOK_FREE_MIN_PER_DAY_LIVE", "VOICEHOOK_FREE_MIN_PER_DAY_NORMAL"):
+              "VH_FREE_EUR_PER_DAY"):
         monkeypatch.delenv(k, raising=False)
     # Kein Test darf LiveKit erreichen
     import agent.server as srv
@@ -266,7 +266,7 @@ def test_gating_off_by_default_calls_work_without_wallet(client):
 
 
 def test_gating_normal_on_402_without_or_empty_wallet(client, monkeypatch):
-    monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_NORMAL", "0")   # Gating greift nur ohne Gratis
+    monkeypatch.setenv("VH_FREE_EUR_PER_DAY", "0")   # Gating greift nur ohne Gratis
     monkeypatch.setenv("VOICEHOOK_REQUIRE_CREDITS_NORMAL", "1")
     r = client.post("/api/host-call", json={"identity": "u"})
     assert r.status_code == 402
@@ -282,7 +282,7 @@ def test_gating_normal_on_402_without_or_empty_wallet(client, monkeypatch):
 
 
 def test_gating_live_independent_of_normal(client, monkeypatch):
-    monkeypatch.setenv("VOICEHOOK_FREE_MIN_PER_DAY_LIVE", "0")
+    monkeypatch.setenv("VH_FREE_EUR_PER_DAY", "0")
     monkeypatch.setenv("VOICEHOOK_REQUIRE_CREDITS_LIVE", "1")
     assert client.post("/api/host-call", json={"identity": "u"}).status_code == 200
     assert client.post("/api/live-room", json={"identity": "u"}).status_code == 402
