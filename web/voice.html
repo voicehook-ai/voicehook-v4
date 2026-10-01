@@ -2155,6 +2155,10 @@ function vhEffectiveN() {
   return Math.max(1, Math.min(N, cap, want));
 }
 let vhDrawN = -1;
+// Zeichenbereich sofort aus vhEffectiveN setzen und den Cache mitführen. Direktes
+// geo.setDrawRange(0, activeN) umging den Cache: unter Eco (Kappung 10 %) blieben
+// dann ungekappt Punkte in Hintergrundfarbe sichtbar (helles Theme: blasse Decke).
+function vhSyncDrawRange() { vhDrawN = vhEffectiveN(); geo.setDrawRange(0, vhDrawN); }
 function vhSimStep() {
   // Alle ~0.5 s prüfen, ob Zoom/Profil/Panelhöhe die Ring-Unterkante verschoben hat.
   if ((++vhLayoutTick % 30) === 0) { try { vhRingLayout(false); } catch (_) {} }
@@ -3292,7 +3296,7 @@ const particleInput = document.getElementById('particle-count');
 activeN = Math.floor(N * parseFloat(particleInput.value));
 particleInput.addEventListener('input', e => {
   activeN = Math.floor(N * parseFloat(e.target.value));
-  geo.setDrawRange(0, activeN);
+  vhSyncDrawRange();
 });
 geo.setDrawRange(0, activeN);
 
@@ -3913,7 +3917,7 @@ function loadState() {
   if (s.ring)   { ringFxInput.value = s.ring;   ringFx = parseFloat(s.ring); }
   // UI-Paket 6 (Punkt 11): Satelliten und Inseln sind nicht mehr im Panel; alte
   // gespeicherte Werte werden ignoriert (interne Standards).
-  if (s.pc)     { particleInput.value = s.pc;   activeN = Math.floor(N * parseFloat(s.pc)); geo.setDrawRange(0, activeN); }
+  if (s.pc)     { particleInput.value = s.pc;   activeN = Math.floor(N * parseFloat(s.pc)); vhSyncDrawRange(); }
   if (s.hue !== undefined) { hueInput.value = s.hue; hueShift = parseFloat(s.hue); }
   if (s.bright) { brightnessInput.value = s.bright; vhBrightRel = parseFloat(s.bright); vhApplyBright(); }
   if (s.size)   { sizeInput.value = s.size;         mat.size = parseFloat(s.size); }
@@ -3965,7 +3969,7 @@ function applyProfile(mode) {
   particleInput.value = pcVal;      activeN = Math.floor(N * pcVal);
   // Draw-Range mitziehen: sonst werden die inaktiven Partikel weiter gezeichnet
   // (in Hintergrundfarbe) und decken im Light-Theme das Fellmuster mit hellen Punkten zu.
-  geo.setDrawRange(0, activeN);
+  vhSyncDrawRange();
   vhApplyCluster(parseFloat(clusterInput.value), true);   // Inseln folgen dem Cluster-Regler
   if (!vhZoomUser) vhZoomTarget = vhZoomDefault;   // Start-Zoom statt p.zoom; eigener Zoom bleibt
   hueInput.value = p.hue;           hueShift = p.hue;
