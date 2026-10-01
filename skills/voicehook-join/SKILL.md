@@ -148,6 +148,7 @@ Fallback `next` prints the raw log line instead of `{"type": …}`:
 | `operator.interrupt` | `{}` | stop speaking; unspoken rest comes back as `operator.revise` |
 | `operator.inject` | `{text, role?}` | context entry, not spoken |
 | `transcript` | ← `{role, text}` | `user` = the human; `operator` = your spoken text; `agent` = voicebot's own answer |
+| `transcript.live` | ← `{phase, role, id, text?, interrupted?}` | your `say` started (`start`, full text) / finished (`end`) playing; for the browser only, NOT proof it was spoken (use `transcript`) |
 | `operator.notice` | ← `{kind, minutes_left, text, topup_url, ...}` | server notice, see below |
 | `quit` | `{}` | leave the call (what `leave` does) |
 
