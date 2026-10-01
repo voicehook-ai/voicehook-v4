@@ -3548,7 +3548,14 @@ async function vhPayErrMsg(r) {
   let d = null;
   try { d = (await r.clone().json()).detail; } catch (_) {}
   if (!d || typeof d !== 'object') return null;
-  if (d.error === 'free_limit') return vhT('pay.free');
+  if (d.error === 'free_limit') {
+    // Gratis-Zeile sofort auf "aufgebraucht" stellen; vhPayShow zeigt dann keinen
+    // zweiten Banner mit demselben Text (Oliver 01.10.: Meldung stand doppelt da).
+    const per = Number(d.free_eur_per_day) > 0 ? Number(d.free_eur_per_day) : (vhFree && Number(vhFree.eur_per_day)) || 1;
+    vhFree = { eur_left: 0, eur_per_day: per };
+    try { vhModeInfoRender(); } catch (_) {}
+    return vhT('pay.free');
+  }
   if (d.error === 'credits_required') return vhT(d.wallet === 'empty' ? 'pay.empty' : 'pay.missing');
   return null;
 }
@@ -3565,7 +3572,21 @@ function vhTopupBtn() {
   return b;
 }
 // Hinweis mit Aufladen-Knopf in der Zeile über dem Call-Knopf, Panel geht auf.
+// Steht dieselbe "aufgebraucht"-Meldung samt Aufladen schon sichtbar in der
+// Gratis-Zeile (#vh-mode-info), kein zweiter Banner; nur das Panel geht auf.
+function vhFreeLineShows(msg) {
+  const info = document.getElementById('vh-mode-info');
+  const el = info && info.querySelector('.vh-free-left');
+  if (!el || el.hidden || info.hidden || !el.querySelector('.vh-topup-open')) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 && (el.textContent || '').startsWith(msg);
+}
 function vhPayShow(msg) {
+  if (msg && msg === vhT('pay.free') && vhFreeLineShows(msg)) {
+    err.textContent = '';
+    vhTopupOpen();
+    return;
+  }
   err.textContent = msg || '';
   const banner = document.getElementById('vh-invite-banner');
   if (banner) {
