@@ -305,6 +305,26 @@ def issue_token(req: TokenRequest) -> TokenResponse:
 _LABEL_MAX = 64
 
 
+def _require_operator_invite() -> bool:
+    """VH_REQUIRE_OPERATOR_INVITE=1: Operator-Join ohne HMAC-Einladung hart ablehnen.
+    Default 0 (Übergangsfrist für alte CLIs), nach 1 bis 2 Tagen auf 1 stellen."""
+    return os.environ.get("VH_REQUIRE_OPERATOR_INVITE", "0").strip() == "1"
+
+
+def _operator_invite_gate(room: str, identity: str, op_invite: str) -> None:
+    """Operator-Join (invite=1) nur mit echter HMAC-Einladung für genau diesen Raum.
+    Ungültige Signatur: immer 403. Fehlende: laut loggen, mit Flag 403."""
+    if op_invite:
+        verdict = verify_invite(op_invite, room)
+        if not verdict.valid:
+            raise HTTPException(status_code=403, detail=f"invalid invite: {verdict.reason}")
+        return
+    if _require_operator_invite():
+        raise HTTPException(status_code=403, detail="operator invite required")
+    logger.warning("legacy operator join without invite room=%s identity=%s",
+                   room, _clean_label(identity))
+
+
 def _clean_label(v: str) -> str:
     """Operator self-report label → safe display string: printable only, collapsed
     whitespace, capped at _LABEL_MAX chars (the chip ellipsizes further)."""
@@ -315,7 +335,7 @@ def _clean_label(v: str) -> str:
 @app.get("/api/token", response_model=TokenResponse)
 def issue_token_get(
     room: str, identity: str, invite: str = "", ttl_seconds: int = 3600,
-    name: str = "", model: str = "",
+    name: str = "", model: str = "", op_invite: str = "",
 ) -> TokenResponse:
     """GET-flavor compat for voicehook-agent CLI (v3 protocol).
 
@@ -332,8 +352,14 @@ def issue_token_get(
     as LK `name` + `attributes` (vh.role/vh.name/vh.model) so the web presence
     chip can show "Claude · opus-5.5" instead of a guessed brand. Optional —
     older CLIs without them still get a plain token.
+
+    `op_invite` (Paket 7): die echte HMAC-Einladung aus der Einladungs-URL. Ohne sie
+    konnte jeder, der nur den Raumnamen kennt, als Agent beitreten und das
+    Transkript mitlesen. Ungültig -> immer 403. Fehlt sie (alte CLI), siehe
+    _operator_invite_gate: Übergangsfrist per VH_REQUIRE_OPERATOR_INVITE.
     """
     if invite == "1":
+        _operator_invite_gate(room, identity, op_invite)
         api_key = os.environ.get("LIVEKIT_API_KEY")
         api_secret = os.environ.get("LIVEKIT_API_SECRET")
         livekit_url = os.environ.get("LIVEKIT_URL", "wss://rtc.voicehook.ai")

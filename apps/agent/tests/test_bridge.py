@@ -518,3 +518,24 @@ def test_caddy_does_not_buffer_bridge_events():
     cf = (Path(__file__).resolve().parents[3] / "infra" / "caddy" / "Caddyfile.tmpl").read_text()
     assert "not path /api/bridge/events" in cf
     assert "encode @enc" in cf
+
+
+# ----- Paket 7: Brücke ohne Einladung nur in der Übergangsfrist -------------------
+
+def test_join_without_invite_rejected_when_required(client, monkeypatch):
+    monkeypatch.setenv("VH_REQUIRE_OPERATOR_INVITE", "1")
+    r = client.post("/api/bridge/join", json={"invite_url": f"https://voicehook.ai/r/{ROOM}", "name": "C", "model": "m"})
+    assert r.status_code == 403
+    assert r.json()["detail"] == "operator invite required"
+
+
+def test_join_with_valid_invite_passes_when_required(client, monkeypatch):
+    monkeypatch.setenv("VH_REQUIRE_OPERATOR_INVITE", "1")
+    inv = mint_invite(ROOM, 600, secret=SECRET)
+    j = _join(client, invite_url=f"https://voicehook.ai/r/{ROOM}?invite={inv}")
+    assert j["room"] == ROOM
+
+
+def test_join_without_invite_allowed_in_transition(client, monkeypatch):
+    monkeypatch.setenv("VH_REQUIRE_OPERATOR_INVITE", "0")
+    assert _join(client)["room"] == ROOM

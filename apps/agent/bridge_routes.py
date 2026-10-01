@@ -17,7 +17,9 @@ ever travels in the `Authorization: Bearer <session>` header, never in a URL.
 Authorization of the join is exactly the CLI's: the server mints the same
 operator token as `GET /api/token?invite=1&name=..&model=..` (vh.role=agent,
 vh.name, vh.model; active-room check; voice-ai dispatch only for rooms with a
-known payer). If the invite URL carries an HMAC `?invite=`, it is verified too.
+known payer). If the invite URL carries an HMAC `?invite=`, it is verified (invalid
+-> 403). Without one the join only works while VH_REQUIRE_OPERATOR_INVITE is 0
+(transition period, logged as "legacy operator join without invite").
 """
 
 from __future__ import annotations
@@ -138,16 +140,20 @@ async def bridge_join(req: JoinRequest, request: Request) -> dict:
     err = bridge.REGISTRY.capacity_error(room_name, ip)
     if err:
         raise HTTPException(status_code=429, detail=err)
-    if invite and invite != "1":
-        verdict = verify_invite(invite, room_name)
+    op_invite = invite if invite and invite != "1" else ""
+    if op_invite:
+        verdict = verify_invite(op_invite, room_name)
         if not verdict.valid:
             raise HTTPException(status_code=403, detail=f"invalid invite: {verdict.reason}")
+    elif srv._require_operator_invite():
+        # Ohne Einladung nur in der Übergangsfrist (wie GET /api/token?invite=1).
+        raise HTTPException(status_code=403, detail="operator invite required")
     identity = _identity(req)
-    # Same token + same gates as the CLI's GET /api/token?invite=1 (410 ended room,
-    # 503 no LK creds, dispatch only for rooms with a payer).
+    # Same token + same gates as the CLI's GET /api/token?invite=1&op_invite=.. (410
+    # ended room, 503 no LK creds, dispatch only for rooms with a payer, HMAC gate).
     tok = await asyncio.to_thread(
         srv.issue_token_get, room=room_name, identity=identity, invite="1",
-        ttl_seconds=3600, name=req.name, model=req.model,
+        ttl_seconds=3600, name=req.name, model=req.model, op_invite=op_invite,
     )
     lk_url = os.environ.get("VOICEHOOK_BRIDGE_LIVEKIT_URL") or tok.url
     slot = (room_name, ip)
