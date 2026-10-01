@@ -27,7 +27,8 @@ def test_deploy_script_is_lean():
 
 def test_caddyfile_template_is_lean():
     # 30 -> 33 (01.10.2026): 3 Zeilen für die Footer-Seiten (PR #83), Platz für /login (PR #95).
-    assert _loc(ROOT / "infra" / "caddy" / "Caddyfile.tmpl") <= 33
+    # 33 -> 34 (01.10.2026): SSE der HTTPS-Brücke nicht komprimieren (PR #99).
+    assert _loc(ROOT / "infra" / "caddy" / "Caddyfile.tmpl") <= 34
 
 
 def test_systemd_units_are_exactly_main_plus_live_worker():
