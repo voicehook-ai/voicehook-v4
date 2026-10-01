@@ -632,6 +632,15 @@ body.theme-light .vh-invite-hint .hd{color:#1f7f90;}
 .vh-invite-actions .vh-copy-btn{margin-top:0;padding:2px 10px;}
 .vh-invite-status{grid-column:1 / -1;margin-top:3px;font-size:10.5px;color:var(--vh-btn-fg);opacity:0.6;letter-spacing:0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .vh-invite-status.ok{color:#9ddb6d;opacity:1;}
+.vh-invite-status.warn{color:#f2a65a;opacity:1;white-space:normal;}
+body.theme-light .vh-invite-status.warn{color:#b8641a;}
+/* Live-Schalter (Normal / Live): eigene Zeile direkt unter den Presence-Pills,
+   gleicher Pill-Stil (.vh-pres-chip, aktive Wahl = .in). Nur sichtbar, wenn
+   /api/live/status available=true meldet, und nur vor dem Call: ein laufender
+   Raum wechselt nie den Modus (im Call zeigt der Untertitel "live"). */
+#vh-mode-row{display:flex;gap:8px;justify-content:center;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;margin-bottom:6px;flex-shrink:0;}
+#vh-mode-row[hidden],#vh-presence.vh-in-call + #vh-mode-row{display:none;}
+#vh-mode-row .vh-pres-chip{font:inherit;padding:3px 9px;border-radius:12px;letter-spacing:0.01em;}
 #vh-invite-banner{margin:6px 0;width:100%;max-width:560px;align-self:center;flex-shrink:0;}
 /* Punkt A: sobald ein externer Agent im Raum ist, Snippet + Copy ausblenden;
    verlässt er den Raum, erscheint es wieder (Klasse aus vhSyncInviteBtnVisibility). */
@@ -811,6 +820,10 @@ body.theme-light #vh-transcript .vh-tr-row.operator{
     <span class="vh-pres-chip" data-slot="voice-ai" title="Delta Agent (voice) — voicehook-interne STT+LLM+TTS pipeline. Moderiert das Gespräch zwischen User und Agent."><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Delta Agent (voice)</span></span>
     <span class="vh-pres-chip" data-slot="agent" title="Agent — der externe LLM (z.B. Claude Code) der via voicehook-agent CLI eingeklinkt ist"><span class="vh-pres-spin" aria-hidden="true"></span><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Agent</span></span>
     <button type="button" id="vh-tr-mode" aria-label="Transkript-Ansicht wechseln" title="Transkript: minimiert / normal / Vollbild (Esc)"></button>
+  </div>
+  <div id="vh-mode-row" role="group" aria-label="Sprachmodus für den nächsten Call" hidden>
+    <button type="button" class="vh-pres-chip in" data-mode="normal" aria-pressed="true" title="Normal: Standard-Sprachpipeline"><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Normal</span></button>
+    <button type="button" class="vh-pres-chip" data-mode="live" aria-pressed="false" title="Live: Gemini Live, gilt für den nächsten neuen Call"><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Live</span></button>
   </div>
   <div id="vh-tr-ticker" aria-live="polite"></div>
   <div id="vh-invite-banner" hidden></div>
@@ -2897,6 +2910,99 @@ function vhStableIdentity(room, prefix) {
   return fresh;
 }
 
+// ── Live-Schalter Normal / Live (Oliver 01.10.: "switchen über die Oberfläche,
+// dass es auch beim Invite funktioniert"). Server-API aus PR #79:
+// GET /api/live/status -> {available}; POST /api/live-room wie /api/host-call.
+// Die Wahl gilt nur für den NÄCHSTEN neuen Raum; ein laufender Raum behält
+// seinen Agent (nie zwei Agents im Raum). Wahl in localStorage, Standard Normal.
+const VH_LIVE_KEY = 'vh-live-mode-v1';
+const VH_LIVE_ERR = {
+  402: 'Live-Budget für diesen Monat aufgebraucht',
+  404: 'Live-Modus ist gerade aus',
+  503: 'Live-Modus ist gerade nicht verfügbar',
+  429: 'Zu viele Starts, bitte kurz warten',
+};
+const vhModeRow = document.getElementById('vh-mode-row');
+let vhLiveAvailable = false;
+function vhLiveWanted() { try { return localStorage.getItem(VH_LIVE_KEY) === 'live'; } catch (_) { return false; } }
+function vhLiveOn() { return vhLiveAvailable && vhLiveWanted(); }
+function vhLiveRender() {
+  if (!vhModeRow) return;
+  vhModeRow.hidden = !vhLiveAvailable;
+  const live = vhLiveOn();
+  vhModeRow.querySelectorAll('[data-mode]').forEach((b) => {
+    const on = (b.dataset.mode === 'live') === live;
+    b.classList.toggle('in', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+}
+function vhLiveSet(mode) {
+  try { localStorage.setItem(VH_LIVE_KEY, mode === 'live' ? 'live' : 'normal'); } catch (_) {}
+  vhLiveRender();
+}
+async function vhLiveRefresh() {
+  try {
+    const r = await fetch('/api/live/status', { cache: 'no-store' });
+    const j = r.ok ? await r.json() : null;
+    vhLiveAvailable = !!(j && j.available === true);
+  } catch (_) { vhLiveAvailable = false; }
+  vhLiveRender();
+}
+// Fehlerzeile: #vh-invite-banner (sichtbare Zeile direkt über dem Call-Knopf;
+// #err existiert im DOM nicht mehr). '' räumt nur eine eigene Meldung weg.
+function vhLiveErrShow(msg) {
+  err.textContent = msg || '';
+  const banner = document.getElementById('vh-invite-banner');
+  if (!banner) return;
+  if (!msg) {
+    if (banner.querySelector('.vh-live-err')) { banner.hidden = true; banner.innerHTML = ''; }
+    return;
+  }
+  banner.innerHTML = '<div class="vh-invite-hint"><div class="vh-invite-status warn vh-live-err" role="alert"></div></div>';
+  banner.querySelector('.vh-live-err').textContent = msg;
+  banner.hidden = false;
+}
+// Neuen Live-Raum holen. Fehler: kurze Meldung; 402/404/503 -> zurück auf Normal.
+async function vhLiveRoom(identity) {
+  const r = await fetch('/api/live-room', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ identity }),
+  });
+  if (!r.ok) {
+    const msg = VH_LIVE_ERR[r.status] || ('Live-Start fehlgeschlagen (' + r.status + ')');
+    if (r.status !== 429) { vhLiveSet('normal'); vhLiveRefresh(); }
+    vhLiveErrShow(msg);
+    throw new Error(msg);
+  }
+  return r.json();
+}
+// ?invite=<hmac> aus dem Einladungslink des Servers (raumgebunden, läuft ab).
+function vhLiveInviteParam(tok) {
+  try { return new URL(tok.invite_url).searchParams.get('invite') || ''; } catch (_) { return ''; }
+}
+function vhLiveUrlFor(room, tok) {
+  const q = new URLSearchParams(location.search);
+  const inv = vhLiveInviteParam(tok);
+  if (inv) q.set('invite', inv);
+  const qs = q.toString();
+  return '/r/' + encodeURIComponent(room) + (qs ? '?' + qs : '');
+}
+// Laufender Live-Call: Untertitel zeigt "live", bis der erste Kosten-Payload
+// "0.012 $ · live" daraus macht (vhCostShow); vhCostStop setzt beim Ende zurück.
+function vhLiveMark() {
+  const t = document.getElementById('tagline');
+  if (!t) return;
+  t.textContent = 'live'; t.title = 'Live-Modus (Gemini Live)'; t.classList.add('vh-cost-on');
+}
+if (vhModeRow) vhModeRow.addEventListener('click', (e) => {
+  const b = e.target && e.target.closest && e.target.closest('[data-mode]');
+  if (!b || vhCallLive()) return;  // laufender Raum wechselt den Modus nicht
+  vhLiveSet(b.dataset.mode);
+  vhLiveErrShow('');
+});
+vhLiveRender();
+vhLiveRefresh();
+
 async function vhStartCall() {
   if (!window.LivekitClient) { err.textContent = 'LiveKit SDK failed to load — reload the page.'; return; }
   btnCall.disabled = true; err.textContent = 'connecting…';
@@ -2921,14 +3027,21 @@ async function vhStartCall() {
       if (!r.ok) throw new Error('Token server ' + r.status);
       tok = await r.json();
     } else {
-      // fresh host call — server returns the slug it minted for us
+      // fresh host call: server returns the slug it minted for us.
+      // Live-Schalter an: gleicher Body an /api/live-room (Raum gehört dem Live-Worker).
       const identity = 'host-' + Math.random().toString(36).slice(2, 8);
-      const r = await fetch('/api/host-call', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ identity }),
-      });
-      if (!r.ok) throw new Error('Host-call ' + r.status);
-      tok = await r.json();
+      vhLiveErrShow('');
+      if (vhLiveOn()) {
+        tok = await vhLiveRoom(identity);
+        tok.vhLive = true;
+      } else {
+        const r = await fetch('/api/host-call', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ identity }),
+        });
+        if (!r.ok) throw new Error('Host-call ' + r.status);
+        tok = await r.json();
+      }
       room = tok.room;
     }
     if (!tok || !tok.token || !tok.url) throw new Error('invalid token response');
@@ -2954,7 +3067,8 @@ async function vhStartCall() {
     // rewrite browser URL to /r/<slug> so bookmark + back-button work
     // Preserve query string (esp. ?go=1) so a refresh re-triggers autostart
     // instead of dumping the user back to the modal mid-call.
-    try { history.replaceState(null, '', '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
+    try { history.replaceState(null, '', tok.vhLive ? vhLiveUrlFor(room, tok) : '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
+    if (tok.vhLive) vhLiveMark();
   } catch (e) {
     console.error('[voicehook] call failed', e);
     err.textContent = 'Connection failed: ' + (e && e.message ? e.message : e);
@@ -4032,17 +4146,33 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
       // own voice-ai does NOT auto-join. Wait for the external agent the
       // user paste-runs from clipboard (Olli "der voicehook joined vor dem
       // echten agent das macht keinen sinn").
-      const room = vhRandSlug();
-      const identity = vhStableIdentity(room, 'host');
-      const u = '/api/token?room=' + encodeURIComponent(room) +
-                '&identity=' + encodeURIComponent(identity) +
-                '&invite=1';
-      const r = await fetch(u);
-      if (!r.ok) throw new Error('Token server ' + r.status);
-      const tok = await r.json();
-      if (!tok || !tok.token || !tok.url) throw new Error('invalid token response');
+      // Live-Schalter an: /api/live-room legt den Raum serverseitig an (Raum
+      // gehört dem Live-Worker, jeder spätere Dispatch dort -> voice-ai-live).
+      const live = vhLiveOn();
+      vhLiveErrShow('');
+      let room, tok;
+      if (live) {
+        const identity = 'host-' + Math.random().toString(36).slice(2, 8);
+        tok = await vhLiveRoom(identity);
+        room = tok && tok.room;
+        try { localStorage.setItem(VH_ID_PREFIX + room, identity); } catch (_) {}
+      } else {
+        room = vhRandSlug();
+        const identity = vhStableIdentity(room, 'host');
+        const u = '/api/token?room=' + encodeURIComponent(room) +
+                  '&identity=' + encodeURIComponent(identity) +
+                  '&invite=1';
+        const r = await fetch(u);
+        if (!r.ok) throw new Error('Token server ' + r.status);
+        tok = await r.json();
+      }
+      if (!tok || !tok.token || !tok.url || !room) throw new Error('invalid token response');
 
-      const inviteUrl = location.origin + '/r/' + encodeURIComponent(room);
+      // Live: Einladung mit ?invite=<hmac>, damit auch ein Mensch per Link im
+      // selben Live-Raum landet (ohne Code würde /r/<slug> einen neuen Raum starten).
+      const inviteInv = live ? vhLiveInviteParam(tok) : '';
+      const inviteUrl = location.origin + '/r/' + encodeURIComponent(room) +
+                        (inviteInv ? '?invite=' + encodeURIComponent(inviteInv) : '');
       let clipOk = true;
 
       if (!window.LivekitClient) throw new Error('LiveKit SDK not loaded');
@@ -4088,9 +4218,10 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
       await lkRoom.localParticipant.setMicrophoneEnabled(true);
       try { await vhStartRoomAudio(lkRoom); } catch (_) {}
       lkConnected = true; try { vhHideJoinGate(); } catch (_) {}
-      try { history.replaceState(null, '', '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
+      try { history.replaceState(null, '', live ? vhLiveUrlFor(room, tok) : '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
+      if (live) vhLiveMark();
 
-      _setCallUi('in-call', 'in call · invite URL copied: ' + inviteUrl);
+      _setCallUi('in-call', 'in call' + (live ? ' (live)' : '') + ' · invite URL copied: ' + inviteUrl);
     } catch (e) {
       console.error('[vh-call] start failed', e);
       _setCallUi('idle', 'failed: ' + (e && e.message ? e.message : e));
