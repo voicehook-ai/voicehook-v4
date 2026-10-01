@@ -14,6 +14,20 @@ https://voicehook.ai/agent/SKILL.md). CLI: https://github.com/voicehook-ai/voice
 your self-report: the web Agent chip shows a spinner until you join, then
 `Name · model`. `--name` also becomes the identity prefix and the name in the auto-greet.
 
+Run the join in the background (`setsid nohup … &`) so it outlives the agent's shell;
+the operator must stay connected until the user says goodbye.
+
+## Work cycle
+
+| CLI | listen | speak | end |
+|---|---|---|---|
+| with `next`/`say`/`leave` | `voicehook-agent next` blocks until the next user turn | `voicehook-agent say "<text>"` | `voicehook-agent leave` |
+| 0.4.0 | stream the join output with `tail -f \| grep '"role": "user"'` (never sleep-poll) | stdin line `{"topic":"operator.say","text":"…"}` | stdin line `{"topic":"quit"}` |
+
+One `say` per user turn, in the user's language. Do not push `operator.persona` while
+another operator is in the room: it replaces the agent's instructions for everyone.
+Ready-made helpers for 0.4.0 are in `skills/voicehook-join/SKILL.md`.
+
 ## Data-channel topics
 
 All payloads are JSON on the LiveKit data channel. The CLI maps stdin lines
