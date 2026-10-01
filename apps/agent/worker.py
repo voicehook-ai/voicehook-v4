@@ -14,6 +14,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -27,7 +28,15 @@ from . import budget, freetier
 from .billing import db as billing_db
 from .billing import pricing as billing_pricing
 from .llm import build_llm
-from .relay import DEFAULT_PERSONA, RelayAgent, build_relay_handlers, topic_dispatch
+from .relay import (
+    DEFAULT_PERSONA,
+    LOW_BALANCE_ANNOUNCEMENT,
+    RelayAgent,
+    build_relay_handlers,
+    publish_notice,
+    speak_notice,
+    topic_dispatch,
+)
 from .voice import build_stt, build_tts
 
 logger = logging.getLogger("voicehook.worker")
@@ -46,6 +55,11 @@ LIVE_BUDGET_ANNOUNCEMENT = "Das Live-Budget für diesen Monat ist aufgebraucht. 
 WALLET_EMPTY_ANNOUNCEMENT = "Dein Guthaben ist aufgebraucht. Ich beende den Call."
 FREE_LIMIT_ANNOUNCEMENT = "Deine Gratisminuten für heute sind um. Lade Guthaben auf."
 DEFAULT_FREE_TICK_SECONDS = 5.0
+# Vorwarnung (Oliver 01.10.): reichen Gratis-Rest + Guthaben bei aktuellem Verbrauch
+# noch höchstens so lange, einmal pro Call operator.notice + Ansage.
+DEFAULT_LOW_BALANCE_WARN_SECONDS = 300.0
+DEFAULT_BURN_WINDOW_SECONDS = 180.0     # gleitender Verbrauch der letzten 3 Minuten
+DEFAULT_BURN_MIN_SPAN_SECONDS = 60.0    # erst ab 1 min Beobachtung hochrechnen
 # Every teardown step is bounded so the teardown itself can never hang.
 TEARDOWN_STEP_TIMEOUT = 10.0
 
@@ -327,23 +341,30 @@ def free_tick_seconds() -> float:
 
 
 class FreeMinutes:
-    """Gratis-Kontingent (freetier.py) für einen Raum ohne Wallet.
+    """Gratis-Kontingent (freetier.py) eines Raums, VOR dem Guthaben.
 
     Liest die Merkmale des Raum-Erstellers EINMAL beim Start. Danach im Takt
     (VH_FREE_TICK_SECONDS, Default 5 s): verstrichene Zeit, in der ein Mensch im Raum
-    war, auf jedes Merkmal buchen; ist der Tagesverbrauch eines Merkmals am Limit,
-    kurze Ansage + Call-Ende (Grund free_limit). Der Schlaf bis zum nächsten Takt ist
-    höchstens die Restzeit, damit das Ende pünktlich kommt. DB-Zugriffe laufen in
-    einem Thread, nie auf der Event-Loop.
+    war, auf jedes Merkmal buchen. Ist der Tagesverbrauch eines Merkmals am Limit:
+      - Raum hat ein Wallet mit Saldo > 0: Gratis-Teil vorbei (`done`), ab jetzt
+        bucht der WalletCharger, der Call läuft weiter;
+      - sonst kurze Ansage + Call-Ende (Grund free_limit).
+    Der Schlaf bis zum nächsten Takt ist höchstens die Restzeit, damit das Ende
+    pünktlich kommt. DB-Zugriffe laufen in einem Thread, nie auf der Event-Loop.
     """
 
-    def __init__(self, room: str, mode: str, *, clock: Callable[[], float] = time.monotonic) -> None:
+    def __init__(self, room: str, mode: str, *, clock: Callable[[], float] = time.monotonic,
+                 wallet: WalletCharger | None = None) -> None:
         self.room = room
         self.mode = mode
         self.keys: list[str] = []
         self._clock = clock
         self._task: asyncio.Task | None = None
+        self._wallet = wallet
         self.known = False  # Raum steht in free_rooms (gezählt oder Admin-Ausnahme)
+        self.counting = False  # Gratis-Teil läuft (geladen und noch nicht aufgebraucht)
+        self.done = False      # Gratis-Teil aufgebraucht, Wallet zahlt weiter
+        self.left_s: float | None = None  # zuletzt gelesener Gratis-Rest
 
     def load(self) -> bool:
         """True = Gratis-Raum mit aktivem Limit, wird gezählt. `known` sagt, ob der
@@ -359,6 +380,7 @@ class FreeMinutes:
         if not found or not found[1]:
             return False
         self.keys = found[1]
+        self.counting = True
         return True
 
     def start(self, guard: CallGuard) -> None:
@@ -380,7 +402,14 @@ class FreeMinutes:
                 except Exception as e:  # noqa: BLE001
                     logger.error("[free] read room=%s failed: %s", self.room, e)
                     left = 0.0  # fail-closed: Gratis-Raum ohne lesbaren Zähler endet
+                self.left_s = max(0.0, left)
                 if left <= 0:
+                    if self._wallet is not None and self._wallet.account is not None and not (
+                        await asyncio.to_thread(self._wallet.is_empty)
+                    ):
+                        logger.info("[free] daily limit reached in room=%s, wallet continues", self.room)
+                        self.counting, self.done = False, True
+                        return
                     logger.warning("[free] daily limit reached in room=%s, ending call", self.room)
                     await guard.end("free_limit", delete_room=True, announce=FREE_LIMIT_ANNOUNCEMENT)
                     return
@@ -395,6 +424,131 @@ class FreeMinutes:
                 with contextlib.suppress(Exception):
                     freetier.add_seconds(self.keys, self.mode, self._clock() - last)
             raise
+
+
+class LowBalanceWatch:
+    """Einmal pro Call warnen, wenn Gratis-Rest + Guthaben bei aktuellem Verbrauch
+    höchstens noch `warn_s` (Default 5 min) reichen.
+
+    Restzeit = Gratis-Rest (FreeMinutes.left_s, Sekunden, solange der Gratis-Teil
+    läuft) + Guthaben / Verbrauch. Verbrauch = gleitender Brutto-Preis (echte Kosten
+    x Faktor + MwSt, billing/pricing.py) der letzten `window_s` (3 min), erst ab
+    `min_span_s` Beobachtung. Ohne Wallet zählt nur der Gratis-Rest; ein Raum ohne
+    Gratis-Zählung und ohne Wallet wird nie gewarnt (nichts kann leer werden).
+    Bei der Warnung: on_warn(Restsekunden, Payload) einmal.
+    """
+
+    def __init__(
+        self,
+        free: FreeMinutes | None,
+        wallet: WalletCharger,
+        *,
+        warn_s: float = DEFAULT_LOW_BALANCE_WARN_SECONDS,
+        window_s: float = DEFAULT_BURN_WINDOW_SECONDS,
+        min_span_s: float = DEFAULT_BURN_MIN_SPAN_SECONDS,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.free = free
+        self.wallet = wallet
+        self.warn_s = warn_s
+        self.window_s = window_s
+        self.min_span_s = min_span_s
+        self._clock = clock
+        self._started = clock()
+        self._costs: list[tuple[float, int]] = []
+        self.warned = False
+        self._task: asyncio.Task | None = None
+
+    def add_cost(self, usd: float) -> None:
+        if usd <= 0:
+            return
+        now = self._clock()
+        self._costs.append((now, billing_pricing.charge_ueur(usd, self.wallet.mode)))
+        cutoff = now - self.window_s
+        while self._costs and self._costs[0][0] < cutoff:
+            self._costs.pop(0)
+
+    def burn_ueur_per_s(self) -> float | None:
+        """Brutto-Verbrauch je Sekunde über das Fenster, None = noch zu kurz beobachtet."""
+        now = self._clock()
+        span = min(self.window_s, now - self._started)
+        if span < self.min_span_s:
+            return None
+        cutoff = now - self.window_s
+        return sum(u for t, u in self._costs if t >= cutoff) / span
+
+    def _free_s(self) -> float | None:
+        if self.free is None or not (self.free.counting or self.free.done):
+            return None
+        if self.free.done:
+            return 0.0
+        return self.free.left_s
+
+    def seconds_left(self) -> float | None:
+        """Geschätzte Restzeit in s; None = unbekannt oder unbegrenzt."""
+        free_s = self._free_s()
+        if self.free is not None and self.free.counting and free_s is None:
+            return None  # erster Gratis-Takt noch nicht gelesen
+        acc = self.wallet.account
+        if acc is None:
+            return free_s
+        try:
+            bal = billing_db.balance_ueur(acc)
+        except Exception as e:  # noqa: BLE001
+            logger.error("[low-balance] balance account=%s failed: %s", acc, e)
+            return None
+        rate = self.burn_ueur_per_s()
+        if not rate:
+            return None  # Verbrauch noch unbekannt: lieber spät als falsch warnen
+        return (free_s or 0.0) + bal / rate
+
+    def payload(self, left: float) -> dict:
+        free_s = self._free_s()
+        bal = None
+        if self.wallet.account is not None:
+            with contextlib.suppress(Exception):
+                bal = billing_pricing.ueur_to_eur(billing_db.balance_ueur(self.wallet.account))
+        base = os.environ.get("VOICEHOOK_PUBLIC_URL", "https://voicehook.ai").rstrip("/")
+        return {
+            "kind": "low_balance",
+            "minutes_left": max(0, math.ceil(left / 60)),
+            "seconds_left": max(0, int(left)),
+            "free_s": None if free_s is None else int(free_s),
+            "balance_eur": bal,
+            "topup_url": f"{base}/aufladen",
+            "text": LOW_BALANCE_ANNOUNCEMENT,
+        }
+
+    async def check(self) -> dict | None:
+        """Einmal prüfen; liefert die Payload, wenn jetzt gewarnt werden muss."""
+        if self.warned:
+            return None
+        left = await asyncio.to_thread(self.seconds_left)
+        if left is None or left > self.warn_s:
+            return None
+        self.warned = True
+        return await asyncio.to_thread(self.payload, left)
+
+    def start(self, guard: CallGuard, on_warn: Callable[[dict], Any]) -> None:
+        async def _run() -> None:
+            while not guard.ended and not self.warned:
+                await asyncio.sleep(free_tick_seconds())
+                if guard.ended:
+                    return
+                try:
+                    p = await self.check()
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("[low-balance] check failed: %r", e)
+                    continue
+                if p is not None:
+                    logger.info("[low-balance] room=%s %s", self.wallet.room, json.dumps(p))
+                    await on_warn(p)
+
+        self._task = asyncio.create_task(_run())
+
+
+def low_balance_warn_seconds() -> float:
+    return _positive_env_seconds("VH_LOW_BALANCE_WARN_SECONDS", DEFAULT_LOW_BALANCE_WARN_SECONDS)
 
 
 def is_live() -> bool:
@@ -439,15 +593,18 @@ async def entrypoint(ctx: JobContext) -> None:
         logger.warning("[live-budget] exhausted (%.2f USD), refusing room=%s", budget.spent_usd(), ctx.room.name)
         ctx.shutdown(reason="live_budget_exhausted")
         return
-    if wallet.is_empty():
-        # Raum gehört einem Wallet ohne Guthaben: keine kostenpflichtige Session öffnen.
+    # Gratis-Kontingent: Räume, die der HTTP-Server als Gratis-Raum angelegt hat
+    # (host-call / live-room / invite-room). Hat der Raum zusätzlich ein Wallet, zahlt
+    # es erst, wenn der Gratis-Teil aufgebraucht ist (Oliver 01.10.).
+    free = FreeMinutes(ctx.room.name, mode, wallet=wallet)
+    counted = free.load()
+    if not counted and wallet.is_empty():
+        # Raum gehört einem Wallet ohne Guthaben und hat keinen Gratis-Teil (mehr):
+        # keine kostenpflichtige Session öffnen. Mit Gratis-Teil endet der Call erst,
+        # wenn der aufgebraucht ist (FreeMinutes).
         logger.warning("[wallet] empty, refusing room=%s", ctx.room.name)
         ctx.shutdown(reason="wallet_empty")
         return
-    # Gratis-Kontingent: nur Räume ohne Wallet, die der HTTP-Server als Gratis-Raum
-    # angelegt hat (host-call / live-room). Bezahlte Räume sind ausgenommen.
-    free = FreeMinutes(ctx.room.name, mode)
-    counted = not paid and free.load()
     if live_mode and not paid and freetier.enabled("live") and not free.known:
         # fail-closed (Review 01.10. #2): Live-Raum ohne Wallet und ohne Gratis-Eintrag
         # (z. B. aufgeräumt oder nie über live-room angelegt) läuft nicht unbegrenzt.
@@ -504,6 +661,7 @@ async def entrypoint(ctx: JobContext) -> None:
     from .live import CostMeter
 
     meter = CostMeter("live" if live_mode else "pipeline")
+    watch = LowBalanceWatch(free if counted else None, wallet, warn_s=low_balance_warn_seconds())
     turns = [0]
     guard_ref: list[CallGuard] = []  # wird unten gesetzt; Budget-Ende braucht den Guard
 
@@ -520,7 +678,10 @@ async def entrypoint(ctx: JobContext) -> None:
                 asyncio.create_task(
                     guard_ref[0].end("live_budget", delete_room=False, announce=LIVE_BUDGET_ANNOUNCEMENT)
                 )
-        if wallet.charge(usd) and guard_ref:
+        watch.add_cost(usd)
+        if free.counting:  # Gratis-Teil läuft: Guthaben bleibt unberührt
+            pass
+        elif wallet.charge(usd) and guard_ref:
             logger.warning("[wallet] empty in room=%s, ending call", ctx.room.name)
             asyncio.create_task(
                 guard_ref[0].end("wallet_empty", delete_room=False, announce=WALLET_EMPTY_ANNOUNCEMENT)
@@ -579,6 +740,13 @@ async def entrypoint(ctx: JobContext) -> None:
     guard.start()
     if counted:
         free.start(guard)
+
+    async def _warn(p: dict) -> None:
+        await publish_notice(ctx.room, p)
+        speak_notice(session, LOW_BALANCE_ANNOUNCEMENT, live=live_mode)
+
+    if counted or paid:
+        watch.start(guard, _warn)
     # Explicit room options (don't rely on lib defaults): close the session when
     # the linked participant leaves. Room deletion is owned by CallGuard so it
     # only happens when no human is left (or on the hard cap).

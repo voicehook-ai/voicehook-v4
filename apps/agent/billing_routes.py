@@ -16,9 +16,15 @@ Ablauf (Oliver 01.10.2026):
   5. Erstattung/Rückbuchung (charge.refunded, charge.dispute.created) ziehen den
      Betrag wieder ab (Saldo nie unter 0, Fehlbetrag vermerkt), idempotent.
 
-Gating per Env, Default AUS bis Stripe live ist:
-  VOICEHOOK_REQUIRE_CREDITS_NORMAL=0, VOICEHOOK_REQUIRE_CREDITS_LIVE=0
+Reihenfolge im Call: erst Gratis-Minuten (freetier.py), dann Guthaben
+(payer_for_call). Gating per Env greift nur, wenn das Gratis-Kontingent des Modus
+aus ist: VOICEHOOK_REQUIRE_CREDITS_NORMAL=0, VOICEHOOK_REQUIRE_CREDITS_LIVE=0
   (1 = ohne gültiges Wallet mit Saldo > 0 antwortet host-call/live-room mit 402).
+
+Login (Magic-Link, Oliver 01.10.): POST /api/login {email} schickt einen Link an
+die Adresse; GET /api/login/verify?token=... tauscht ihn einmalig (15 min) gegen
+ein Wallet-Token für das Konto mit dieser BESTÄTIGTEN Adresse. Die Stripe-Mail
+allein verknüpft nie (siehe billing/db.py login_verified_email).
 
 Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, VOICEHOOK_PUBLIC_URL,
      VOICEHOOK_TOPUP_AMOUNTS_EUR ("10,20,50"), VOICEHOOK_TOPUP_MIN_EUR (10),
@@ -27,16 +33,20 @@ Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, VOICEHOOK_PUBLIC_URL,
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import os
+import re
+import threading
+import time
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from . import freetier
-from .billing import db, pricing, stripe_api
+from .billing import db, mail, pricing, stripe_api
 
 logger = logging.getLogger("voicehook.billing")
 
@@ -51,6 +61,18 @@ def _public_base() -> str:
     return os.environ.get("VOICEHOOK_PUBLIC_URL", "https://voicehook.ai").rstrip("/")
 
 
+def client_ip(request: Request) -> str:
+    """Client-IP hinter Caddy. Das LETZTE X-Forwarded-For-Element hat der nächste
+    Proxy (Caddy) selbst gesetzt; frühere Elemente kann der Client fälschen.
+    Caddy ohne trusted_proxies (infra/caddy/Caddyfile.tmpl) verwirft eingehende
+    X-Forwarded-For-Werte ohnehin, das letzte Element bleibt aber auch dann richtig,
+    wenn dort später trusted_proxies gesetzt wird (Review 01.10. #4)."""
+    parts = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
+    if parts:
+        return parts[-1]
+    return request.client.host if request.client else "unknown"
+
+
 def credits_required(mode: str) -> bool:
     name = "VOICEHOOK_REQUIRE_CREDITS_LIVE" if mode == "live" else "VOICEHOOK_REQUIRE_CREDITS_NORMAL"
     return os.environ.get(name, "0").strip().lower() not in _OFF
@@ -60,42 +82,50 @@ def wallet_token(request: Request) -> str:
     return request.headers.get(WALLET_HEADER, "").strip()
 
 
-def wallet_for_call(request: Request, mode: str) -> str | None:
-    """Konto, das für einen neuen Call zahlt, oder None.
+def payer_for_call(request: Request, mode: str, ip: str) -> tuple[str | None, list[str] | None]:
+    """Wer zahlt einen NEUEN Raum: (Wallet-Konto | None, Gratis-Merkmale | None).
 
-    Gating an + kein gültiges Token / Saldo <= 0 -> 402 mit Link zum Aufladen.
-    Gating aus: ein Wallet mit Saldo > 0 wird trotzdem belastet (wer eins schickt,
-    zahlt); ohne Wallet oder mit leerem Wallet läuft der Call wie bisher.
+    Reihenfolge (Oliver 01.10.): erst die Gratis-Minuten des Tages, dann das Guthaben.
+    Hat der Anfragende heute noch Gratis-Minuten, kommen seine Merkmale zurück (der
+    Worker zählt sie zuerst herunter); hat er zusätzlich ein Wallet mit Saldo > 0,
+    wird der Raum auch daran gebunden, der Worker bucht nach dem Gratis-Teil vom
+    Guthaben weiter. Weder Gratis-Rest noch Guthaben -> 402 mit Link zum Aufladen:
+      free_limit        Gratis-Kontingent für den Modus an, heute aufgebraucht
+      credits_required  Gratis-Kontingent für den Modus aus und
+                        VOICEHOOK_REQUIRE_CREDITS_<MODE>=1
+    Gratis aus und Gating aus: (None, None), der Call läuft wie bisher ungezählt.
     """
     acc = db.account_for_token(wallet_token(request))
-    if acc is not None and db.balance_ueur(acc) > 0:
-        return acc
+    wallet = acc if acc is not None and db.balance_ueur(acc) > 0 else None
+    if freetier.enabled(mode):
+        keys = freetier.identity_keys(request.headers.get(freetier.ANON_HEADER), ip)
+        if freetier.remaining_seconds(keys, mode) > 0:
+            return wallet, keys
+        if wallet:
+            return wallet, None
+        raise HTTPException(
+            status_code=402,
+            detail={"error": "free_limit", "topup_url": TOPUP_PATH,
+                    "free_min_per_day": freetier.limit_minutes(mode)},
+        )
+    if wallet:
+        return wallet, None
     if credits_required(mode):
         raise HTTPException(
             status_code=402,
             detail={"error": "credits_required", "topup_url": TOPUP_PATH,
                     "wallet": "empty" if acc else "missing"},
         )
-    return None
+    return None, None
 
 
-def free_keys_for_call(request: Request, mode: str, ip: str, wallet: str | None) -> list[str] | None:
-    """Gratis-Kontingent (freetier.py) für einen neuen Raum ohne Wallet.
-
-    None = nicht zu zählen (bezahlter Raum oder Limit für den Modus aus).
-    Sonst die Merkmale des Erstellers; ist eines davon heute schon am Limit -> 402
-    mit Grund free_limit und Link zum Aufladen.
-    """
-    if wallet or not freetier.enabled(mode):
-        return None
-    keys = freetier.identity_keys(request.headers.get(freetier.ANON_HEADER), ip)
-    if freetier.remaining_seconds(keys, mode) <= 0:
-        raise HTTPException(
-            status_code=402,
-            detail={"error": "free_limit", "topup_url": TOPUP_PATH,
-                    "free_min_per_day": freetier.limit_minutes(mode)},
-        )
-    return keys
+def register_new_room(room: str, mode: str, wallet: str | None, free_keys: list[str] | None,
+                      ttl_seconds: int) -> None:
+    """Zuordnungen für den Worker anlegen, VOR dem Dispatch (er liest sie beim Start)."""
+    if wallet:
+        db.bind_room(room, wallet, mode, ttl_seconds)
+    if free_keys is not None:
+        freetier.register_room(room, mode, free_keys)
 
 
 # ----- Konfiguration für die Seite -------------------------------------------
@@ -299,3 +329,72 @@ def api_wallet_recover(req: RecoverRequest) -> dict:
         raise HTTPException(status_code=404, detail="unknown recovery code")
     acc, token, code = got
     return {"wallet_token": token, "recovery_url": _recovery_url(code), **_wallet_view(acc)}
+
+
+# ----- Magic-Link-Login -----------------------------------------------------------
+_EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
+LOGIN_IP_LIMIT, LOGIN_IP_WINDOW = 5, 600          # 5 Links je IP in 10 min
+LOGIN_MAIL_LIMIT, LOGIN_MAIL_WINDOW = 3, 900      # 3 Links je Adresse in 15 min
+_LOGIN_HITS: dict[str, list[float]] = {}
+_LOGIN_LOCK = threading.Lock()
+
+
+def _login_rate_ok(key: str, limit: int, window: float) -> bool:
+    now = time.time()
+    with _LOGIN_LOCK:
+        if len(_LOGIN_HITS) > 10_000:  # Prozess-Speicher begrenzen
+            _LOGIN_HITS.clear()
+        hits = [t for t in _LOGIN_HITS.get(key, []) if now - t < window]
+        ok = len(hits) < limit
+        if ok:
+            hits.append(now)
+        _LOGIN_HITS[key] = hits
+        return ok
+
+
+def login_link(token: str) -> str:
+    """Link in der Mail. Token im Fragment: Mail-Scanner, die Links vorab abrufen,
+    sehen es nie; die Seite liest es und ruft /api/login/verify auf."""
+    return f"{_public_base()}{TOPUP_PATH}#login={token}"
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=254)
+
+
+@router.post("/api/login")
+def api_login(req: LoginRequest, request: Request) -> dict:
+    """Login-Link an `email` schicken. Antwort immer gleich, egal ob es zu der
+    Adresse ein Konto gibt (sonst ließe sich abfragen, wer Kunde ist)."""
+    if not mail.configured():
+        raise HTTPException(status_code=503, detail="login_unavailable")
+    email = db.normalize_email(req.email)
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="invalid_email")
+    mail_key = "mail:" + hashlib.sha256(email.encode()).hexdigest()
+    if not _login_rate_ok("ip:" + client_ip(request), LOGIN_IP_LIMIT, LOGIN_IP_WINDOW) or \
+            not _login_rate_ok(mail_key, LOGIN_MAIL_LIMIT, LOGIN_MAIL_WINDOW):
+        raise HTTPException(status_code=429, detail="rate_limited")
+    token = db.create_login_link(email)
+    try:
+        mail.send(email, mail.login_message(login_link(token), db.LOGIN_TTL_S // 60))
+    except mail.MailError as e:
+        logger.error("[login] mail send failed: %s", e)
+        raise HTTPException(status_code=502, detail="mail_failed") from e
+    logger.info("[login] link sent")
+    return {"sent": True, "expires_in": db.LOGIN_TTL_S}
+
+
+@router.get("/api/login/verify")
+def api_login_verify(token: str, request: Request) -> dict:
+    """Magic-Link einlösen (einmal, 15 min) -> Wallet-Token für das Konto mit dieser
+    jetzt bestätigten Adresse. Optional X-Wallet-Token: hat dieser Browser schon ein
+    Wallet ohne bestätigte Adresse, wird genau dieses Konto bestätigt und bleibt
+    angemeldet (Regeln in billing/db.py login_verified_email)."""
+    email = db.consume_login_link(token)
+    if email is None:
+        raise HTTPException(status_code=400, detail="invalid_or_expired")
+    acc, wallet, code = db.login_verified_email(email, wallet_token=wallet_token(request) or None)
+    logger.info("[login] verified account %s", acc)
+    return {"wallet_token": wallet, "recovery_url": _recovery_url(code), "email_verified": True,
+            **_wallet_view(acc)}

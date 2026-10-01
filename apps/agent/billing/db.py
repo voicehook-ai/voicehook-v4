@@ -5,10 +5,15 @@ laufen auf derselben Box und teilen sich das State-Verzeichnis). WAL + Busy-Time
 jede Schreiboperation in einer eigenen BEGIN-IMMEDIATE-Transaktion.
 
 Schema:
-    accounts(id, email, balance_ueur, debt_ueur, created_at, updated_at)
+    accounts(id, email, balance_ueur, debt_ueur, created_at, updated_at, email_verified_at)
         Konto = Wallet (geheimes Token + Wiederherstellungs-Link), NICHT die E-Mail.
-        Die Checkout-E-Mail wird nur vermerkt; Stripe prüft sie nicht, deshalb wird
-        NIE über die E-Mail zusammengeführt (Review 01.10.: Konto-Übernahme).
+        Die Checkout-E-Mail wird nur als UNBESTÄTIGTE Kontakt-Mail vermerkt; Stripe
+        prüft sie nicht, deshalb führt sie allein nie zu einem Konto (Review 01.10.:
+        Konto-Übernahme). email_verified_at wird erst gesetzt, wenn jemand einen
+        Magic-Link an genau diese Adresse eingelöst hat (login_verified_email);
+        eine bestätigte Adresse gehört höchstens einem Konto (Teilindex).
+    login_links(token_hash PK, email, created_at, expires_at, used_at)
+        Magic-Link-Tokens (nur SHA-256), einmalig, kurzlebig (LOGIN_TTL_S).
         Saldo in µEUR, brutto. debt_ueur = offener Fehlbetrag aus Erstattung/
         Rückbuchung, wird bei der nächsten Gutschrift zuerst verrechnet.
     tokens(token_hash PK, account_id, kind 'wallet'|'recovery', created_at, last_used_at)
@@ -99,11 +104,20 @@ CREATE TABLE IF NOT EXISTS usage (
     ts TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_usage_account ON usage(account_id);
+CREATE TABLE IF NOT EXISTS login_links (
+    token_hash TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    expires_at REAL NOT NULL,
+    used_at REAL
+);
 """
 
 _INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email);
 CREATE INDEX IF NOT EXISTS idx_sessions_pi ON stripe_sessions(payment_intent);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_verified_email
+    ON accounts(email) WHERE email_verified_at IS NOT NULL;
 """
 
 
@@ -128,6 +142,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
     cols = {r[1] for r in conn.execute("PRAGMA table_info(accounts)").fetchall()}
     if "debt_ueur" not in cols:
         conn.execute("ALTER TABLE accounts ADD COLUMN debt_ueur INTEGER NOT NULL DEFAULT 0")
+    if "email_verified_at" not in cols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN email_verified_at TEXT")
     cols = {r[1] for r in conn.execute("PRAGMA table_info(room_wallets)").fetchall()}
     if "expires_at" not in cols:  # Altbestand ohne Ablauf: sofort abgelaufen (fail-closed)
         conn.execute("ALTER TABLE room_wallets ADD COLUMN expires_at REAL")
@@ -205,7 +221,8 @@ def account(account_id: str) -> sqlite3.Row | None:
     conn = connect()
     try:
         return conn.execute(
-            "SELECT id, email, balance_ueur, debt_ueur, created_at, updated_at FROM accounts WHERE id = ?",
+            "SELECT id, email, balance_ueur, debt_ueur, created_at, updated_at, email_verified_at"
+            " FROM accounts WHERE id = ?",
             (account_id,),
         ).fetchone()
     finally:
@@ -480,3 +497,115 @@ def reverse_payment(
         return {"status": "reversed" if cents else "nothing", "account_id": s["account_id"],
                 "cents": cents, "debited_ueur": debited, "shortfall_ueur": shortfall}
 
+
+
+# ----- Magic-Link-Login ---------------------------------------------------------
+LOGIN_TTL_S = 15 * 60
+
+
+def create_login_link(email: str, *, ttl_seconds: float = LOGIN_TTL_S, now: float | None = None) -> str:
+    """Einmal-Token für einen Login-Link an `email` (nur der Hash wird gespeichert)."""
+    now = time.time() if now is None else now
+    token = "vhl_" + secrets.token_urlsafe(32)
+    with _Tx() as conn:
+        conn.execute("DELETE FROM login_links WHERE expires_at < ?", (now - 86400,))
+        conn.execute(
+            "INSERT INTO login_links (token_hash, email, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            (_hash(token), normalize_email(email), now, now + float(ttl_seconds)),
+        )
+    return token
+
+
+def consume_login_link(token: str | None, *, now: float | None = None) -> str | None:
+    """Token einlösen: bestätigte Adresse oder None (unbekannt, abgelaufen, schon benutzt)."""
+    if not token or len(token) > 200:
+        return None
+    now = time.time() if now is None else now
+    with _Tx() as conn:
+        row = conn.execute(
+            "SELECT email, expires_at, used_at FROM login_links WHERE token_hash = ?", (_hash(token),)
+        ).fetchone()
+        if row is None or row["used_at"] is not None or float(row["expires_at"]) <= now:
+            return None
+        conn.execute("UPDATE login_links SET used_at = ? WHERE token_hash = ?", (now, _hash(token)))
+        return row["email"]
+
+
+def login_verified_email(email: str, *, wallet_token: str | None = None) -> tuple[str, str, str]:
+    """Login mit einer gerade per Magic-Link BESTÄTIGTEN Adresse.
+
+    Liefert (account_id, neues Wallet-Token, neuer Recovery-Code). Ziel-Konto:
+      1. das Konto, dem diese Adresse schon bestätigt gehört, sonst
+      2. das Konto des mitgeschickten Wallet-Tokens (derselbe Browser hat Wallet UND
+         Mail-Zugang bewiesen), wenn es noch keine bestätigte Adresse hat, sonst
+      3. das älteste Konto mit dieser unbestätigten Kontakt-Mail (Stripe), sonst
+      4. ein neues, leeres Konto.
+    Alle übrigen unbestätigten Konten mit dieser Kontakt-Mail (und das des
+    Wallet-Tokens, falls es unbestätigt ist) werden in das Ziel überführt: Saldo,
+    Schuld und Stripe-Sessions wandern mit, ihre Tokens werden gelöscht.
+
+    Sicherheit (PR #88 critical): wer bei Stripe eine fremde Adresse eintippt, hält
+    ein Token für ein UNBESTÄTIGTES Konto. Wird ein Konto zum ersten Mal bestätigt,
+    werden deshalb alle seine bisherigen Tokens gelöscht, außer dem, das dieser
+    Browser gerade mitgeschickt hat. So erreicht nie jemand ein Konto, dessen
+    Adresse er nicht selbst bestätigt hat, auch nicht durch Voranlegen.
+    """
+    email = normalize_email(email)
+    keep_hash = _hash(wallet_token) if wallet_token and len(wallet_token) <= 200 else None
+    wallet = "vhw_" + secrets.token_urlsafe(32)
+    code = "vhr_" + secrets.token_urlsafe(32)
+    with _Tx() as conn:
+        now = _now()
+        verified = conn.execute(
+            "SELECT id FROM accounts WHERE email = ? AND email_verified_at IS NOT NULL", (email,)
+        ).fetchone()
+        candidates = [r["id"] for r in conn.execute(
+            "SELECT id FROM accounts WHERE email = ? AND email_verified_at IS NULL"
+            " ORDER BY created_at, id", (email,)
+        ).fetchall()]
+        requester = None
+        if keep_hash:
+            r = conn.execute(
+                "SELECT a.id FROM tokens t JOIN accounts a ON a.id = t.account_id"
+                " WHERE t.token_hash = ? AND t.kind = 'wallet' AND a.email_verified_at IS NULL",
+                (keep_hash,),
+            ).fetchone()
+            requester = r["id"] if r else None
+        if verified:
+            target, newly = verified["id"], False
+        elif requester:
+            target, newly = requester, True
+        elif candidates:
+            target, newly = candidates[0], True
+        else:
+            target, newly = _new_account(conn, email), True
+        merge = [c for c in candidates if c != target]
+        if requester and requester != target and requester not in merge:
+            merge.append(requester)
+        for m in merge:
+            bal, debt = conn.execute(
+                "SELECT balance_ueur, debt_ueur FROM accounts WHERE id = ?", (m,)
+            ).fetchone()
+            conn.execute(
+                "UPDATE accounts SET balance_ueur = balance_ueur + ?, debt_ueur = debt_ueur + ?,"
+                " updated_at = ? WHERE id = ?", (int(bal), int(debt), now, target),
+            )
+            conn.execute(
+                "UPDATE accounts SET balance_ueur = 0, debt_ueur = 0, updated_at = ? WHERE id = ?", (now, m)
+            )
+            conn.execute("UPDATE stripe_sessions SET account_id = ? WHERE account_id = ?", (target, m))
+            conn.execute("DELETE FROM tokens WHERE account_id = ?", (m,))
+        if newly:
+            if target == requester:
+                conn.execute("DELETE FROM tokens WHERE account_id = ? AND token_hash != ?", (target, keep_hash))
+            else:
+                conn.execute("DELETE FROM tokens WHERE account_id = ?", (target,))
+            conn.execute(
+                "UPDATE accounts SET email = ?, email_verified_at = ?, updated_at = ? WHERE id = ?",
+                (email, now, now, target),
+            )
+        conn.executemany(
+            "INSERT INTO tokens (token_hash, account_id, kind, created_at) VALUES (?, ?, ?, ?)",
+            [(_hash(wallet), target, "wallet", now), (_hash(code), target, "recovery", now)],
+        )
+    return target, wallet, code

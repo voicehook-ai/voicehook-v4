@@ -33,9 +33,9 @@ def _rem(client, anon=None, ip="1.1.1.1"):
     return r.json()
 
 
-def test_defaults_full_live_normal_off(client):
-    assert _rem(client, ANON_A) == {"live_s": 1200, "normal_s": 0,
-                                    "enabled": {"live": True, "normal": False}}
+def test_defaults_full_normal_20_live_10(client):
+    assert _rem(client, ANON_A) == {"live_s": 600, "normal_s": 1200,
+                                    "enabled": {"live": True, "normal": True}}
 
 
 def test_used_minutes_reduce_remaining_per_mode(client, monkeypatch):
@@ -43,16 +43,16 @@ def test_used_minutes_reduce_remaining_per_mode(client, monkeypatch):
     freetier.add_seconds(freetier.identity_keys(ANON_A, "1.1.1.1"), "live", 450)
     freetier.add_seconds(freetier.identity_keys(ANON_A, "1.1.1.1"), "normal", 60)
     got = _rem(client, ANON_A)
-    assert got == {"live_s": 750, "normal_s": 540, "enabled": {"live": True, "normal": True}}
+    assert got == {"live_s": 150, "normal_s": 540, "enabled": {"live": True, "normal": True}}
 
 
 def test_counts_like_host_call_either_anon_or_ip(client):
-    freetier.add_seconds(freetier.identity_keys(ANON_A, "1.1.1.1"), "live", 600)
-    assert _rem(client, ANON_A, ip="2.2.2.2")["live_s"] == 600   # gleiche Anon-ID, neue IP
-    assert _rem(client, ANON_B, ip="1.1.1.1")["live_s"] == 600   # neue Anon-ID, gleiche IP
-    assert _rem(client, ANON_B, ip="2.2.2.2")["live_s"] == 1200  # Positivkontrolle: beides frisch
+    freetier.add_seconds(freetier.identity_keys(ANON_A, "1.1.1.1"), "live", 300)
+    assert _rem(client, ANON_A, ip="2.2.2.2")["live_s"] == 300   # gleiche Anon-ID, neue IP
+    assert _rem(client, ANON_B, ip="1.1.1.1")["live_s"] == 300   # neue Anon-ID, gleiche IP
+    assert _rem(client, ANON_B, ip="2.2.2.2")["live_s"] == 600   # Positivkontrolle: beides frisch
     # IP wie bei host-call: letztes X-Forwarded-For-Element, Fake davor zählt nicht
-    assert _rem(client, ANON_B, ip="9.9.9.9, 1.1.1.1")["live_s"] == 600
+    assert _rem(client, ANON_B, ip="9.9.9.9, 1.1.1.1")["live_s"] == 300
 
 
 def test_never_negative_and_read_only(client):

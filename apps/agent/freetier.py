@@ -13,9 +13,11 @@ Gezählt wird je Merkmal; das Limit greift, sobald EINES der Merkmale es erreich
 Gespeichert werden nur SHA-256-Hashes der Merkmale, nie IP oder ID im Klartext.
 
 Env (Minuten pro Tag, 0 = aus):
-  VOICEHOOK_FREE_MIN_PER_DAY_LIVE    Default 20
-  VOICEHOOK_FREE_MIN_PER_DAY_NORMAL  Default 0 (aus; offen, ob Normal mitzählt)
-Annahme: Live- und Normal-Minuten zählen getrennt (je Modus ein Zähler).
+  VOICEHOOK_FREE_MIN_PER_DAY_NORMAL  Default 20
+  VOICEHOOK_FREE_MIN_PER_DAY_LIVE    Default 10
+Live- und Normal-Minuten zählen getrennt (je Modus ein Zähler). Reihenfolge im Call
+(Oliver 01.10.): erst die Gratis-Minuten, dann das Guthaben eines Wallets; ein
+Raum kann deshalb gleichzeitig in free_rooms stehen und an ein Wallet gebunden sein.
 
 Datei: $VOICEHOOK_STATE_DIR/freetier.sqlite. Der HTTP-Server prüft beim Anlegen des
 Raums (402 free_limit) und merkt sich Raum -> Merkmale; der Worker liest das EINMAL
@@ -40,8 +42,8 @@ import time
 from collections.abc import Iterable
 from pathlib import Path
 
-DEFAULT_MIN_LIVE = 20.0
-DEFAULT_MIN_NORMAL = 0.0
+DEFAULT_MIN_LIVE = 10.0
+DEFAULT_MIN_NORMAL = 20.0
 ANON_HEADER = "x-anon-id"
 _ANON_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 _KEEP_DAYS = 7
