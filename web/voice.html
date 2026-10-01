@@ -125,6 +125,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'menu.topup': 'Aufladen', 'menu.setup': 'Setup', 'menu.privacy': 'Datenschutz',
       'menu.imprint': 'Impressum', 'menu.security': 'Sicherheit', 'menu.github': 'GitHub ↗',
       'menu.mic': 'Mikrofon', 'menu.style': 'Style',
+      'style.lagoon': 'Wasser',
       'style.ice': 'Delta', 'style.earth': 'Erde', 'style.fire': 'Feuer', 'style.water': 'Deepsea',
       'style.air': 'Luft', 'style.forest': 'Wald', 'style.zebra': 'Zebra', 'style.giraffe': 'Giraffe',
       'style.leopard': 'Leopard', 'style.tiger': 'Tiger', 'style.glacier': 'Gletscher',
@@ -261,6 +262,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'menu.topup': 'Top up', 'menu.setup': 'Setup', 'menu.privacy': 'Privacy',
       'menu.imprint': 'Imprint', 'menu.security': 'Security', 'menu.github': 'GitHub ↗',
       'menu.mic': 'Microphone', 'menu.style': 'Style',
+      'style.lagoon': 'Water',
       'style.ice': 'Delta', 'style.earth': 'Earth', 'style.fire': 'Fire', 'style.water': 'Deepsea',
       'style.air': 'Air', 'style.forest': 'Forest', 'style.zebra': 'Zebra', 'style.giraffe': 'Giraffe',
       'style.leopard': 'Leopard', 'style.tiger': 'Tiger', 'style.glacier': 'Glacier',
@@ -1403,6 +1405,7 @@ body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
       <button type="button" class="vh-dp-sw" data-pal="ice" style="--img-d:url(/img/styles/ice-dark.webp);--img-l:url(/img/styles/ice-light.webp);--c:linear-gradient(120deg,#7fb8e8,#b8e6f5,#ffffff)" data-i18n-title="style.ice" data-i18n-aria="style.ice" title="ice" aria-label="ice"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.ice">ice</span></button>
       <button type="button" class="vh-dp-sw" data-pal="earth" style="--img-d:url(/img/styles/earth-dark.webp);--img-l:url(/img/styles/earth-light.webp);--c:linear-gradient(120deg,#1e5fb5,#2d8c4a,#caa56a)" data-i18n-title="style.earth" data-i18n-aria="style.earth" title="earth" aria-label="earth"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.earth">earth</span></button>
       <button type="button" class="vh-dp-sw" data-pal="fire" style="--img-d:url(/img/styles/fire-dark.webp);--img-l:url(/img/styles/fire-light.webp);--c:linear-gradient(120deg,#7a1fbf,#ff3018,#ffd24a)" data-i18n-title="style.fire" data-i18n-aria="style.fire" title="fire" aria-label="fire"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.fire">fire</span></button>
+      <button type="button" class="vh-dp-sw" data-pal="lagoon" style="--img-d:url(/img/styles/lagoon-dark.webp);--img-l:url(/img/styles/lagoon-light.webp);--c:linear-gradient(120deg,#5fe0d0,#1fb5a6 25%,#4c8dff 45%,#1d3fc4)" data-i18n-title="style.lagoon" data-i18n-aria="style.lagoon" title="lagoon" aria-label="lagoon"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.lagoon">lagoon</span></button>
       <button type="button" class="vh-dp-sw" data-pal="water" style="--img-d:url(/img/styles/water-dark.webp);--img-l:url(/img/styles/water-light.webp);--c:#1a4ec4" data-i18n-title="style.water" data-i18n-aria="style.water" title="water" aria-label="water"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.water">water</span></button>
       <button type="button" class="vh-dp-sw" data-pal="air" style="--img-d:url(/img/styles/air-dark.webp);--img-l:url(/img/styles/air-light.webp);--c:linear-gradient(120deg,#e9eef2,#9aa3ad,#5b8fc9)" data-i18n-title="style.air" data-i18n-aria="style.air" title="air" aria-label="air"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.air">air</span></button>
       <button type="button" class="vh-dp-sw" data-pal="forest" style="--img-d:url(/img/styles/forest-dark.webp);--img-l:url(/img/styles/forest-light.webp);--c:linear-gradient(120deg,#6e4a22,#2a5a2a,#ffaf3a)" data-i18n-title="style.forest" data-i18n-aria="style.forest" title="forest" aria-label="forest"><span class="vh-dp-sw-img" aria-hidden="true"></span><span class="vh-dp-sw-name" data-i18n="style.forest">forest</span></button>
@@ -1614,6 +1617,7 @@ body.theme-light .vh-dp-use[data-lvl="crit"] b { color: #c0281a; }
   <button data-pal="ice"    style="--c:linear-gradient(120deg,#7fb8e8,#b8e6f5,#ffffff)" title="ice"></button>
   <button data-pal="earth"  style="--c:linear-gradient(120deg,#1e5fb5,#2d8c4a,#caa56a)" title="earth"></button>
   <button data-pal="fire"   style="--c:linear-gradient(120deg,#7a1fbf,#ff3018,#ffd24a)" title="fire"></button>
+  <button data-pal="lagoon" style="--c:linear-gradient(120deg,#5fe0d0,#1fb5a6 25%,#4c8dff 45%,#1d3fc4)" title="lagoon"></button>
   <button data-pal="water"  style="--c:#1a4ec4" title="water"></button>
   <button data-pal="air"    style="--c:linear-gradient(120deg,#e9eef2,#9aa3ad,#5b8fc9)" title="air"></button>
   <button data-pal="forest" style="--c:linear-gradient(120deg,#6e4a22,#2a5a2a,#ffaf3a)" title="forest"></button>
@@ -1981,6 +1985,7 @@ let mouseEarth  = false;   // Earth-Spezialfall: braun↔grün-Wechsel
 // Discrete-Hue-Mode: zwingt fNorm in N feste Buckets statt smooth gradient
 // (Earth: Sand · Grün · Ozean-Blau). null = Gradient-Mode wie sonst.
 let discreteHues = null, discreteSats = null, discreteLits = null;
+let discreteScale = 1;   // PALETTES[pal].discrete.scale: Inselgröße (< 1 = größere Flächen)
 // Bucket-LUT: cluster_id → bucket_index (per palette gebaut, gewichtet via
 // weights[]). Single Array-Read im Hot-Loop statt threshold-Schleife.
 let discreteBucketLUT = null;
@@ -3145,8 +3150,10 @@ const PALETTES = {
               hues: [0.11, 0.33, 0.60],     // Sand · Grün · Ozean-Blau
               sats: [0.55, 0.85, 0.95],
               lits: [0.55, 0.42, 0.40],
-              // Verhältnis wie echter Globus: 70% Ozean · 22% Kontinent · 8% Wüste
-              weights: [0.08, 0.22, 0.70]
+              // Flächenanteile (seit Rang-Normierung exakt). Kalibriert auf das
+              // zeitliche Mittel des bisherigen Looks (gemessen 100 Proben,
+              // Cluster 0,5: Sand 0,13 · Grün 0,14 · Ozean 0,73), Optik bleibt.
+              weights: [0.13, 0.14, 0.73]
             } },
   // Zebra: 2 Buckets schwarz/weiß; Muster = verzweigte, geschwungene Streifen
   // variabler Breite mit Y-Gabelungen (vhBuildSpatialLUT 'stripes').
@@ -3208,6 +3215,23 @@ const PALETTES = {
   fire:   { hueStart: 0.99, hueRange:  0.14, satFloor: 0.95, litMul: 0.82,
             satH: 0.13, satS: 0.98, satL: 0.55,
             mR: 1.0,  mG: 0.35, mB: 0.05 },
+  // Lagune (Kachel "Wasser", Olli 01.10.): 4:1 Blau zu Türkis/Mint, große
+  // zusammenhängende Flächen. Reihenfolge = Rauschhöhe: Mint im Kern der
+  // Türkis-Inseln, Dunkelblau in der Tiefe. weights = Flächenanteile.
+  lagoon: { hueStart: 0.616, hueRange: 0.05, satFloor: 0.6, litMul: 0.62,
+            satH: 0.479, satS: 0.9, satL: 0.6,
+            mR: 1.00, mG: 0.60, mB: 0.20,
+            discrete: {
+              //      Mint #5fe0d0 · Türkis #1fb5a6 · Hellblau #4c8dff · Blau #2d63e0 · Dunkelblau #1d3fc4
+              // Helligkeiten unter den Hex-Werten: additives Rendering addiert
+              // überlappende Punkte, sonst verwäscht Blau zu Lavendel und das
+              // Dunkelblau verschwindet (gemessen: Pixel-Blau 0,56 statt 0,80).
+              hues:    [0.479, 0.483, 0.606, 0.616, 0.633],
+              sats:    [0.80, 0.85, 1.00, 0.95, 0.95],
+              lits:    [0.46, 0.32, 0.46, 0.34, 0.24],
+              weights: [0.05, 0.12, 0.18, 0.27, 0.38],   // 17 % Mint/Türkis · 83 % Blau (Pixel ~79 %)
+              scale: 0.6                       // Inseln ~1,7x größer als Erde
+            } },
   // Wasser: tiefblau · cyan-Schaumkronen · Maus = warm orange (default)
   water:  { hueStart: 0.65, hueRange:  0.05, satFloor: 0.92, litMul: 0.72,
             satH: 0.50, satS: 0.90, satL: 0.55,
@@ -3233,6 +3257,7 @@ const VH_SPEAKER_COLORS = {
   earth:   { user: '#58b86e', delta: '#4a8fe0', agent: '#d9b26a' },  // Grün · Ozean · Sand
   fire:    { user: '#ff6a3d', delta: '#ffc93c', agent: '#c86bff' },  // Glut · Flamme · Violett
   water:   { user: '#4c8dff', delta: '#2fd4c8', agent: '#a98cff' },  // Tiefblau · Schaum · Indigo
+  lagoon:  { user: '#5fe0d0', delta: '#4c8dff', agent: '#8fb0ff' },  // Mint · Lagunenblau · Himmelblau
   air:     { user: '#e3eaf0', delta: '#5d93e0', agent: '#9fdcff' },  // Wolke · Azur · Himmel
   forest:  { user: '#6cc46c', delta: '#2fb3a0', agent: '#ffaf3a' },  // Laub · Türkis · Orange
   zebra:   { user: '#ffffff', delta: '#9a9a9a', agent: '#e8d6b0' },  // Weiß · Grau · Elfenbein
@@ -3270,11 +3295,25 @@ geo.setDrawRange(0, activeN);
 // Insel-Slider — schiebt freqBin zwischen rein-random und voll-spatial-noise
 const islandInput = document.getElementById('island');
 islandStrength = parseFloat(islandInput.value);
+// Discrete-Styles (Erde, Wasser ...): weights[] sind Flächenanteile. Das
+// Rauschfeld auf dem Ring ist NICHT gleichverteilt (3 tieffrequente Sinus,
+// je nach Drift-Phase schief, früher zusätzlich per Kontrast an 0/1 geklemmt),
+// deshalb landeten feste Schwellen auf der Werte-Achse bei zufälligen Anteilen.
+// Fix: Rang-Normierung (Histogramm-CDF) -> fNorm ist pro Aufruf exakt
+// gleichverteilt, Bucket k bekommt genau weights[k] der Ring-Partikel. Die
+// Form der Inseln (Höhenlinien des Rauschens) bleibt dieselbe.
+const VH_DISC_HIST = 4096;
+const vhDiscNoise = new Float32Array(N);
+const vhDiscHist  = new Uint32Array(VH_DISC_HIST);
 function rebuildFreqBins(t) {
   t = t || 0;
   // Discrete-Mode (Earth): pure-spatial Inseln + tiefere Noise-Frequenzen für
   // größere zusammenhängende Patches (Kontinente statt speckle).
   const isDisc = !!discreteHues;
+  // discrete.scale (optional, Default 1): Inselgröße je Style, < 1 = größer.
+  const dScale = isDisc ? discreteScale : 1;
+  if (isDisc) vhDiscHist.fill(0);
+  let nDisc = 0;
   for (let i = 0; i < N; i++) {
     if (lift[i] > SAT_LIFT) continue;
     const x = orig[i*3], y = orig[i*3+1], z = orig[i*3+2];
@@ -3282,18 +3321,39 @@ function rebuildFreqBins(t) {
     const cosA = x / (Math.sqrt(x*x + y*y) + 0.001);
     const sinA = y / (Math.sqrt(x*x + y*y) + 0.001);
     // Tiefere Frequenzen im Discrete-Mode → 2-3 große Kontinente statt 20 Spots
-    const fS = (isDisc ? 0.45 : 1.0) * (1.25 - 0.5 * vhCluster);   // Cluster: größere Inseln
+    const fS = (isDisc ? 0.45 * dScale : 1.0) * (1.25 - 0.5 * vhCluster);   // Cluster: größere Inseln
     const n = Math.sin(x * 0.6 * fS + y * 0.4 * fS + t) +
               Math.sin(x * 0.3 * fS - y * 0.55 * fS + t * 0.7) +
               Math.sin(z * 1.2 * fS + cosA * 1.6 + sinA * 1.6 - t * 1.1);
     let noiseN = (n + 3) / 6;
+    if (isDisc) {
+      // Rohwert merken, Verteilung zählen; fNorm folgt unten aus der CDF.
+      vhDiscNoise[i] = noiseN;
+      vhDiscHist[Math.min(VH_DISC_HIST - 1, Math.max(0, Math.floor(noiseN * VH_DISC_HIST)))]++;
+      nDisc++;
+      continue;
+    }
     // Kontrast-Kurve: bei hohem Slider werden Inseln klarer/härter
     const contrast = 1 + islandStrength * 2.0;
     noiseN = Math.max(0, Math.min(1, (noiseN - 0.5) * contrast + 0.5));
-    // Discrete-Mode: 100% spatial — sonst zerwürfelt random die Kontinente
-    const islandPow = isDisc ? 1.0 : Math.min(1, islandStrength * 1.4);
+    const islandPow = Math.min(1, islandStrength * 1.4);
     const blend = noiseN * islandPow + Math.random() * (1 - islandPow);
     freqBin[i] = Math.max(0, Math.min(VISUAL_CLUSTERS - 1, Math.floor(blend * VISUAL_CLUSTERS)));
+  }
+  if (!isDisc || !nDisc) return;
+  // CDF: Anteil der Partikel unterhalb jedes Histogramm-Fachs.
+  let acc = 0;
+  for (let k = 0; k < VH_DISC_HIST; k++) { const c = vhDiscHist[k]; vhDiscHist[k] = acc; acc += c; }
+  const inv = 1 / nDisc, hw = 1 / VH_DISC_HIST;
+  for (let i = 0; i < N; i++) {
+    if (lift[i] > SAT_LIFT) continue;
+    const v = vhDiscNoise[i];
+    const k = Math.min(VH_DISC_HIST - 1, Math.max(0, Math.floor(v * VH_DISC_HIST)));
+    const lo = vhDiscHist[k], hi = k + 1 < VH_DISC_HIST ? vhDiscHist[k + 1] : nDisc;
+    // innerhalb des Fachs linear nach Rohwert -> Rang bleibt monoton
+    const frac = Math.max(0, Math.min(1, (v - k * hw) / hw));
+    const u = (lo + frac * (hi - lo)) * inv;
+    freqBin[i] = Math.max(0, Math.min(VISUAL_CLUSTERS - 1, Math.floor(u * VISUAL_CLUSTERS)));
   }
 }
 islandInput.addEventListener('input', e => {
@@ -3312,7 +3372,7 @@ rebuildFreqBins();
 // gesättigt, Fellmuster mit Kontrast). Felle behalten ihren bisherigen Look.
 const VH_STYLE_BRIGHT = {
   ice:     { d: 1.20, l: 1.50 }, earth:  { d: 1.30, l: 1.85 }, fire:    { d: 0.95, l: 1.50 },
-  water:   { d: 2.20, l: 1.85 }, air:    { d: 0.80, l: 1.40 }, forest:  { d: 1.35, l: 1.85 },
+  water:   { d: 2.20, l: 1.85 }, lagoon: { d: 1.30, l: 1.60 }, air:    { d: 0.80, l: 1.40 }, forest:  { d: 1.35, l: 1.85 },
   zebra:   { d: 1.85, l: 1.85 }, giraffe:{ d: 1.85, l: 1.85 }, leopard: { d: 1.85, l: 1.85 },
   tiger:   { d: 1.85, l: 1.85 },
   glacier: { d: 1.60, l: 1.60 },
@@ -3700,6 +3760,7 @@ function applyPalette(pal) {
     discreteHues = p.discrete.hues;
     discreteSats = p.discrete.sats;
     discreteLits = p.discrete.lits;
+    discreteScale = p.discrete.scale ?? 1;
     // LUT bauen: cluster_id (0..1023) → bucket_index, gewichtet via weights[].
     // Earth weights = [0.08, 0.22, 0.70] → 8% Cluster=Sand, 22%=Grün, 70%=Blau.
     // Da rebuildFreqBins fNorm via Spatial-Noise verteilt und das spatial-
@@ -6498,6 +6559,7 @@ body.settings-collapsed #vh-build{display:none !important;}
       <button type="button" class="vh-foot-style" data-pal="ice"     role="menuitem" data-i18n="style.ice">Ice</button>
       <button type="button" class="vh-foot-style" data-pal="earth"   role="menuitem" data-i18n="style.earth">Earth</button>
       <button type="button" class="vh-foot-style" data-pal="fire"    role="menuitem" data-i18n="style.fire">Fire</button>
+      <button type="button" class="vh-foot-style" data-pal="lagoon"  role="menuitem" data-i18n="style.lagoon">Water</button>
       <button type="button" class="vh-foot-style" data-pal="water"   role="menuitem" data-i18n="style.water">Water</button>
       <button type="button" class="vh-foot-style" data-pal="air"     role="menuitem" data-i18n="style.air">Air</button>
       <button type="button" class="vh-foot-style" data-pal="forest"  role="menuitem" data-i18n="style.forest">Forest</button>
