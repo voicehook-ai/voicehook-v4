@@ -12,8 +12,11 @@ Schema:
         Konto-Übernahme). email_verified_at wird erst gesetzt, wenn jemand einen
         Magic-Link an genau diese Adresse eingelöst hat (login_verified_email);
         eine bestätigte Adresse gehört höchstens einem Konto (Teilindex).
-    login_links(token_hash PK, email, created_at, expires_at, used_at)
+    login_links(token_hash PK, email, created_at, expires_at, used_at, requester_hash)
         Magic-Link-Tokens (nur SHA-256), einmalig, kurzlebig (LOGIN_TTL_S).
+        requester_hash = SHA-256 des Wallet-Tokens, das den Link ANGEFORDERT hat
+        (Review PR #93 critical, Login-CSRF): nur genau dieses Wallet darf beim
+        Einlösen mit dem Konto verknüpft werden.
         Saldo in µEUR, brutto. debt_ueur = offener Fehlbetrag aus Erstattung/
         Rückbuchung, wird bei der nächsten Gutschrift zuerst verrechnet.
     tokens(token_hash PK, account_id, kind 'wallet'|'recovery', created_at, last_used_at)
@@ -41,6 +44,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import hmac
 import os
 import secrets
 import sqlite3
@@ -109,7 +113,8 @@ CREATE TABLE IF NOT EXISTS login_links (
     email TEXT NOT NULL,
     created_at REAL NOT NULL,
     expires_at REAL NOT NULL,
-    used_at REAL
+    used_at REAL,
+    requester_hash TEXT
 );
 """
 
@@ -150,6 +155,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("UPDATE room_wallets SET expires_at = 0")
     if "closed_at" not in cols:
         conn.execute("ALTER TABLE room_wallets ADD COLUMN closed_at TEXT")
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(login_links)").fetchall()}
+    if "requester_hash" not in cols:  # Altbestand: Links ohne Bindung verknüpfen nie ein Wallet
+        conn.execute("ALTER TABLE login_links ADD COLUMN requester_hash TEXT")
     conn.executescript(_INDEXES)
 
 
@@ -503,41 +511,68 @@ def reverse_payment(
 LOGIN_TTL_S = 15 * 60
 
 
-def create_login_link(email: str, *, ttl_seconds: float = LOGIN_TTL_S, now: float | None = None) -> str:
-    """Einmal-Token für einen Login-Link an `email` (nur der Hash wird gespeichert)."""
+def _token_hash_or_none(token: str | None) -> str | None:
+    return _hash(token) if token and len(token) <= 200 else None
+
+
+def create_login_link(email: str, *, requester_token: str | None = None,
+                      ttl_seconds: float = LOGIN_TTL_S, now: float | None = None) -> str:
+    """Einmal-Token für einen Login-Link an `email` (nur der Hash wird gespeichert).
+    requester_token = Wallet-Token des anfordernden Browsers (X-Wallet-Token); nur
+    dieses Wallet darf beim Einlösen verknüpft werden (Login-CSRF, PR #93)."""
     now = time.time() if now is None else now
     token = "vhl_" + secrets.token_urlsafe(32)
     with _Tx() as conn:
         conn.execute("DELETE FROM login_links WHERE expires_at < ?", (now - 86400,))
         conn.execute(
-            "INSERT INTO login_links (token_hash, email, created_at, expires_at) VALUES (?, ?, ?, ?)",
-            (_hash(token), normalize_email(email), now, now + float(ttl_seconds)),
+            "INSERT INTO login_links (token_hash, email, created_at, expires_at, requester_hash)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (_hash(token), normalize_email(email), now, now + float(ttl_seconds),
+             _token_hash_or_none(requester_token)),
         )
     return token
 
 
-def consume_login_link(token: str | None, *, now: float | None = None) -> str | None:
-    """Token einlösen: bestätigte Adresse oder None (unbekannt, abgelaufen, schon benutzt)."""
+def consume_login_link(token: str | None, *, now: float | None = None) -> tuple[str, str | None] | None:
+    """Token einlösen: (bestätigte Adresse, requester_hash) oder None (unbekannt,
+    abgelaufen, schon benutzt). requester_hash = Hash des Wallet-Tokens, das den
+    Link angefordert hat, oder None."""
     if not token or len(token) > 200:
         return None
     now = time.time() if now is None else now
     with _Tx() as conn:
         row = conn.execute(
-            "SELECT email, expires_at, used_at FROM login_links WHERE token_hash = ?", (_hash(token),)
+            "SELECT email, expires_at, used_at, requester_hash FROM login_links WHERE token_hash = ?",
+            (_hash(token),),
         ).fetchone()
         if row is None or row["used_at"] is not None or float(row["expires_at"]) <= now:
             return None
         conn.execute("UPDATE login_links SET used_at = ? WHERE token_hash = ?", (now, _hash(token)))
-        return row["email"]
+        return row["email"], row["requester_hash"]
 
 
-def login_verified_email(email: str, *, wallet_token: str | None = None) -> tuple[str, str, str]:
+def login_verified_email(
+    email: str, *, wallet_token: str | None = None, requester_hash: str | None = None,
+) -> tuple[str, str, str, bool]:
     """Login mit einer gerade per Magic-Link BESTÄTIGTEN Adresse.
 
-    Liefert (account_id, neues Wallet-Token, neuer Recovery-Code). Ziel-Konto:
+    Liefert (account_id, neues Wallet-Token, neuer Recovery-Code, wallet_linked).
+    wallet_linked = True, wenn das Wallet des einlösenden Browsers mit dem Konto
+    verknüpft (bestätigt oder überführt) wurde.
+
+    Login-CSRF (Review PR #93 critical): das mitgeschickte Wallet-Token zählt NUR,
+    wenn es exakt das Token ist, das den Link angefordert hat (requester_hash aus
+    login_links). Sonst könnte jemand einen Link an SEINE Adresse anfordern, ihn
+    einem Opfer schicken, und dessen Browser würde beim Einlösen das Opfer-Wallet
+    unter der Adresse des Angreifers bestätigen oder in dessen Konto überführen.
+    Passt das Token nicht, wird das Wallet des Browsers gar nicht angefasst; der
+    Browser bekommt nur ein Token für das Konto der bestätigten Adresse.
+
+    Ziel-Konto:
       1. das Konto, dem diese Adresse schon bestätigt gehört, sonst
-      2. das Konto des mitgeschickten Wallet-Tokens (derselbe Browser hat Wallet UND
-         Mail-Zugang bewiesen), wenn es noch keine bestätigte Adresse hat, sonst
+      2. das Konto des mitgeschickten Wallet-Tokens (derselbe Browser hat den Link
+         angefordert UND Mail-Zugang bewiesen), wenn es noch keine bestätigte
+         Adresse hat, sonst
       3. das älteste Konto mit dieser unbestätigten Kontakt-Mail (Stripe), sonst
       4. ein neues, leeres Konto.
     Alle übrigen unbestätigten Konten mit dieser Kontakt-Mail (und das des
@@ -551,7 +586,9 @@ def login_verified_email(email: str, *, wallet_token: str | None = None) -> tupl
     Adresse er nicht selbst bestätigt hat, auch nicht durch Voranlegen.
     """
     email = normalize_email(email)
-    keep_hash = _hash(wallet_token) if wallet_token and len(wallet_token) <= 200 else None
+    keep_hash = _token_hash_or_none(wallet_token)
+    if not (keep_hash and requester_hash and hmac.compare_digest(keep_hash, requester_hash)):
+        keep_hash = None  # nicht der Anforderer: fremdes Wallet nie anfassen
     wallet = "vhw_" + secrets.token_urlsafe(32)
     code = "vhr_" + secrets.token_urlsafe(32)
     with _Tx() as conn:
@@ -608,4 +645,4 @@ def login_verified_email(email: str, *, wallet_token: str | None = None) -> tupl
             "INSERT INTO tokens (token_hash, account_id, kind, created_at) VALUES (?, ?, ?, ?)",
             [(_hash(wallet), target, "wallet", now), (_hash(code), target, "recovery", now)],
         )
-    return target, wallet, code
+    return target, wallet, code, requester is not None

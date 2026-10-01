@@ -597,7 +597,13 @@ async def entrypoint(ctx: JobContext) -> None:
     # (host-call / live-room / invite-room). Hat der Raum zusätzlich ein Wallet, zahlt
     # es erst, wenn der Gratis-Teil aufgebraucht ist (Oliver 01.10.).
     free = FreeMinutes(ctx.room.name, mode, wallet=wallet)
-    counted = free.load()
+    if live_mode and paid and budget.exhausted():
+        # Gratis-Live-Minuten kommen aus dem Monatsbudget; ist es weg, zahlt das
+        # Wallet von Anfang an (PR #93 low). Raum bleibt bekannt (paid).
+        logger.info("[live-budget] exhausted, room=%s runs on wallet only", ctx.room.name)
+        counted = False
+    else:
+        counted = free.load()
     if not counted and wallet.is_empty():
         # Raum gehört einem Wallet ohne Guthaben und hat keinen Gratis-Teil (mehr):
         # keine kostenpflichtige Session öffnen. Mit Gratis-Teil endet der Call erst,
@@ -605,10 +611,11 @@ async def entrypoint(ctx: JobContext) -> None:
         logger.warning("[wallet] empty, refusing room=%s", ctx.room.name)
         ctx.shutdown(reason="wallet_empty")
         return
-    if live_mode and not paid and freetier.enabled("live") and not free.known:
-        # fail-closed (Review 01.10. #2): Live-Raum ohne Wallet und ohne Gratis-Eintrag
-        # (z. B. aufgeräumt oder nie über live-room angelegt) läuft nicht unbegrenzt.
-        logger.warning("[free] live room=%s has neither wallet nor free entry, refusing", ctx.room.name)
+    if not paid and freetier.enabled(mode) and not free.known:
+        # fail-closed (Review 01.10. #2, Normal seit PR #93): Raum ohne Wallet und ohne
+        # Gratis-Eintrag (z. B. neuer Slug über /api/token?invite=1, aufgeräumt, nie
+        # über host-call/invite-room/live-room angelegt) läuft nicht unbegrenzt.
+        logger.warning("[free] %s room=%s has neither wallet nor free entry, refusing", mode, ctx.room.name)
         ctx.shutdown(reason="free_room_unknown")
         return
     session = build_session()
@@ -671,9 +678,13 @@ async def entrypoint(ctx: JobContext) -> None:
         usd = meter.add(m)
         if usd <= 0:
             return
-        if live_mode and not paid:  # Monatsbudget nur für Gratis/Demo (Review #7)
+        # Monatsbudget = alles, was nicht vom Guthaben bezahlt wird (Review #7): Gratis/
+        # Demo-Räume ganz, Räume mit Wallet nur ihr Gratis-Teil (PR #93 low). Beenden
+        # nur ohne Wallet; mit Wallet zählt der Gratis-Teil, und ein schon erschöpftes
+        # Budget lässt den Gratis-Teil beim Start ganz weg (siehe oben).
+        if live_mode and (not paid or free.counting):
             month = budget.add_usd(usd)
-            if month >= budget.limit_usd() and guard_ref:
+            if not paid and month >= budget.limit_usd() and guard_ref:
                 logger.warning("[live-budget] reached %.4f USD in room=%s, ending call", month, ctx.room.name)
                 asyncio.create_task(
                     guard_ref[0].end("live_budget", delete_room=False, announce=LIVE_BUDGET_ANNOUNCEMENT)

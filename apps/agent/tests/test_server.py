@@ -156,6 +156,8 @@ def test_invite1_auto_dispatches_voice_ai(monkeypatch):
         srv, "_ensure_agent_dispatched",
         lambda room, agent_name="voice-ai": calls.append((room, agent_name)),
     )
+    from agent import freetier
+    freetier.register_room("auto-disp-room", "normal", [], exempt=True)  # Raum mit Zahler (PR #93)
     c = TestClient(app)
     r = c.get("/api/token", params={"room": "auto-disp-room", "identity": "claude", "invite": "1"})
     assert r.status_code == 200

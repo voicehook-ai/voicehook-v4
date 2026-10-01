@@ -146,6 +146,8 @@ def _run_entrypoint_with_metrics(monkeypatch, *, live_mode, metrics):
     else:
         monkeypatch.delenv("VOICEHOOK_PIPELINE", raising=False)
         monkeypatch.setenv("VOICEHOOK_STT_GATE", "0")
+        from agent import freetier
+        freetier.register_room("r1", "normal", [], exempt=True)  # fail-closed seit PR #93
     session = _Emitter()
     session.start = AsyncMock()
     session.aclose = AsyncMock()

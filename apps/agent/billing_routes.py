@@ -284,6 +284,17 @@ def _wallet_view(acc: str) -> dict:
     }
 
 
+def mask_email(email: str) -> str | None:
+    """o***@n***.ai: genug zum Wiedererkennen, nicht genug zum Abschreiben."""
+    local, _, domain = (email or "").partition("@")
+    if not local or not domain:
+        return None
+    host, dot, tld = domain.rpartition(".")
+    if not host:
+        host, dot, tld = domain, "", ""
+    return f"{local[0]}***@{host[0]}***{dot}{tld}"
+
+
 def _recovery_url(code: str) -> str:
     return f"{_public_base()}{TOPUP_PATH}#r={code}"
 
@@ -375,7 +386,9 @@ def api_login(req: LoginRequest, request: Request) -> dict:
     if not _login_rate_ok("ip:" + client_ip(request), LOGIN_IP_LIMIT, LOGIN_IP_WINDOW) or \
             not _login_rate_ok(mail_key, LOGIN_MAIL_LIMIT, LOGIN_MAIL_WINDOW):
         raise HTTPException(status_code=429, detail="rate_limited")
-    token = db.create_login_link(email)
+    # Wallet des anfordernden Browsers an den Link binden (Login-CSRF, PR #93):
+    # nur genau dieses Wallet darf beim Einlösen verknüpft werden.
+    token = db.create_login_link(email, requester_token=wallet_token(request) or None)
     try:
         mail.send(email, mail.login_message(login_link(token), db.LOGIN_TTL_S // 60))
     except mail.MailError as e:
@@ -388,13 +401,22 @@ def api_login(req: LoginRequest, request: Request) -> dict:
 @router.get("/api/login/verify")
 def api_login_verify(token: str, request: Request) -> dict:
     """Magic-Link einlösen (einmal, 15 min) -> Wallet-Token für das Konto mit dieser
-    jetzt bestätigten Adresse. Optional X-Wallet-Token: hat dieser Browser schon ein
-    Wallet ohne bestätigte Adresse, wird genau dieses Konto bestätigt und bleibt
-    angemeldet (Regeln in billing/db.py login_verified_email)."""
-    email = db.consume_login_link(token)
-    if email is None:
+    jetzt bestätigten Adresse.
+
+    X-Wallet-Token zählt nur, wenn es exakt das Token ist, mit dem der Link per
+    POST /api/login angefordert wurde (Login-CSRF, PR #93). Dann wird dieses Wallet
+    bestätigt bzw. in das Konto überführt (wallet_linked true). In jedem anderen
+    Fall (anderer Browser, fremdes Token, kein Token) bleibt das Wallet des Browsers
+    unberührt (wallet_linked false); die Seite zeigt dann vor dem Ersetzen ihres
+    gespeicherten Tokens, als wer sie angemeldet wird (email, maskiert).
+    Regeln in billing/db.py login_verified_email."""
+    link = db.consume_login_link(token)
+    if link is None:
         raise HTTPException(status_code=400, detail="invalid_or_expired")
-    acc, wallet, code = db.login_verified_email(email, wallet_token=wallet_token(request) or None)
-    logger.info("[login] verified account %s", acc)
+    email, requester_hash = link
+    acc, wallet, code, linked = db.login_verified_email(
+        email, wallet_token=wallet_token(request) or None, requester_hash=requester_hash,
+    )
+    logger.info("[login] verified account %s (wallet_linked=%s)", acc, linked)
     return {"wallet_token": wallet, "recovery_url": _recovery_url(code), "email_verified": True,
-            **_wallet_view(acc)}
+            "wallet_linked": linked, "email_masked": mask_email(email), **_wallet_view(acc)}

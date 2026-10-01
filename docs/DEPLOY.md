@@ -168,16 +168,25 @@ laufender Gratis-Call endet mit der Ansage "Deine Gratisminuten für heute sind 
 auf." Gespeichert werden nur SHA-256-Hashes der Merkmale in `/opt/voicehook/state/freetier.sqlite`
 (älter als 7 Tage wird gelöscht). Mit gedecktem Wallet endet der Call am Gratis-Limit nicht, das
 Wallet zahlt weiter. Die Obergrenze pro Live-Call
-(`VH_MAX_CALL_SECONDS=1200` im Live-Dienst) gilt zusätzlich. Der Live-Worker ist fail-closed: ein
-Live-Raum ohne Wallet und ohne Gratis-Eintrag wird abgelehnt (Admin-Räume stehen als Ausnahme drin).
-Das Live-Monatsbudget gilt nur für Gratis/Demo-Räume, Wallet-Räume sind davon ausgenommen.
+(`VH_MAX_CALL_SECONDS=1200` im Live-Dienst) gilt zusätzlich. Der Worker ist in beiden Modi
+fail-closed, solange das Gratis-Kontingent des Modus an ist: ein Raum ohne Wallet und ohne
+Gratis-Eintrag wird abgelehnt (`free_room_unknown`). Ausnahmen stehen als exempt drin: Admin-Live-Räume
+und Normal-Räume, die jemand mit einer gültigen HMAC-Einladung betritt, die der Server nicht selbst
+ausgestellt hat (call-starten mintet sie mit `INVITE_SECRET`). `GET /api/token?invite=1`
+(Operator-Join, voicehook-agent CLI) gibt weiter ein Token, dispatcht voice-ai aber nur in Räume
+mit bekanntem Zahler; ein selbst ausgedachter neuer Slug bekommt keinen Gratis-Agent mehr.
+Das Live-Monatsbudget zählt alles, was nicht das Guthaben zahlt: Gratis/Demo-Räume ganz, Wallet-Räume
+ihren Gratis-Teil. Beendet wird am Budget nur ein Raum ohne Wallet; ist das Budget schon erschöpft,
+zahlt bei Wallet-Räumen das Guthaben von Anfang an (kein Gratis-Teil).
 
 ### Login per Magic-Link
 
 `POST /api/login {email}` schickt über Resend einen Link `https://voicehook.ai/aufladen#login=<token>`
 (einmal, 15 Minuten; Ratenlimit 5 je IP in 10 min, 3 je Adresse in 15 min). Die Seite ruft damit
 `GET /api/login/verify?token=...` auf und bekommt ein Wallet-Token für das Konto mit dieser jetzt
-bestätigten Adresse. Die Stripe-Mail ist nur eine unbestätigte Kontakt-Mail und verknüpft allein nie.
+bestätigten Adresse. Das Wallet des Browsers (`X-Wallet-Token`) wird nur verknüpft, wenn es exakt das
+Token ist, mit dem der Link angefordert wurde (Hash in `login_links.requester_hash`, Schutz gegen
+Login-CSRF); sonst bleibt es unberührt und die Antwort sagt `wallet_linked: false`. Die Stripe-Mail ist nur eine unbestätigte Kontakt-Mail und verknüpft allein nie.
 Wird eine Adresse zum ersten Mal bestätigt, verlieren alle anderen Tokens der so übernommenen Konten
 ihre Gültigkeit (wer bei Stripe eine fremde Adresse eintippt, behält keinen Zugriff); weitere
 unbestätigte Konten mit derselben Kontakt-Mail werden samt Saldo zusammengeführt. Einrichtung:

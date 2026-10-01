@@ -224,7 +224,42 @@ def _mint(room: str, identity: str, invite: str, ttl_seconds: int, *, agent_name
     verdict = verify_invite(invite, room)
     if not verdict.valid:
         raise HTTPException(status_code=403, detail=f"invalid invite: {verdict.reason}")
+    _adopt_operator_room(room)
     return _issue(room, identity, ttl_seconds, agent_name=agent_name)
+
+
+def _room_mode(room: str) -> str:
+    return "live" if _agent_for(room) == LIVE_AGENT_NAME else "normal"
+
+
+def _room_has_payer(room: str) -> bool:
+    """Weiß der Worker, wer diesen Raum zahlt? Gratis-Eintrag (auch exempt), Wallet-
+    Bindung, oder Gratis-Kontingent des Modus aus (dann läuft er wie früher ungezählt).
+    Lesefehler -> False (fail-closed, wie der Worker)."""
+    mode = _room_mode(room)
+    if not freetier.enabled(mode):
+        return True
+    try:
+        return freetier.room_keys(room) is not None or billing_routes.db.room_binding(room) is not None
+    except Exception as e:  # noqa: BLE001
+        logger.error("[free] payer lookup room=%s failed: %s", room, e)
+        return False
+
+
+def _adopt_operator_room(room: str) -> None:
+    """Gültige HMAC-Einladung für einen Normal-Raum, den der Server nie angelegt hat:
+    die hat nur ausgestellt, wer INVITE_SECRET hält (call-starten, `agent.cli invite`),
+    also ein Operator. Raum als exempt merken, sonst lehnt der Worker ihn seit PR #93
+    ab (fail-closed auch im Normalmodus). Server-Räume (host-call, invite-room,
+    live-room) haben ihren Eintrag schon und bleiben unverändert; Live-Räume ohne
+    Eintrag bleiben abgelehnt."""
+    if _room_mode(room) != "normal" or _room_has_payer(room):
+        return
+    try:
+        if freetier.register_room_if_absent(room, "normal"):
+            logger.info("[free] operator room=%s adopted via HMAC invite (exempt)", room)
+    except Exception as e:  # noqa: BLE001
+        logger.error("[free] adopt room=%s failed: %s", room, e)
 
 
 def _issue(room: str, identity: str, ttl_seconds: int, *, agent_name: str | None = "voice-ai") -> TokenResponse:
@@ -313,10 +348,17 @@ def issue_token_get(
             room=room, identity=identity, ttl_seconds=ttl_seconds,
             agent_name=None, name=op_name or None, attributes=attrs,
         )
-        # auto-ensure voice-ai is present (presence-idempotent) — see docstring (#42)
-        threading.Thread(
-            target=_ensure_agent_dispatched, args=(room, "voice-ai"), daemon=True
-        ).start()
+        # auto-ensure voice-ai is present (presence-idempotent) — see docstring (#42).
+        # Nur für Räume, deren Zahler der Worker kennt (PR #93): ein neuer, selbst
+        # ausgedachter Slug startet keinen Gratis-Agent mehr; der Operator kann den
+        # Raum betreten, voice-ai kommt erst mit dem Gastgeber (host-call/invite-room
+        # oder HMAC-Link) dazu.
+        if _room_has_payer(room):
+            threading.Thread(
+                target=_ensure_agent_dispatched, args=(room, "voice-ai"), daemon=True
+            ).start()
+        else:
+            logger.warning("[free] operator join room=%s has no payer, no dispatch", room)
         return TokenResponse(token=token, url=livekit_url, room=room, identity=identity)
     return _mint(room, identity, invite, ttl_seconds)
 
@@ -421,15 +463,7 @@ def invite_room(req: HostCallRequest, request: Request) -> InviteRoomResponse:
     )
 
 
-def _mask_email(email: str) -> str | None:
-    """o***@n***.ai: genug zum Wiedererkennen, nicht genug zum Abschreiben."""
-    local, _, domain = (email or "").partition("@")
-    if not local or not domain:
-        return None
-    host, dot, tld = domain.rpartition(".")
-    if not host:
-        host, dot, tld = domain, "", ""
-    return f"{local[0]}***@{host[0]}***{dot}{tld}"
+_mask_email = billing_routes.mask_email  # auch in /api/login/verify
 
 
 @app.get("/api/me")
