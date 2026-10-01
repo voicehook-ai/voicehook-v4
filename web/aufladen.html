@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22%3E%3Ctext y=%2232%22 font-size=%2232%22 fill=%22%236dc9d9%22%3E%E2%88%86%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22%3E%3Cpath d=%22M20 4.5 37 35.5H3Z%22 fill=%22none%22 stroke=%22%236dc9d9%22 stroke-width=%223.5%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E">
 <title>voicehook · Aufladen</title>
 <style>
 /* Drehregler-Design aus voicehook (alt) web/landing/aufladen.html, Tokens + Theme wie web/voice.html */
@@ -43,7 +43,12 @@ body{
   font-size:13px; letter-spacing:.02em; color:var(--vh-fg-0); font-weight:500; z-index:5; white-space:nowrap;
 }
 .brand a{ color:inherit; text-decoration:none; }
-.brand .dlt{ color:var(--vh-teal); font-size:18px; line-height:1; position:relative; top:-1px; margin-right:6px; font-weight:400; }
+/* ∆ als Inline-SVG statt Glyph (Oliver 01.10.): Tinte exakt mittig in der Box, auf jedem System gleich. */
+.vh-dlt{display:block;width:.75em;height:.75em;fill:none;stroke:currentColor;stroke-width:3.5;stroke-linejoin:round;overflow:visible;}
+.brand,.brand a{ display:flex; align-items:center; }
+.brand{ padding-top:3px; }  /* Text bleibt, wo er mit dem höheren Glyph-Zeilenkasten stand */
+.brand a .tld{ white-space:pre; }  /* führendes Leerzeichen in " voicehook" bleibt im Flex-Layout */
+.brand .dlt{ color:var(--vh-teal); font-size:18px; line-height:1; display:inline-flex; margin-right:6px; font-weight:400; }
 .brand .tld,.brand .by{ color:var(--vh-fg-3); font-weight:400; } .brand .by{ margin:0 6px; }
 #btn-theme{
   position:fixed; top:calc(14px + env(safe-area-inset-top,0px)); right:14px; width:38px; height:38px; z-index:6;
@@ -109,6 +114,7 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
 .login form{ width:100%; display:flex; gap:8px; }
 .login input{ flex:1 1 auto; min-width:0; font-family:var(--vh-mono); font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid var(--vh-btn-border-hov); background:transparent; color:var(--vh-fg-0); }
 .login form .cta{ width:auto; padding:0 14px; font-size:13px; min-height:44px; white-space:nowrap; }
+.em{ text-transform:none; letter-spacing:.02em; color:var(--vh-fg-0); }
 .tagline{ margin-top:28px; font-size:11px; color:var(--vh-fg-3); letter-spacing:.04em; white-space:nowrap; }
 @media (max-width:480px){ .dial-box{ width:260px; height:260px; } .center .amt{ font-size:40px; } .wrap{ gap:20px; } }
 </style>
@@ -122,7 +128,7 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
     if (pref === 'light') document.body.classList.add('theme-light');
   })();
 </script>
-<div class="brand"><a href="/"><span class="dlt">∆</span><span>by</span><span class="tld"> voicehook</span></a><span class="by">·</span><span id="t-brand">Aufladen</span></div>
+<div class="brand"><a href="/"><span class="dlt"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span>by</span><span class="tld"> voicehook</span></a><span class="by">·</span><span id="t-brand">Aufladen</span></div>
 <button id="btn-theme" type="button" aria-label="Theme"></button>
 
 <main class="wrap" id="view-topup">
@@ -177,13 +183,30 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
     <div class="link" id="rec-link"></div>
     <button class="cta ghost" id="rec-copy" type="button"></button>
   </div>
+  <div class="login" id="confirm-box" hidden>
+    <button class="cta ghost" id="confirm-open" type="button"></button>
+    <form id="confirm-form" novalidate hidden>
+      <input type="email" id="confirm-email" autocomplete="email" inputmode="email" required>
+      <button class="cta ghost" id="confirm-go" type="submit"></button>
+    </form>
+    <div class="msg" id="confirm-msg" aria-live="polite" hidden></div>
+  </div>
   <div class="row" style="width:100%;max-width:360px">
     <button class="cta" id="go-call" type="button"></button>
   </div>
   <button class="chip" id="more" type="button"></button>
 </main>
 
-<div class="tagline">talk to any AI</div>
+<main class="wrap" id="view-ask" hidden>
+  <h1 id="ask-h1"></h1>
+  <div class="msg" id="ask-txt"></div>
+  <div class="row" style="width:100%;max-width:360px">
+    <button class="cta ghost" id="ask-no" type="button"></button>
+    <button class="cta" id="ask-yes" type="button"></button>
+  </div>
+</main>
+
+<div class="tagline">Talk with your agents</div>
 
 <script>
 (function(){
@@ -197,8 +220,13 @@ const T = {
         fine:'Zahlung über Stripe. Kein Abo.<br>Mit der E-Mail, die du bei Stripe angibst, wird dein Konto angelegt. Auf anderen Geräten meldest du dich per E-Mail-Link an.',
         login:'Schon Guthaben? Anmelden', loginPh:'deine@email.de', loginSend:'Link senden',
         loginHint:'Die E-Mail, die du bei Stripe angegeben hast.', loginSent:'Link gesendet. Öffne ihn aus deinem Postfach.',
-        loginBad:'Bitte eine gültige E-Mail eingeben', loginUnavail:'Anmelden ist gerade nicht verfügbar',
-        loggedIn:'Angemeldet',
+        loginBad:'Bitte eine gültige E-Mail eingeben', loginUnavail:'Anmelden bald verfügbar',
+        loginRate:'Zu viele Versuche. Bitte warte ein paar Minuten.', loginMailFail:'Die E-Mail ließ sich nicht senden. Bitte versuch es später noch einmal.',
+        loginExpired:'Dieser Anmelde-Link ist abgelaufen oder wurde schon benutzt. Fordere unten einen neuen an.',
+        verifying:'Anmeldung wird geprüft …', loggedInAs:e=>'Angemeldet als '+e,
+        askH:e=>'Anmelden als '+e+'?', askTxt:'In diesem Browser ist schon ein Guthaben gespeichert. „Anmelden“ wechselt zu diesem Konto, „Abbrechen“ lässt alles wie es ist.',
+        askYes:'Anmelden', askNo:'Abbrechen', askKept:'Abgebrochen. Dieser Browser bleibt im bisherigen Konto.',
+        confirmMail:'E-Mail bestätigen', confirmHint:'Die E-Mail, die du bei Stripe angegeben hast. Öffne den Link in diesem Browser, danach meldest du dich auf anderen Geräten per E-Mail an.',
         bal:b=>'Guthaben: <b>'+b+'</b>', cancel:'Zahlung abgebrochen. Es wurde nichts abgebucht.',
         confirming:'Zahlung wird bestätigt …', slow:'Die Bestätigung dauert länger als üblich. Lade die Seite gleich neu.',
         claimed:'Diese Zahlung wurde schon auf einem Gerät eingelöst. Nutze dort deinen Wiederherstellungs-Link.',
@@ -212,8 +240,13 @@ const T = {
         fine:'Payment via Stripe. No subscription.<br>Your account is created with the email you give Stripe. On other devices you log in with an email link.',
         login:'Already have credit? Log in', loginPh:'you@example.com', loginSend:'Send link',
         loginHint:'The email you entered at Stripe.', loginSent:'Link sent. Open it from your inbox.',
-        loginBad:'Please enter a valid email', loginUnavail:'Login is not available right now',
-        loggedIn:'Logged in',
+        loginBad:'Please enter a valid email', loginUnavail:'Login coming soon',
+        loginRate:'Too many attempts. Please wait a few minutes.', loginMailFail:'The email could not be sent. Please try again later.',
+        loginExpired:'This login link has expired or was already used. Request a new one below.',
+        verifying:'Checking your login …', loggedInAs:e=>'Logged in as '+e,
+        askH:e=>'Log in as '+e+'?', askTxt:'This browser already holds credit. “Log in” switches to this account, “Cancel” leaves everything as it is.',
+        askYes:'Log in', askNo:'Cancel', askKept:'Cancelled. This browser stays in its previous account.',
+        confirmMail:'Confirm email', confirmHint:'The email you entered at Stripe. Open the link in this browser; afterwards you log in on other devices by email.',
         bal:b=>'Credit: <b>'+b+'</b>', cancel:'Payment cancelled. Nothing was charged.',
         confirming:'Confirming payment …', slow:'Confirmation is taking longer than usual. Reload the page in a moment.',
         claimed:'This payment was already redeemed on a device. Use your recovery link there.',
@@ -224,6 +257,9 @@ const T = {
 }[LANG];
 const $ = id => document.getElementById(id);
 const TOKEN_KEY = 'vh-wallet-v1';
+const NONCE_KEY = 'vh_login_nonce';  // localStorage: der Mail-Link öffnet einen neuen Tab
+const getNonce = () => { try { return localStorage.getItem(NONCE_KEY) || ''; } catch { return ''; } };
+const setNonce = n => { try { if (n) localStorage.setItem(NONCE_KEY, n); else localStorage.removeItem(NONCE_KEY); } catch {} };
 const getToken = () => { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } };
 const setToken = t => { try { localStorage.setItem(TOKEN_KEY, t); } catch {} };
 const eurFmt = new Intl.NumberFormat(LANG === 'de' ? 'de-DE' : 'en-IE', { style:'currency', currency:'EUR' });
@@ -237,6 +273,9 @@ $('rec-copy').textContent = T.copy; $('go-call').textContent = T.call; $('more')
 $('dial').setAttribute('aria-label', T.amount); document.title = 'voicehook · ' + T.brand;
 $('login-open').textContent = T.login; $('login-email').placeholder = T.loginPh;
 $('login-email').setAttribute('aria-label', T.loginPh); $('login-go').textContent = T.loginSend;
+$('confirm-open').textContent = T.confirmMail; $('confirm-email').placeholder = T.loginPh;
+$('confirm-email').setAttribute('aria-label', T.loginPh); $('confirm-go').textContent = T.loginSend;
+$('ask-yes').textContent = T.askYes; $('ask-no').textContent = T.askNo;
 
 // ---- Theme-Schalter (gleicher Schlüssel wie voice.html) ----
 const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
@@ -353,10 +392,18 @@ async function loadBalance(){
     return w;
   } catch { return null; }
 }
+// Überschriften sind VERSAL; die maskierte Mail bleibt in ihrer echten Schreibweise.
+function setWithEmail(el, text, email){
+  el.textContent = '';
+  const i = email ? text.indexOf(email) : -1;
+  if (i < 0) { el.textContent = text; return; }
+  const sp = document.createElement('span'); sp.className = 'em'; sp.textContent = email;
+  el.append(text.slice(0, i), sp, text.slice(i + email.length));
+}
 function showDone(w, recoveryUrl, title){
-  $('view-topup').hidden = true; $('view-done').hidden = false;
-  $('login-box').hidden = true;
-  if (title) $('t-done-h1').textContent = title;
+  $('view-topup').hidden = true; $('view-ask').hidden = true; $('view-done').hidden = false;
+  $('login-box').hidden = true; $('confirm-box').hidden = true;
+  if (title) setWithEmail($('t-done-h1'), title, w.email_masked);
   $('done-bal').textContent = eurFmt.format(w.balance_eur || 0);
   if (recoveryUrl) { $('recovery-box').hidden = false; $('rec-link').textContent = recoveryUrl; }
 }
@@ -367,26 +414,111 @@ $('rec-copy').addEventListener('click', async () => {
 $('go-call').addEventListener('click', () => { location.href = '/'; });
 $('more').addEventListener('click', () => { $('view-done').hidden = true; $('view-topup').hidden = false; loadBalance(); });
 
-// ---- Anmelden per E-Mail-Link (POST /api/login {email} -> 202 | 503) ----
-// Der Link geht an die bei Stripe angegebene Mail; erst GET /api/login/verify
-// liefert ein Wallet-Token (?wallet=). Ohne Mail-Bestätigung wird nichts übernommen.
-function loginMsg(text, warn){ const m = $('login-msg'); m.textContent = text; m.className = 'msg' + (warn ? ' warn' : ''); m.hidden = !text; }
+// ---- Anmelden per E-Mail-Link (Vertrag PR #93) ----
+// POST /api/login {email} MIT X-Wallet-Token (falls vorhanden): der Server bindet
+// den Link an genau dieses Wallet und antwortet mit login_nonce (localStorage).
+// Die Mail enthält /aufladen#login=<token>; init() löst ihn über
+// GET /api/login/verify?token=&nonce= ein. Kein Token kommt je aus der URL.
+let loginUnavail = false;
+function setMsg(el, text, warn){ el.textContent = text; el.className = 'msg' + (warn ? ' warn' : ''); el.hidden = !text; }
+function loginMsg(text, warn){ setMsg($('login-msg'), text, warn); }
+function markLoginUnavail(){
+  loginUnavail = true;
+  $('login-open').disabled = true; $('login-open').textContent = T.loginUnavail;
+  $('login-form').hidden = true; $('confirm-form').hidden = true;
+  $('confirm-open').disabled = true; $('confirm-open').hidden = false; $('confirm-open').textContent = T.loginUnavail;
+}
+// -> true = gesendet
+async function sendLoginLink(email, input, go, msg){
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) { msg(T.loginBad, true); return false; }
+  go.disabled = true;
+  try {
+    const r = await fetch('/api/login', { method:'POST', headers:headers(), body:JSON.stringify({ email }) });
+    if (r.ok) {
+      const d = await r.json().catch(() => ({}));
+      if (d && typeof d.login_nonce === 'string' && d.login_nonce) setNonce(d.login_nonce);
+      msg(T.loginSent); input.disabled = true; return true;
+    }
+    if (r.status === 503) { markLoginUnavail(); msg(''); return false; }
+    msg(r.status === 400 ? T.loginBad : r.status === 429 ? T.loginRate : r.status === 502 ? T.loginMailFail : T.err, true);
+  } catch { msg(T.err, true); }
+  go.disabled = false;
+  return false;
+}
 $('login-open').addEventListener('click', () => {
+  if (loginUnavail) return;
   const f = $('login-form'); f.hidden = !f.hidden;
   if (!f.hidden) { loginMsg(T.loginHint); $('login-email').focus(); } else loginMsg('');
 });
-$('login-form').addEventListener('submit', async e => {
+$('login-form').addEventListener('submit', e => {
   e.preventDefault();
-  const email = $('login-email').value.trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) { loginMsg(T.loginBad, true); return; }
-  $('login-go').disabled = true;
-  try {
-    const r = await fetch('/api/login', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ email }) });
-    if (r.status === 202 || r.status === 200) { loginMsg(T.loginSent); $('login-email').disabled = true; return; }
-    loginMsg(r.status === 503 ? T.loginUnavail : T.err, true);
-  } catch { loginMsg(T.err, true); }
-  $('login-go').disabled = false;
+  sendLoginLink($('login-email').value.trim(), $('login-email'), $('login-go'), loginMsg);
 });
+// "E-Mail bestätigen" nach dem Checkout: gleicher Aufruf, Wallet-Header = dieses Konto.
+const confirmMsg = (t, w) => setMsg($('confirm-msg'), t, w);
+$('confirm-open').addEventListener('click', () => {
+  if (loginUnavail) return;
+  $('confirm-open').hidden = true; $('confirm-form').hidden = false; confirmMsg(T.confirmHint); $('confirm-email').focus();
+});
+$('confirm-form').addEventListener('submit', e => {
+  e.preventDefault();
+  sendLoginLink($('confirm-email').value.trim(), $('confirm-email'), $('confirm-go'), confirmMsg);
+});
+async function offerConfirm(){
+  // Schon bestätigte Konten brauchen den Knopf nicht (GET /api/me.email_verified).
+  try {
+    const r = await fetch('/api/me', { headers:headers() });
+    if (r.ok) { const m = await r.json(); if (m && m.email_verified === true) return; }
+  } catch {}
+  $('confirm-box').hidden = false;
+}
+
+// GET /api/login/verify?token=&nonce= -> 200 {wallet_token, recovery_url, wallet_linked, email_masked, ...}
+// 409 confirm_required {email_masked}: Link aus einem anderen Browser (kein/falscher
+// Nonce), noch NICHT verbraucht -> erst fragen "Anmelden als …?", bei Ja &confirm=1.
+// Abbrechen speichert nichts. 400 invalid_or_expired: alt oder schon benutzt.
+async function verifyCall(token, confirm){
+  const n = confirm ? '' : getNonce();
+  const u = '/api/login/verify?token=' + encodeURIComponent(token) + (n ? '&nonce=' + encodeURIComponent(n) : '') + (confirm ? '&confirm=1' : '');
+  const r = await fetch(u, { headers:headers() });
+  const d = await r.json().catch(() => ({}));
+  return { r, d };
+}
+async function verifyFail(){ showMsg(T.err, true); await loadBalance(); }
+function askLogin(email, onYes){
+  showMsg('');
+  setWithEmail($('ask-h1'), T.askH(email || '?'), email); $('ask-txt').textContent = getToken() ? T.askTxt : '';
+  $('ask-txt').hidden = !getToken();
+  $('view-topup').hidden = true; $('view-done').hidden = true; $('view-ask').hidden = false;
+  $('ask-yes').disabled = false;
+  $('ask-yes').onclick = () => { $('ask-yes').disabled = true; onYes(); };
+  $('ask-no').onclick = async () => {
+    $('view-ask').hidden = true; $('view-topup').hidden = false;
+    await loadBalance(); showMsg(getToken() ? T.askKept : '');
+  };
+  $('ask-yes').focus();
+}
+async function verifyLogin(token, confirmed){
+  showMsg(T.verifying);
+  let r, d;
+  try { ({ r, d } = await verifyCall(token, confirmed)); } catch { return verifyFail(); }
+  if (r.status === 400) {
+    $('view-ask').hidden = true; $('view-topup').hidden = false;
+    showMsg(T.loginExpired, true); await loadBalance();
+    $('login-box').hidden = false; $('login-form').hidden = false; loginMsg(T.loginHint); return;
+  }
+  if (r.status === 409) {
+    const c = (d && typeof d.detail === 'object' && d.detail) || d || {};
+    if (c.error === 'confirm_required' && !confirmed) return askLogin(c.email_masked, () => verifyLogin(token, true));
+    return verifyFail();
+  }
+  if (!r.ok || !d || !d.wallet_token) return verifyFail();
+  // 200 kommt nur mit passender Nonce (dieser Browser hat den Link angefordert)
+  // oder nach bestätigter Rückfrage (confirm=1): Token übernehmen.
+  setNonce('');
+  setToken(d.wallet_token); showMsg('');
+  showDone(d, d.recovery_url, d.email_masked ? T.loggedInAs(d.email_masked) : T.loggedIn);
+}
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function claim(sessionId){
@@ -396,7 +528,7 @@ async function claim(sessionId){
     try { r = await fetch('/api/wallet/claim', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ session_id:sessionId }) }); }
     catch { await sleep(2000); continue; }
     if (r.status === 200) {
-      const d = await r.json(); setToken(d.wallet_token); showMsg(''); showDone(d, d.recovery_url); return;
+      const d = await r.json(); setToken(d.wallet_token); showMsg(''); showDone(d, d.recovery_url); offerConfirm(); return;
     }
     if (r.status === 409) { showMsg(T.claimed, true); loadBalance(); return; }
     await sleep(2000);
@@ -412,6 +544,11 @@ async function recover(code){
 }
 
 async function init(){
+  // Codes sofort aus der Adresszeile (vor jedem await): ?session_id, #r=, #login=.
+  const q = new URLSearchParams(location.search);
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const sid = q.get('session_id'), rec = hash.get('r'), login = hash.get('login');
+  if (sid || q.get('topup') || rec || login || q.has('wallet')) history.replaceState(null, '', location.pathname);
   try {
     const r = await fetch('/api/billing/config');
     if (r.ok) {
@@ -425,16 +562,10 @@ async function init(){
   drawTicks(); drawChips(); render();
   if (!checkoutOn) showMsg(T.soonMsg);
 
-  const q = new URLSearchParams(location.search);
-  const hash = new URLSearchParams(location.hash.slice(1));
-  const sid = q.get('session_id'), rec = hash.get('r'), wal = q.get('wallet');
-  if (sid || q.get('topup') || rec || q.has('wallet')) history.replaceState(null, '', location.pathname);  // Codes nicht in der Adresszeile lassen
-  // Rückweg von GET /api/login/verify: bestätigtes Wallet-Token übernehmen.
-  if (wal && /^[A-Za-z0-9_.~-]{16,512}$/.test(wal)) setToken(wal);
   if (getToken()) $('login-box').hidden = true;
   if (rec) return recover(rec);
-  const w = await loadBalance();
-  if (wal && w) showMsg(T.loggedIn);
+  if (login) return verifyLogin(login);
+  await loadBalance();
   if (sid) return claim(sid);
   if (q.get('topup') === 'cancel') showMsg(T.cancel);
 }

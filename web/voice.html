@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22%3E%3Ctext y=%2232%22 font-size=%2232%22 fill=%22%236dc9d9%22%3E%E2%88%86%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22%3E%3Cpath d=%22M20 4.5 37 35.5H3Z%22 fill=%22none%22 stroke=%22%236dc9d9%22 stroke-width=%223.5%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E">
 
-<title>voicehook — talk to any AI</title>
+<title>voicehook — Talk with your agents</title>
 <script>
 /* VH_BUILD — auto-replaced by .github/workflows/deploy.yml on every deploy.
    PLACEHOLDER_SHA and PLACEHOLDER_TS are sed-substituted with the short git
@@ -22,8 +22,8 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
   try { lang = /^de\b/i.test(String(navigator.language || '')) ? 'de' : 'en'; } catch (_) {}
   var D = {
     de: {
-      'title': 'voicehook · sprich mit jeder KI',
-      'tagline': 'sprich mit jeder KI',
+      'title': 'voicehook · Talk with your agents',
+      'tagline': 'Talk with your agents',
       'info.title': 'voicehook Info', 'info.aria': 'Info',
       'music.tip': 'Musikmodus: Mikro an, Effekte hoch', 'music.aria': 'Musikmodus',
       'mute.title': 'Mikrofon (stumm / an)', 'mute.aria': 'Mikrofon stumm schalten',
@@ -133,7 +133,9 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'login.hint': 'Die E-Mail, die du bei Stripe angegeben hast.',
       'login.sent': 'Link gesendet. Öffne ihn aus deinem Postfach.',
       'login.bad': 'Bitte eine gültige E-Mail eingeben',
-      'login.unavail': 'Anmelden ist gerade nicht verfügbar',
+      'login.unavail': 'Anmelden bald verfügbar',
+      'login.rate': 'Zu viele Versuche. Bitte warte ein paar Minuten.',
+      'login.mailfail': 'Die E-Mail ließ sich nicht senden. Bitte versuch es später noch einmal.',
       'login.err': 'Das hat nicht geklappt. Bitte versuch es noch einmal.',
       'login.as': 'angemeldet: {e}',
       'topup.title': 'Guthaben aufladen', 'topup.amount': 'Betrag', 'topup.close': 'Schließen',
@@ -153,8 +155,8 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'delta.title': 'Startet einen Call mit Delta. Delta erklärt dir, was voicehook kann.'
     },
     en: {
-      'title': 'voicehook · talk to any AI',
-      'tagline': 'talk to any AI',
+      'title': 'voicehook · Talk with your agents',
+      'tagline': 'Talk with your agents',
       'info.title': 'voicehook info', 'info.aria': 'info',
       'music.tip': 'Music mode: mic on, effects up', 'music.aria': 'music mode',
       'mute.title': 'Microphone (mute / unmute)', 'mute.aria': 'mute microphone',
@@ -264,7 +266,9 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'login.hint': 'The email you entered at Stripe.',
       'login.sent': 'Link sent. Open it from your inbox.',
       'login.bad': 'Please enter a valid email',
-      'login.unavail': 'Login is not available right now',
+      'login.unavail': 'Login coming soon',
+      'login.rate': 'Too many attempts. Please wait a few minutes.',
+      'login.mailfail': 'The email could not be sent. Please try again later.',
       'login.err': 'That did not work. Please try again.',
       'login.as': 'logged in: {e}',
       'topup.title': 'Top up credit', 'topup.amount': 'Amount', 'topup.close': 'Close',
@@ -363,9 +367,13 @@ body { background: var(--vh-bg-0); overflow: hidden; font-family: var(--vh-mono)
   font-family: var(--vh-mono); font-size: 13px; letter-spacing: 0.02em;
   color: var(--vh-fg-0); font-weight: 500;
 }
+/* ∆ als Inline-SVG statt Glyph (Oliver 01.10.): Tinte exakt mittig in der Box, auf jedem System gleich. */
+.vh-dlt{display:block;width:.75em;height:.75em;fill:none;stroke:currentColor;stroke-width:3.5;stroke-linejoin:round;overflow:visible;}
+/* padding-top: Text bleibt exakt, wo er mit dem höheren Glyph-Zeilenkasten stand. */
+#label { display: flex; align-items: center; padding-top: 3px; }
 #label .dlt {
   color: var(--vh-teal); font-size: 18px; font-weight: 400;
-  line-height: 1; position: relative; top: -1px;
+  line-height: 1; display: inline-flex;
   margin-right: 6px;
 }
 #label .tld { color: var(--vh-fg-3); font-weight: 400; }
@@ -576,8 +584,8 @@ body.vh-transcript-min #vh-tr-ticker { display: block; }
   border: 1px solid var(--vh-btn-border);
   color: var(--vh-btn-fg); letter-spacing: 0.01em; }
 /* presence marker = ∆ glyph (not a dot), colored per state */
-.vh-pres-chip .vh-pres-dot { font-size: 11px; line-height: 1; flex-shrink: 0;
-  color: rgba(255,255,255,0.18); transition: color .25s, text-shadow .25s; }
+.vh-pres-chip .vh-pres-dot { font-size: 11px; line-height: 1; flex-shrink: 0; display: inline-flex;
+  color: rgba(255,255,255,0.18); transition: color .25s, filter .25s; }
 .vh-pres-chip.in           { color: rgba(255,255,255,0.9); }
 /* Sprecherfarbe je Slot (gleiche Quelle wie Transkript + Kringel-Leuchten) */
 .vh-pres-chip[data-slot="user"]     { --vh-spk: var(--vh-user-ink); }
@@ -585,7 +593,7 @@ body.vh-transcript-min #vh-tr-ticker { display: block; }
 .vh-pres-chip[data-slot="agent"]    { --vh-spk: var(--vh-senior-ink); }
 .vh-pres-chip.in .vh-pres-dot   { color: var(--vh-spk, #6dc9d9); }
 .vh-pres-chip.speak              { color: #fff; border-color: color-mix(in srgb, var(--vh-spk, #6dc9d9) 60%, transparent); }
-.vh-pres-chip.speak .vh-pres-dot { color: var(--vh-spk, #6dc9d9); text-shadow: 0 0 6px var(--vh-spk, #6dc9d9); }
+.vh-pres-chip.speak .vh-pres-dot { color: var(--vh-spk, #6dc9d9); filter: drop-shadow(0 0 3px var(--vh-spk, #6dc9d9)); }
 /* Agent chip (Olli 30.09.): erst sichtbar, wenn wirklich ein externer Agent-
    Teilnehmer joint. Ladekreis (.joining) nur zwischen ParticipantConnected und
    erstem Track bzw. Selbstauskunft (vh.name); ersetzt den ∆ an Ort und Stelle.
@@ -729,7 +737,7 @@ body.settings-collapsed #hue-ctl { display: none; }
 #btn-vh-delta:hover { background: rgba(109,201,217,0.2); }
 #btn-vh-delta:active { transform: scale(0.97); }
 #btn-vh-delta[disabled] { opacity: 0.55; cursor: progress; }
-#btn-vh-delta .vh-delta-ico { font-size: 14px; line-height: 1; }
+#btn-vh-delta .vh-delta-ico { font-size: 14px; line-height: 1; display: inline-flex; }
 #btn-vh-delta .lbl { white-space: nowrap; }
 @media (max-width: 360px) {
   body.vh-first-visit #btn-vh-call, body.vh-first-visit #btn-vh-delta { padding: 9px 10px; font-size: 10.5px; letter-spacing: 0; }
@@ -868,6 +876,7 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
   /* ∆ by voicehook.ai oben mittig — auf Mobile etwas kompakter */
   #label { top: 16px; font-size: 11px; }
   #label .dlt { font-size: 15px; }
+  #label { padding-top: 2px; }
   #label .by { margin: 0 5px; }
   #tagline { bottom: 4px; }
 }
@@ -1048,6 +1057,7 @@ body.theme-light .vh-tu-go{background:#1f8fa3;color:#fff;}
 body.theme-light .vh-tu-msg.warn{color:#b8641a;}
 .vh-tu-fine{opacity:0.5;line-height:1.45;font-size:9.5px;}
 #vh-login form{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+#vh-login form[hidden]{display:none;}
 #vh-login input{flex:1 1 150px;min-width:0;font:inherit;font-size:16px;padding:5px 8px;border-radius:6px;border:1px solid var(--vh-btn-border-hov);background:transparent;color:var(--vh-btn-fg-hov);}
 @media (min-width:641px){#vh-login input{font-size:11px;}}
 #vh-login .vh-tu-go{min-height:30px;padding:6px 10px;}
@@ -1120,7 +1130,7 @@ body.theme-light #vh-low-bal{color:#b8641a;border-color:rgba(184,100,26,0.5);}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
   </button>
   <button id="btn-vh-delta" type="button" hidden title="Starts a call with Delta" data-i18n-title="delta.title">
-    <span class="vh-delta-ico" aria-hidden="true">∆</span>
+    <span class="vh-delta-ico" aria-hidden="true"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span>
     <span class="lbl" data-i18n="delta.label">Talk to Delta</span>
   </button>
   <button id="btn-vh-call" title="copies invite URL to clipboard + connects you as host" aria-label="invite your agent" data-i18n-title="call.title" data-i18n-aria="call.aria">
@@ -1134,9 +1144,9 @@ body.theme-light #vh-low-bal{color:#b8641a;border-color:rgba(184,100,26,0.5);}
 <div id="vh-info-pop" hidden data-i18n-html="infoPop.html"></div>
 <button id="btn-theme" title="theme" aria-label="theme" data-i18n-title="theme.title" data-i18n-aria="theme.title"></button>
 <div id="label">
-  <span class="dlt">∆</span><span class="by">by</span><span>voicehook<span class="tld">.ai</span></span>
+  <span class="dlt"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="by">by</span><span>voicehook<span class="tld">.ai</span></span>
 </div>
-<div id="tagline" data-i18n="tagline">talk to any AI</div>
+<div id="tagline" data-i18n="tagline">Talk with your agents</div>
 <script>
   // (spotify-iframe removed 2026-05-18 per Olli)
   if (false) {
@@ -1224,14 +1234,14 @@ body.theme-light #vh-low-bal{color:#b8641a;border-color:rgba(184,100,26,0.5);}
 <!-- Transcript log — block in body flow, under the kringel -->
 <div id="vh-transcript-wrap">
   <div id="vh-presence">
-    <span class="vh-pres-chip" data-slot="user" title="You, the human in the room" data-i18n-title="pres.userDesc"><span class="vh-pres-dot">∆</span><span class="vh-pres-label" data-i18n="pres.user">User</span></span>
-    <span class="vh-pres-chip" data-slot="voice-ai" title="Delta Agent (voice)" data-i18n-title="pres.voiceDesc"><span class="vh-pres-dot">∆</span><span class="vh-pres-label" data-i18n="pres.voice">Delta Agent (voice)</span></span>
-    <span class="vh-pres-chip" data-slot="agent" title="Agent" data-i18n-title="pres.agentDesc"><span class="vh-pres-spin" aria-hidden="true"></span><span class="vh-pres-dot">∆</span><span class="vh-pres-label" data-i18n="pres.agent">Agent</span></span>
+    <span class="vh-pres-chip" data-slot="user" title="You, the human in the room" data-i18n-title="pres.userDesc"><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label" data-i18n="pres.user">User</span></span>
+    <span class="vh-pres-chip" data-slot="voice-ai" title="Delta Agent (voice)" data-i18n-title="pres.voiceDesc"><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label" data-i18n="pres.voice">Delta Agent (voice)</span></span>
+    <span class="vh-pres-chip" data-slot="agent" title="Agent" data-i18n-title="pres.agentDesc"><span class="vh-pres-spin" aria-hidden="true"></span><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label" data-i18n="pres.agent">Agent</span></span>
     <button type="button" id="vh-tr-mode" aria-label="Transkript-Ansicht wechseln" title="Transkript" data-i18n-aria="tr.aria"></button>
   </div>
   <div id="vh-mode-row" role="group" aria-label="Sprachmodus für den nächsten Call" data-i18n-aria="mode.aria" hidden>
-    <button type="button" class="vh-pres-chip in" data-mode="normal" aria-pressed="true" title="Normal: Standard-Sprachpipeline" data-i18n-title="mode.normalTitle"><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Normal</span></button>
-    <button type="button" class="vh-pres-chip" data-mode="live" aria-pressed="false" title="Live: Gemini Live, gilt für den nächsten neuen Call" data-i18n-title="mode.liveTitle"><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Live</span></button>
+    <button type="button" class="vh-pres-chip in" data-mode="normal" aria-pressed="true" title="Normal: Standard-Sprachpipeline" data-i18n-title="mode.normalTitle"><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label">Normal</span></button>
+    <button type="button" class="vh-pres-chip" data-mode="live" aria-pressed="false" title="Live: Gemini Live, gilt für den nächsten neuen Call" data-i18n-title="mode.liveTitle"><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label">Live</span></button>
   </div>
   <div id="vh-mode-info" hidden>
     <div class="vh-free-left" aria-live="polite" hidden></div>
@@ -3540,7 +3550,7 @@ async function vhPayErrMsg(r) {
   let d = null;
   try { d = (await r.clone().json()).detail; } catch (_) {}
   if (!d || typeof d !== 'object') return null;
-  if (d.error === 'free_limit') return vhT('pay.free');
+  if (d.error === 'free_limit') { try { vhFreeMarkSeen(vhLiveOn() ? 'live' : 'normal'); } catch (_) {} return vhT('pay.free'); }
   if (d.error === 'credits_required') return vhT(d.wallet === 'empty' ? 'pay.empty' : 'pay.missing');
   return null;
 }
@@ -3569,18 +3579,6 @@ function vhPayShow(msg) {
   }
   vhTopupOpen();
 }
-
-// ?wallet=<token> (Rückweg von GET /api/login/verify): speichern, aus der
-// Adresszeile entfernen. Nur ein bestätigter Login-Link liefert ein Token.
-(function vhWalletFromUrl() {
-  let q; try { q = new URLSearchParams(location.search); } catch (_) { return; }
-  if (!q.has('wallet')) return;
-  const t = q.get('wallet') || '';
-  q.delete('wallet');
-  if (/^[A-Za-z0-9_.~-]{16,512}$/.test(t)) { try { localStorage.setItem(VH_WALLET_KEY, t); } catch (_) {} }
-  const qs = q.toString();
-  try { history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash); } catch (_) {}
-})();
 
 // ── Aufladen-Panel: Chips + Drehregler aus aufladen.html, ein Klick zu Stripe ──
 // Stripe öffnet in einem NEUEN Tab (ein laufender Call bricht nicht ab). Der
@@ -3715,9 +3713,12 @@ function vhReturnCheck() { if (vhTopupPending && !document.hidden) vhFreeRefresh
 window.addEventListener('focus', vhReturnCheck);
 document.addEventListener('visibilitychange', vhReturnCheck);
 
-// ── Anmelden per E-Mail-Link (POST /api/login {email} -> 202 | 503) ──────────
-// Der Link geht an die bei Stripe angegebene Mail; erst GET /api/login/verify
-// gibt ein Wallet-Token (?wallet=). Ohne Mail-Bestätigung wird nichts übernommen.
+// ── Anmelden per E-Mail-Link (Vertrag PR #93) ─────────────────────────────────
+// POST /api/login {email} MIT X-Wallet-Token (falls vorhanden) -> login_nonce
+// (localStorage vh_login_nonce). Die Mail führt auf /aufladen#login=<token>,
+// dort wird der Link über GET /api/login/verify?token=&nonce= eingelöst. Diese Seite nimmt NIE ein Token aus der URL (Login-Fixation).
+// 503 login_unavailable: Anmelden-Links weg, Panel sagt "bald verfügbar".
+let vhLoginUnavail = false;
 const vhLg = {
   box: document.getElementById('vh-login'), form: document.getElementById('vh-login-form'),
   email: document.getElementById('vh-login-email'), go: document.getElementById('vh-login-go'),
@@ -3744,14 +3745,23 @@ if (vhLg.form) vhLg.form.addEventListener('submit', async (e) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) { vhLoginMsg(vhT('login.bad'), true); return; }
   vhLg.go.disabled = true;
   try {
-    const r = await fetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'X-Anon-Id': vhAnonId() }, body: JSON.stringify({ email }) });
-    if (r.status === 202 || r.status === 200) {
+    const r = await fetch('/api/login', { method: 'POST', headers: vhPayHeaders(), body: JSON.stringify({ email }) });
+    if (r.ok) {
+      // login_nonce bindet den Link an diesen Browser; /aufladen schickt ihn bei verify mit.
+      try { const d = await r.json(); if (d && typeof d.login_nonce === 'string' && d.login_nonce) localStorage.setItem('vh_login_nonce', d.login_nonce); } catch (_) {}
       vhLoginMsg(vhT('login.sent'), false);
       vhLg.email.disabled = true;
       vhLg.box.classList.add('vh-sent');
       return;
     }
-    vhLoginMsg(r.status === 503 ? vhT('login.unavail') : vhT('login.err'), true);
+    if (r.status === 503) {
+      vhLoginUnavail = true;
+      vhLoginMsg(vhT('login.unavail'), true);
+      if (vhLg.form) vhLg.form.hidden = true;
+      try { vhModeInfoRender(); } catch (_) {}
+      return;
+    }
+    vhLoginMsg(vhT(r.status === 400 ? 'login.bad' : r.status === 429 ? 'login.rate' : r.status === 502 ? 'login.mailfail' : 'login.err'), true);
   } catch (_) { vhLoginMsg(vhT('login.err'), true); }
   vhLg.go.disabled = false;
 });
@@ -3812,7 +3822,7 @@ function vhModeInfoRender() {
   if (freeEl) {
     freeEl.textContent = '';
     const parts = [];
-    const freeOn = vhFree && (!vhFree.enabled || vhFree.enabled[mode] === true);
+    const freeOn = vhFree && (vhFree.enabled ? vhFree.enabled[mode] === true : vhFreeKnown(mode));
     if (freeOn) {
       const sec = Math.max(0, Number(vhFree[mode + '_s']) || 0);
       parts.push(sec <= 0 ? vhT('pay.free') : sec < 60 ? vhT('free.lt1') : vhT('free.left', { n: Math.floor(sec / 60) }));
@@ -3826,7 +3836,7 @@ function vhModeInfoRender() {
       if (vhMe && vhMe.email_masked) txt.title = vhT('login.as', { e: vhMe.email_masked });
       if (parts.length) { freeEl.appendChild(txt); freeEl.appendChild(vhSep()); }
       freeEl.appendChild(vhTopupBtn());
-      if (!vhLoggedIn()) {
+      if (!vhLoggedIn() && !vhLoginUnavail) {
         const wrap = document.createElement('span');
         wrap.className = 'vh-login-wrap';
         wrap.appendChild(vhSep());
@@ -3836,7 +3846,7 @@ function vhModeInfoRender() {
         wrap.appendChild(lg);
         freeEl.appendChild(wrap);
       }
-      const tl = document.getElementById('vh-tu-login'); if (tl) tl.hidden = vhLoggedIn();
+      const tl = document.getElementById('vh-tu-login'); if (tl) tl.hidden = vhLoggedIn() || vhLoginUnavail;
       showFree = true;
     }
     freeEl.hidden = !showFree;
@@ -3867,6 +3877,25 @@ function vhModeInfoRender() {
 // (Billing-Runde 4). Solange das Backend /api/me noch nicht hat (404): Fallback
 // auf /api/free/remaining + /api/wallet wie bisher.
 let vhMe = null;
+// /api/me.free hat kein enabled-Feld: ein Modus ohne Gratis-Kontingent meldet 0,
+// genau wie ein aufgebrauchtes. "Aufgebraucht" zeigen wir deshalb nur, wenn wir
+// heute (UTC) schon Gratis-Rest > 0 gesehen haben oder der Server 402 free_limit
+// gemeldet hat; sonst gar keine Gratis-Angabe für diesen Modus.
+const VH_FREE_SEEN_KEY = 'vh-free-seen-v1';
+function vhUtcDay() { return new Date().toISOString().slice(0, 10); }
+function vhFreeSeen() {
+  try { const o = JSON.parse(localStorage.getItem(VH_FREE_SEEN_KEY) || 'null'); if (o && o.day === vhUtcDay()) return o; } catch (_) {}
+  return { day: vhUtcDay() };
+}
+function vhFreeMarkSeen(mode) {
+  const o = vhFreeSeen(); if (o[mode]) return;
+  o[mode] = true; try { localStorage.setItem(VH_FREE_SEEN_KEY, JSON.stringify(o)); } catch (_) {}
+}
+function vhFreeKnown(mode) {
+  const sec = vhFree ? Number(vhFree[mode + '_s']) || 0 : 0;
+  if (sec > 0) { vhFreeMarkSeen(mode); return true; }
+  return vhFreeSeen()[mode] === true;
+}
 function vhLoggedIn() { return !!vhWalletToken() || !!(vhMe && vhMe.email_masked); }
 async function vhFreeRefresh() {
   let me = null, meOk = false;
@@ -3878,6 +3907,7 @@ async function vhFreeRefresh() {
     vhMe = me;
     const f = me.free && typeof me.free === 'object' ? me.free : null;
     vhFree = f ? Object.assign({}, f) : null;
+    if (f) ['normal', 'live'].forEach((m) => { if (Number(f[m + '_s']) > 0) vhFreeMarkSeen(m); });
   } else {
     vhMe = null;
     try {
@@ -4549,7 +4579,7 @@ async function vhStartRoomAudio(room) {
 // Preis). Untertitel zeigt "0.012 $" (+ " · live"), title = basis. KEINE Uhr,
 // kein Timer, kein "≈" (Olli 30.09.: eine hochzählende Uhr wirkte wie laufende
 // Kosten): Anzeige erscheint erst mit dem ersten echten Payload und ändert sich
-// nur bei neuen Payloads. Ohne Payload bleibt "talk to any AI"; nach Call-Ende zurück.
+// nur bei neuen Payloads. Ohne Payload bleibt "Talk with your agents"; nach Call-Ende zurück.
 // Schnitt pro Minute (Olli 01.10.): Summe aus dem letzten echten Payload geteilt
 // durch die Call-Minuten seit Connect, erst ab 1 Minute Calldauer, nur bei
 // eintreffenden Payloads neu gerechnet (kein Timer, der Kosten erfindet).
