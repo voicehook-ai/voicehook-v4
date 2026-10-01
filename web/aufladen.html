@@ -104,6 +104,11 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
 }
 .row{ display:flex; gap:8px; }
 .row .cta{ font-size:13px; padding:12px 0; }
+.login{ width:100%; max-width:340px; display:flex; flex-direction:column; align-items:center; gap:10px; }
+.linkbtn{ appearance:none; background:none; border:0; padding:6px 4px; font:inherit; font-size:12px; color:var(--vh-teal); text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
+.login form{ width:100%; display:flex; gap:8px; }
+.login input{ flex:1 1 auto; min-width:0; font-family:var(--vh-mono); font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid var(--vh-btn-border-hov); background:transparent; color:var(--vh-fg-0); }
+.login form .cta{ width:auto; padding:0 14px; font-size:13px; min-height:44px; white-space:nowrap; }
 .tagline{ margin-top:28px; font-size:11px; color:var(--vh-fg-3); letter-spacing:.04em; white-space:nowrap; }
 @media (max-width:480px){ .dial-box{ width:260px; height:260px; } .center .amt{ font-size:40px; } .wrap{ gap:20px; } }
 </style>
@@ -148,7 +153,16 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
   <button class="cta" id="cta" type="button"></button>
   <div class="msg" id="msg" hidden></div>
 
-  <div class="fineprint" id="t-fine">Zahlung über Stripe. Kein Abo.<br>Dein Guthaben hängt an diesem Gerät und deinem Wiederherstellungs-Link.</div>
+  <div class="fineprint" id="t-fine">Zahlung über Stripe. Kein Abo.</div>
+
+  <div class="login" id="login-box">
+    <button class="linkbtn" id="login-open" type="button"></button>
+    <form id="login-form" novalidate hidden>
+      <input type="email" id="login-email" autocomplete="email" inputmode="email" required>
+      <button class="cta ghost" id="login-go" type="submit"></button>
+    </form>
+    <div class="msg" id="login-msg" aria-live="polite" hidden></div>
+  </div>
 </main>
 
 <main class="wrap" id="view-done" hidden>
@@ -180,7 +194,11 @@ const T = {
   de: { brand:'Aufladen', h1:'Guthaben aufladen', sub:'Guthaben inkl. MwSt', rate:'Abgerechnet wird der echte Verbrauch',
         cta:a=>'Aufladen · '+a, busy:'Verbinde mit Stripe …', soon:'Aufladen bald verfügbar',
         soonMsg:'Die Zahlung ist noch nicht freigeschaltet.', err:'Das hat nicht geklappt. Bitte versuch es noch einmal.',
-        fine:'Zahlung über Stripe. Kein Abo.<br>Dein Guthaben hängt an diesem Gerät und deinem Wiederherstellungs-Link.',
+        fine:'Zahlung über Stripe. Kein Abo.<br>Mit der E-Mail, die du bei Stripe angibst, wird dein Konto angelegt. Auf anderen Geräten meldest du dich per E-Mail-Link an.',
+        login:'Schon Guthaben? Anmelden', loginPh:'deine@email.de', loginSend:'Link senden',
+        loginHint:'Die E-Mail, die du bei Stripe angegeben hast.', loginSent:'Link gesendet. Öffne ihn aus deinem Postfach.',
+        loginBad:'Bitte eine gültige E-Mail eingeben', loginUnavail:'Anmelden ist gerade nicht verfügbar',
+        loggedIn:'Angemeldet',
         bal:b=>'Guthaben: <b>'+b+'</b>', cancel:'Zahlung abgebrochen. Es wurde nichts abgebucht.',
         confirming:'Zahlung wird bestätigt …', slow:'Die Bestätigung dauert länger als üblich. Lade die Seite gleich neu.',
         claimed:'Diese Zahlung wurde schon auf einem Gerät eingelöst. Nutze dort deinen Wiederherstellungs-Link.',
@@ -191,7 +209,11 @@ const T = {
   en: { brand:'Top up', h1:'Top up credit', sub:'credit incl. VAT', rate:'You pay for actual usage',
         cta:a=>'Top up · '+a, busy:'Connecting to Stripe …', soon:'Top-up coming soon',
         soonMsg:'Payments are not enabled yet.', err:'That did not work. Please try again.',
-        fine:'Payment via Stripe. No subscription.<br>Your credit is tied to this device and your recovery link.',
+        fine:'Payment via Stripe. No subscription.<br>Your account is created with the email you give Stripe. On other devices you log in with an email link.',
+        login:'Already have credit? Log in', loginPh:'you@example.com', loginSend:'Send link',
+        loginHint:'The email you entered at Stripe.', loginSent:'Link sent. Open it from your inbox.',
+        loginBad:'Please enter a valid email', loginUnavail:'Login is not available right now',
+        loggedIn:'Logged in',
         bal:b=>'Credit: <b>'+b+'</b>', cancel:'Payment cancelled. Nothing was charged.',
         confirming:'Confirming payment …', slow:'Confirmation is taking longer than usual. Reload the page in a moment.',
         claimed:'This payment was already redeemed on a device. Use your recovery link there.',
@@ -213,6 +235,8 @@ $('t-rate').textContent = T.rate; $('t-fine').innerHTML = T.fine; $('t-done-h1')
 $('t-done-bal').textContent = T.doneBal; $('t-rec-h').textContent = T.recH; $('t-rec-txt').textContent = T.recTxt;
 $('rec-copy').textContent = T.copy; $('go-call').textContent = T.call; $('more').textContent = T.more;
 $('dial').setAttribute('aria-label', T.amount); document.title = 'voicehook · ' + T.brand;
+$('login-open').textContent = T.login; $('login-email').placeholder = T.loginPh;
+$('login-email').setAttribute('aria-label', T.loginPh); $('login-go').textContent = T.loginSend;
 
 // ---- Theme-Schalter (gleicher Schlüssel wie voice.html) ----
 const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
@@ -331,6 +355,7 @@ async function loadBalance(){
 }
 function showDone(w, recoveryUrl, title){
   $('view-topup').hidden = true; $('view-done').hidden = false;
+  $('login-box').hidden = true;
   if (title) $('t-done-h1').textContent = title;
   $('done-bal').textContent = eurFmt.format(w.balance_eur || 0);
   if (recoveryUrl) { $('recovery-box').hidden = false; $('rec-link').textContent = recoveryUrl; }
@@ -341,6 +366,27 @@ $('rec-copy').addEventListener('click', async () => {
 });
 $('go-call').addEventListener('click', () => { location.href = '/'; });
 $('more').addEventListener('click', () => { $('view-done').hidden = true; $('view-topup').hidden = false; loadBalance(); });
+
+// ---- Anmelden per E-Mail-Link (POST /api/login {email} -> 202 | 503) ----
+// Der Link geht an die bei Stripe angegebene Mail; erst GET /api/login/verify
+// liefert ein Wallet-Token (?wallet=). Ohne Mail-Bestätigung wird nichts übernommen.
+function loginMsg(text, warn){ const m = $('login-msg'); m.textContent = text; m.className = 'msg' + (warn ? ' warn' : ''); m.hidden = !text; }
+$('login-open').addEventListener('click', () => {
+  const f = $('login-form'); f.hidden = !f.hidden;
+  if (!f.hidden) { loginMsg(T.loginHint); $('login-email').focus(); } else loginMsg('');
+});
+$('login-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const email = $('login-email').value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) { loginMsg(T.loginBad, true); return; }
+  $('login-go').disabled = true;
+  try {
+    const r = await fetch('/api/login', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ email }) });
+    if (r.status === 202 || r.status === 200) { loginMsg(T.loginSent); $('login-email').disabled = true; return; }
+    loginMsg(r.status === 503 ? T.loginUnavail : T.err, true);
+  } catch { loginMsg(T.err, true); }
+  $('login-go').disabled = false;
+});
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function claim(sessionId){
@@ -381,10 +427,14 @@ async function init(){
 
   const q = new URLSearchParams(location.search);
   const hash = new URLSearchParams(location.hash.slice(1));
-  const sid = q.get('session_id'), rec = hash.get('r');
-  if (sid || q.get('topup') || rec) history.replaceState(null, '', location.pathname);  // Codes nicht in der Adresszeile lassen
+  const sid = q.get('session_id'), rec = hash.get('r'), wal = q.get('wallet');
+  if (sid || q.get('topup') || rec || q.has('wallet')) history.replaceState(null, '', location.pathname);  // Codes nicht in der Adresszeile lassen
+  // Rückweg von GET /api/login/verify: bestätigtes Wallet-Token übernehmen.
+  if (wal && /^[A-Za-z0-9_.~-]{16,512}$/.test(wal)) setToken(wal);
+  if (getToken()) $('login-box').hidden = true;
   if (rec) return recover(rec);
-  await loadBalance();
+  const w = await loadBalance();
+  if (wal && w) showMsg(T.loggedIn);
   if (sid) return claim(sid);
   if (q.get('topup') === 'cancel') showMsg(T.cancel);
 }
