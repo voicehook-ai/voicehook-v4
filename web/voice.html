@@ -120,7 +120,20 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'mic.default': 'System-Standard', 'mic.show': 'Mikros anzeigen …',
       'mic.showTitle': 'Einmal Mikro-Zugriff erlauben, dann erscheinen alle Geräte',
       'build.title': 'Klick kopiert die Build-Version',
-      'cost.perMin': '{v} ¢/min'
+      'cost.perMin': '{v} ¢/min',
+      'pay.free': 'Gratisminuten für heute aufgebraucht',
+      'pay.empty': 'Dein Guthaben ist aufgebraucht',
+      'pay.missing': 'Für diesen Modus brauchst du Guthaben',
+      'pay.topup': 'Aufladen',
+      'free.left': 'noch {n} min gratis heute',
+      'free.lt1': 'noch unter 1 min gratis heute',
+      'price.approx': 'ca. {p} pro Stunde inkl. MwSt',
+      'adv.live1': 'natürlichere Stimme', 'adv.live2': 'schneller', 'adv.live3': 'hört den Tonfall',
+      'adv.normal1': 'günstiger', 'adv.normal2': 'kostet nichts bei Stille',
+      'adv.normal3': 'filtert fremde Stimmen und Nebengeräusche',
+      'adv.normal4': 'Sätze deines Agents kommen wörtlich',
+      'delta.label': 'Mit Delta sprechen',
+      'delta.title': 'Startet einen Call mit Delta. Delta erklärt dir, was voicehook kann.'
     },
     en: {
       'title': 'voicehook · talk to any AI',
@@ -221,7 +234,20 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'mic.default': 'System default', 'mic.show': 'Show microphones …',
       'mic.showTitle': 'Allow mic access once, then all devices appear',
       'build.title': 'Click to copy build sha',
-      'cost.perMin': '{v} ¢/min'
+      'cost.perMin': '{v} ¢/min',
+      'pay.free': 'Free minutes for today are used up',
+      'pay.empty': 'Your credit is used up',
+      'pay.missing': 'This mode needs credit',
+      'pay.topup': 'Top up',
+      'free.left': '{n} min free left today',
+      'free.lt1': 'under 1 min free left today',
+      'price.approx': 'approx. {p} per hour incl. VAT',
+      'adv.live1': 'more natural voice', 'adv.live2': 'faster', 'adv.live3': 'hears your tone of voice',
+      'adv.normal1': 'cheaper', 'adv.normal2': 'costs nothing during silence',
+      'adv.normal3': 'filters out other voices and background noise',
+      'adv.normal4': 'your agent\'s sentences come through word for word',
+      'delta.label': 'Talk to Delta',
+      'delta.title': 'Starts a call with Delta. Delta explains what voicehook can do.'
     }
   };
   window.VH_LANG = lang;
@@ -650,6 +676,31 @@ body.settings-collapsed #hue-ctl { display: none; }
 #btn-vh-call.on:hover { border-color: #ff7a7a; background: rgba(255,122,122,0.18); }
 #btn-vh-call svg { width: 15px; height: 15px; display: block; }
 #btn-vh-call .lbl { white-space: nowrap; }
+/* Erstbesucher (UI-Runde 3): "Mit Delta sprechen" links neben "Agent einladen",
+   gleiche Pill, aber hervorgehoben (Hover-Look des Call-Knopfs als Ruhezustand). */
+#btn-vh-delta {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 18px;
+  background: rgba(109,201,217,0.12);
+  border: 1px solid var(--vh-teal, #6dc9d9);
+  color: var(--vh-teal, #6dc9d9);
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--vh-mono, ui-monospace, Menlo, monospace);
+  font-size: 12px; letter-spacing: 0.04em;
+  backdrop-filter: var(--vh-btn-blur); -webkit-backdrop-filter: var(--vh-btn-blur);
+  transition: color .25s, border-color .25s, background .25s, transform .15s;
+}
+#btn-vh-delta[hidden] { display: none; }
+#btn-vh-delta:hover { background: rgba(109,201,217,0.2); }
+#btn-vh-delta:active { transform: scale(0.97); }
+#btn-vh-delta[disabled] { opacity: 0.55; cursor: progress; }
+#btn-vh-delta .vh-delta-ico { font-size: 14px; line-height: 1; }
+#btn-vh-delta .lbl { white-space: nowrap; }
+@media (max-width: 360px) {
+  body.vh-first-visit #btn-vh-call, body.vh-first-visit #btn-vh-delta { padding: 9px 10px; font-size: 10.5px; letter-spacing: 0; }
+  body.vh-first-visit #btn-vh-call svg, body.vh-first-visit #btn-vh-delta .vh-delta-ico { display: none; }
+}
 
 .vh-bottom-icon {
   width: 38px; height: 38px; padding: 0;
@@ -749,6 +800,11 @@ body.theme-light #tagline.vh-cost-on { color: rgba(0,0,0,0.80); }
   #btn-theme svg, #btn-vh-music svg { width: 17px; height: 17px; }
   #vh-bottom-bar { bottom: 18px; gap: 8px; }
   #btn-vh-call   { padding: 9px 16px; font-size: 11.5px; }
+  #btn-vh-delta  { padding: 9px 16px; font-size: 11.5px; }
+  /* Erstbesucher: zwei Pills in einer Reihe, bündig mit dem Transkript-Panel
+     (links 12 px), damit rechts das Menü frei bleibt. */
+  body.vh-first-visit #vh-bottom-bar { left: 12px; transform: none; gap: 6px; }
+  body.vh-first-visit #btn-vh-call, body.vh-first-visit #btn-vh-delta { padding: 9px 11px; gap: 6px; letter-spacing: 0.01em; }
   .vh-bottom-icon { width: 36px; height: 36px; }
   .vh-bottom-icon svg { width: 15px; height: 15px; }
 
@@ -900,6 +956,18 @@ body.theme-light .vh-invite-status.warn{color:#b8641a;}
 #vh-mode-row{display:flex;gap:8px;justify-content:center;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;margin-bottom:6px;flex-shrink:0;}
 #vh-mode-row[hidden],#vh-presence.vh-in-call + #vh-mode-row{display:none;}
 #vh-mode-row .vh-pres-chip{font:inherit;padding:3px 9px;border-radius:12px;letter-spacing:0.01em;}
+/* Unter dem Schalter (UI-Runde 3): übrige Gratisminuten (dezent) und nach Klick
+   auf einen Modus dessen ungefährer Preis + Vorteile. Nur vor dem Call. */
+#vh-mode-info{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;line-height:1.5;text-align:center;color:var(--vh-btn-fg);margin:-2px 0 6px;flex-shrink:0;}
+#vh-mode-info[hidden],#vh-mode-info [hidden],#vh-presence.vh-in-call ~ #vh-mode-info{display:none;}
+#vh-mode-info .vh-free-left{opacity:0.6;letter-spacing:0.01em;}
+#vh-mode-info .vh-mode-detail{margin-top:2px;}
+#vh-mode-info .vh-md-price{color:var(--vh-teal,#6dc9d9);}
+body.theme-light #vh-mode-info .vh-md-price{color:#1f7f90;}
+#vh-mode-info .vh-md-adv{opacity:0.75;}
+#vh-mode-info a,.vh-pay-link{color:var(--vh-teal,#6dc9d9);text-decoration:underline;text-underline-offset:2px;}
+body.theme-light #vh-mode-info a,body.theme-light .vh-pay-link{color:#1f7f90;}
+.vh-invite-status.vh-pay-err{white-space:normal;}
 #vh-invite-banner{margin:6px 0;width:100%;max-width:560px;align-self:center;flex-shrink:0;}
 /* Punkt A: sobald ein externer Agent im Raum ist, Snippet + Copy ausblenden;
    verlässt er den Raum, erscheint es wieder (Klasse aus vhSyncInviteBtnVisibility). */
@@ -961,6 +1029,10 @@ body.theme-light .vh-invite-status.warn{color:#b8641a;}
 <div id="vh-bottom-bar">
   <button id="btn-mute" class="vh-bottom-icon" hidden title="microphone (mute / unmute)" aria-label="microphone mute" data-i18n-title="mute.title" data-i18n-aria="mute.aria">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+  </button>
+  <button id="btn-vh-delta" type="button" hidden title="Starts a call with Delta" data-i18n-title="delta.title">
+    <span class="vh-delta-ico" aria-hidden="true">∆</span>
+    <span class="lbl" data-i18n="delta.label">Talk to Delta</span>
   </button>
   <button id="btn-vh-call" title="copies invite URL to clipboard + connects you as host" aria-label="invite your agent" data-i18n-title="call.title" data-i18n-aria="call.aria">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
@@ -1071,6 +1143,10 @@ body.theme-light .vh-invite-status.warn{color:#b8641a;}
   <div id="vh-mode-row" role="group" aria-label="Sprachmodus für den nächsten Call" data-i18n-aria="mode.aria" hidden>
     <button type="button" class="vh-pres-chip in" data-mode="normal" aria-pressed="true" title="Normal: Standard-Sprachpipeline" data-i18n-title="mode.normalTitle"><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Normal</span></button>
     <button type="button" class="vh-pres-chip" data-mode="live" aria-pressed="false" title="Live: Gemini Live, gilt für den nächsten neuen Call" data-i18n-title="mode.liveTitle"><span class="vh-pres-dot">∆</span><span class="vh-pres-label">Live</span></button>
+  </div>
+  <div id="vh-mode-info" hidden>
+    <div class="vh-free-left" aria-live="polite" hidden></div>
+    <div class="vh-mode-detail" hidden></div>
   </div>
   <div id="vh-tr-ticker" aria-live="polite"></div>
   <div id="vh-invite-banner" hidden></div>
@@ -3312,10 +3388,165 @@ const VH_LIVE_ERR = {
 };
 const vhModeRow = document.getElementById('vh-mode-row');
 let vhLiveAvailable = false;
+
+// ── Aufladen-Verdrahtung (UI-Runde 3, PR #88) ────────────────────────────────
+// X-Anon-Id: zufällige ID dieses Browsers (localStorage), zählt die Gratisminuten.
+// X-Wallet-Token: kommt aus dem /aufladen-Flow (localStorage 'vh-wallet-v1').
+// Beide gehen NUR an /api/host-call und /api/live-room (wer den Raum anlegt,
+// zahlt), X-Anon-Id zusätzlich an /api/free/remaining. NIE an /api/token:
+// ein Gast, der per Einladung beitritt, zahlt nie für fremde Räume.
+const VH_ANON_KEY = 'vh-anon-v1';
+const VH_WALLET_KEY = 'vh-wallet-v1';
+const TOPUP_URL = '/aufladen';
+let vhAnonMem = '';
+function vhAnonId() {
+  try { const v = localStorage.getItem(VH_ANON_KEY); if (v && /^[A-Za-z0-9_-]{8,128}$/.test(v)) return v; } catch (_) {}
+  if (!vhAnonMem) {
+    const b = new Uint8Array(16);
+    try { crypto.getRandomValues(b); } catch (_) { for (let i = 0; i < b.length; i++) b[i] = Math.floor(Math.random() * 256); }
+    vhAnonMem = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  }
+  try { localStorage.setItem(VH_ANON_KEY, vhAnonMem); } catch (_) {}
+  return vhAnonMem;
+}
+function vhWalletToken() { try { return localStorage.getItem(VH_WALLET_KEY) || ''; } catch (_) { return ''; } }
+function vhPayHeaders() {
+  const h = { 'content-type': 'application/json', 'X-Anon-Id': vhAnonId() };
+  const w = vhWalletToken();
+  if (w) h['X-Wallet-Token'] = w;
+  return h;
+}
+// 402 von host-call / live-room -> Hinweistext, oder null (anderer Grund,
+// z. B. Live-Monatsbudget: dafür gibt es live.402).
+async function vhPayErrMsg(r) {
+  if (!r || r.status !== 402) return null;
+  let d = null;
+  try { d = (await r.clone().json()).detail; } catch (_) {}
+  if (!d || typeof d !== 'object') return null;
+  if (d.error === 'free_limit') return vhT('pay.free');
+  if (d.error === 'credits_required') return vhT(d.wallet === 'empty' ? 'pay.empty' : 'pay.missing');
+  return null;
+}
+function vhTopupLink() {
+  const a = document.createElement('a');
+  a.href = TOPUP_URL; a.target = '_blank'; a.rel = 'noopener'; a.className = 'vh-pay-link';
+  a.textContent = vhT('pay.topup');
+  return a;
+}
+// Hinweis mit Link /aufladen (neuer Tab) in der Zeile über dem Call-Knopf.
+function vhPayShow(msg) {
+  err.textContent = msg || '';
+  const banner = document.getElementById('vh-invite-banner');
+  if (!banner) return;
+  banner.innerHTML = '<div class="vh-invite-hint"><div class="vh-invite-status warn vh-live-err vh-pay-err" role="alert"></div></div>';
+  const st = banner.querySelector('.vh-pay-err');
+  st.textContent = msg + ' · ';
+  st.appendChild(vhTopupLink());
+  banner.hidden = false;
+}
+
+// Übrige Gratisminuten (GET /api/free/remaining) und ungefährer Preis
+// (GET /api/billing/config). Kein Timer: geladen beim Seitenstart und nach
+// Call-Ende, angezeigt wird nur, was der Server meldet.
+const vhModeInfo = document.getElementById('vh-mode-info');
+let vhFree = null;          // {live_s, normal_s, enabled:{live,normal}}
+let vhPriceCfg = null;      // {normal, live} EUR pro Stunde
+let vhModeDetail = null;    // 'normal' | 'live' | null (erst nach Klick)
+const vhEur = (() => { try { return new Intl.NumberFormat(VH_LANG === 'de' ? 'de-DE' : 'en-IE', { style: 'currency', currency: 'EUR' }); } catch (_) { return null; } })();
+const VH_ADV = { live: ['adv.live1', 'adv.live2', 'adv.live3'], normal: ['adv.normal1', 'adv.normal2', 'adv.normal3', 'adv.normal4'] };
+function vhModeInfoRender() {
+  if (!vhModeInfo) return;
+  const freeEl = vhModeInfo.querySelector('.vh-free-left');
+  const detEl = vhModeInfo.querySelector('.vh-mode-detail');
+  const mode = vhLiveOn() ? 'live' : 'normal';
+  // Gratis-Zeile: nur wenn der Modus ein Gratis-Kontingent hat und kein Wallet da ist.
+  let showFree = false;
+  if (freeEl) {
+    freeEl.textContent = '';
+    if (vhFree && vhFree.enabled && vhFree.enabled[mode] === true && !vhWalletToken()) {
+      const sec = Math.max(0, Number(vhFree[mode + '_s']) || 0);
+      if (sec <= 0) {
+        freeEl.textContent = vhT('pay.free') + ' · ';
+        freeEl.appendChild(vhTopupLink());
+      } else {
+        freeEl.textContent = sec < 60 ? vhT('free.lt1') : vhT('free.left', { n: Math.floor(sec / 60) });
+      }
+      showFree = true;
+    }
+    freeEl.hidden = !showFree;
+  }
+  // Preis + Vorteile des angeklickten Modus (Schalter muss sichtbar sein).
+  let showDet = false;
+  if (detEl) {
+    detEl.textContent = '';
+    const dm = vhLiveAvailable ? vhModeDetail : null;
+    if (dm && VH_ADV[dm]) {
+      const name = dm === 'live' ? 'Live' : 'Normal';
+      const p = vhPriceCfg && Number(vhPriceCfg[dm]);
+      const price = document.createElement('div');
+      price.className = 'vh-md-price';
+      price.textContent = name + (p > 0 && vhEur ? ' · ' + vhT('price.approx', { p: vhEur.format(p) }) : '');
+      const adv = document.createElement('div');
+      adv.className = 'vh-md-adv';
+      adv.textContent = VH_ADV[dm].map((k) => vhT(k)).join(' · ');
+      detEl.appendChild(price); detEl.appendChild(adv);
+      showDet = true;
+    }
+    detEl.hidden = !showDet;
+  }
+  vhModeInfo.hidden = !(showFree || showDet);
+}
+async function vhFreeRefresh() {
+  try {
+    const r = await fetch('/api/free/remaining', { cache: 'no-store', headers: { 'X-Anon-Id': vhAnonId() } });
+    const j = r.ok ? await r.json() : null;
+    vhFree = j && typeof j === 'object' && j.enabled ? j : null;
+  } catch (_) { vhFree = null; }
+  vhModeInfoRender();
+}
+let vhFreeTimer = null;
+function vhFreeRefreshSoon() {  // nach Call-Ende einmal (vhEndCall läuft dabei mehrfach)
+  clearTimeout(vhFreeTimer);
+  vhFreeTimer = setTimeout(vhFreeRefresh, 400);
+}
+async function vhPriceLoad() {
+  try {
+    const r = await fetch('/api/billing/config', { cache: 'no-store' });
+    const j = r.ok ? await r.json() : null;
+    vhPriceCfg = j && j.approx_eur_per_hour && typeof j.approx_eur_per_hour === 'object' ? j.approx_eur_per_hour : null;
+  } catch (_) { vhPriceCfg = null; }
+  vhModeInfoRender();
+}
+
+// Erstbesucher (localStorage-Flag, kein Cookie, kein Banner): wer noch nie einen
+// Agent eingeladen oder einen Call gehabt hat, sieht zusätzlich "Mit Delta
+// sprechen" (normaler Call mit Delta, ohne externen Agent). Nicht auf einem
+// /r/<slug>-Einladungslink: dort würde der Knopf den fremden Raum betreten.
+const VH_SEEN_KEY = 'vh-seen-v1';
+const btnDelta = document.getElementById('btn-vh-delta');
+function vhSeen() { try { return localStorage.getItem(VH_SEEN_KEY) === '1'; } catch (_) { return true; } }
+function vhFirstVisitRender() {
+  const first = !vhSeen() && !VH_PREFILL_ROOM && !lkConnected;
+  if (btnDelta) btnDelta.hidden = !first;
+  document.body.classList.toggle('vh-first-visit', first);
+}
+function vhMarkSeen() {
+  try { localStorage.setItem(VH_SEEN_KEY, '1'); } catch (_) {}
+  vhFirstVisitRender();
+}
+if (btnDelta) btnDelta.addEventListener('click', async () => {
+  if (lkConnected || btnDelta.disabled) return;
+  btnDelta.disabled = true;
+  try {
+    await vhStartCall();
+    if (lkConnected && window.vhSetCallUi) window.vhSetCallUi('in-call');  // Knopf zeigt "Auflegen"
+  } finally { btnDelta.disabled = false; }
+});
 function vhLiveWanted() { try { return localStorage.getItem(VH_LIVE_KEY) === 'live'; } catch (_) { return false; } }
 function vhLiveOn() { return vhLiveAvailable && vhLiveWanted(); }
 function vhLiveRender() {
   if (!vhModeRow) return;
+  vhModeInfoRender();
   vhModeRow.hidden = !vhLiveAvailable;
   const live = vhLiveOn();
   vhModeRow.querySelectorAll('[data-mode]').forEach((b) => {
@@ -3353,13 +3584,14 @@ function vhLiveErrShow(msg) {
 // Neuen Live-Raum holen. Fehler: kurze Meldung; 402/404/503 -> zurück auf Normal.
 async function vhLiveRoom(identity) {
   const r = await fetch('/api/live-room', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
+    method: 'POST', headers: vhPayHeaders(),
     body: JSON.stringify({ identity }),
   });
   if (!r.ok) {
-    const msg = VH_LIVE_ERR[r.status] || vhT('live.failed', { status: r.status });
+    const pay = await vhPayErrMsg(r);
+    const msg = pay || VH_LIVE_ERR[r.status] || vhT('live.failed', { status: r.status });
     if (r.status !== 429) { vhLiveSet('normal'); vhLiveRefresh(); }
-    vhLiveErrShow(msg);
+    if (pay) { vhPayShow(pay); vhFreeRefresh(); } else vhLiveErrShow(msg);
     throw new Error(msg);
   }
   return r.json();
@@ -3385,11 +3617,17 @@ function vhLiveMark() {
 if (vhModeRow) vhModeRow.addEventListener('click', (e) => {
   const b = e.target && e.target.closest && e.target.closest('[data-mode]');
   if (!b || vhCallLive()) return;  // laufender Raum wechselt den Modus nicht
-  vhLiveSet(b.dataset.mode);
+  const m = b.dataset.mode === 'live' ? 'live' : 'normal';
+  const wasOpen = vhModeDetail === m && vhLiveWanted() === (m === 'live');
+  vhModeDetail = wasOpen ? null : m;  // zweiter Klick auf denselben Modus klappt zu
+  vhLiveSet(m);
   vhLiveErrShow('');
 });
 vhLiveRender();
 vhLiveRefresh();
+vhFirstVisitRender();
+vhPriceLoad();
+vhFreeRefresh();
 
 async function vhStartCall() {
   if (!window.LivekitClient) { err.textContent = vhT('err.sdk'); return; }
@@ -3424,10 +3662,14 @@ async function vhStartCall() {
         tok.vhLive = true;
       } else {
         const r = await fetch('/api/host-call', {
-          method: 'POST', headers: { 'content-type': 'application/json' },
+          method: 'POST', headers: vhPayHeaders(),
           body: JSON.stringify({ identity }),
         });
-        if (!r.ok) throw new Error('Host-call ' + r.status);
+        if (!r.ok) {
+          const pay = await vhPayErrMsg(r);
+          if (pay) { vhPayShow(pay); vhFreeRefresh(); throw new Error(pay); }
+          throw new Error('Host-call ' + r.status);
+        }
         tok = await r.json();
       }
       room = tok.room;
@@ -3449,6 +3691,7 @@ async function vhStartCall() {
     // "ready"-message comes from TrackSubscribed once voice-ai's audio-track
     // arrives — at this point the user cannot actually talk yet.
     lkConnected = true; try { vhHideJoinGate(); } catch (_) {}
+    try { vhMarkSeen(); } catch (_) {}
     btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = vhT('call.end');
     try { vhMuteBtnVisibility(true); } catch (_) {}  // show mic-mute toggle next to btn-call
     err.textContent = '';  // no "connected" text — speaker-color in kringel does the talking
@@ -3481,6 +3724,9 @@ function vhEndCall(fromEvent) {
   btnCall.innerHTML = ICON_CALL_START; btnCall.classList.remove('on');
   btnCall.title = vhT('call.start');
   try { vhMuteBtnVisibility(false); } catch (_) {}  // hide mic-mute when call ends
+  try { vhFirstVisitRender(); vhFreeRefreshSoon(); } catch (_) {}
+  // Call endet auch ohne Klick (Gratisminuten um, Gegenseite trennt): Knopf zurück.
+  try { if (window.vhSetCallUi) window.vhSetCallUi('idle'); } catch (_) {}
   // Verbindungs-/Einladungsfehler bleiben stehen (sprachunabhängig, Flag statt
   // Suche nach dem englischen Wort 'failed').
   if (err.textContent && !err.dataset.sticky) err.textContent = '';
@@ -3589,6 +3835,7 @@ async function vhModalOpenInvite() {
     });
 
     vhInvitePrepared = { tok, room, snippet };
+    try { vhMarkSeen(); } catch (_) {}  // Agent eingeladen -> kein Erstbesucher mehr
     vhInviteBtnShow();  // persistent invite-copy button in footer
     if (snippetEl) snippetEl.textContent = snippet;
     if (goBtn) goBtn.disabled = false;
@@ -3642,6 +3889,7 @@ async function vhInviteJoinAsHost() {
     // Unblock remote-audio playback inside this user gesture (autoplay policy).
     await vhStartRoomAudio(lkRoom);
     lkConnected = true; try { vhHideJoinGate(); } catch (_) {}
+    try { vhMarkSeen(); } catch (_) {}
     btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = vhT('call.end');
     try { vhMuteBtnVisibility(true); } catch (_) {}  // show mic-mute + speaker-mute toggles (parity with vhStartCall)
     // Preserve query string (esp. ?go=1) so a refresh re-triggers autostart
@@ -4527,6 +4775,7 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
       try { vhMuteBtnVisibility(false); } catch (_) {}
     }
   };
+  window.vhSetCallUi = _setCallUi;  // Delta-Einstieg + Call-Ende nutzen denselben Knopfzustand
 
   if (callBtn) callBtn.addEventListener('click', async () => {
     if (callBtn.disabled) return;
@@ -4619,6 +4868,7 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
       await lkRoom.localParticipant.setMicrophoneEnabled(true);
       try { await vhStartRoomAudio(lkRoom); } catch (_) {}
       lkConnected = true; try { vhHideJoinGate(); } catch (_) {}
+      try { vhMarkSeen(); } catch (_) {}  // Agent eingeladen -> kein Erstbesucher mehr
       try { history.replaceState(null, '', live ? vhLiveUrlFor(room, tok) : '/r/' + encodeURIComponent(room) + location.search); } catch (_) {}
       if (live) vhLiveMark();
 
