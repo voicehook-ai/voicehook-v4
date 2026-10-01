@@ -190,14 +190,15 @@ def build_relay_handlers(
     def _speak(text: str, seq: object = None) -> None:
         logger.info("[operator.say]%s %s", " (live)" if live else "", text[:200])
         if live:
-            # Realtime-Modell hat kein wörtliches TTS: Operator-Text wird Anweisung.
+            # Realtime-Modell spricht selbst: Operator-Text wird Anweisung (Inhalt
+            # vollständig, bei Markierung/Transkript/Zitat wörtlich, live_say_user_input).
             # Das tatsächlich Gesprochene publiziert der Worker (conversation_item_added).
             # als markierter User-Turn (role=user); instructions= würde als
             # role="model"-Turn ankommen und Gemini hielte es für eigenes Gerede
-            from .live import LIVE_SAY_USER
+            from .live import live_say_user_input
 
             handle = session.generate_reply(
-                user_input=LIVE_SAY_USER.format(text=text), allow_interruptions=True
+                user_input=live_say_user_input(text), allow_interruptions=True
             )
         else:
             # Transkript kommt vom Worker (conversation_item_added) mit dem tatsächlich

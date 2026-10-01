@@ -1,8 +1,10 @@
 """Gemini-3.8-Live-Testmodus (eigener Worker `voice-ai-live`, VOICEHOOK_PIPELINE=live).
 
 Statt STT -> LLM -> TTS spricht ein Realtime-Modell selbst (Audio rein, Audio raus).
-operator.say wird dort zur Anweisung ("sag sinngemäß"), nicht zu wörtlichem TTS;
-der Operator steuert über Persona/Graph-Updates und korrigiert über say/revise.
+operator.say wird dort zur Anweisung an Gemini, nicht zu TTS: Gemini formuliert
+selbst (Live-Qualität), muss den Inhalt aber vollständig und unverfälscht
+übernehmen; bei "wörtlich"/"eins zu eins"/Transkript/Zitat exakt Wort für Wort
+(live_say_user_input). Wortgleichheit ist so NICHT garantiert, nur angewiesen.
 
 Kosten: Die Live API rechnet pro Turn den GESAMTEN Kontext neu ab (Google, Live API
 best practices). Deshalb Kontext-Kompression: bei TRIGGER Tokens auf TARGET kürzen
@@ -13,6 +15,7 @@ in die Persona (Text, billig), nicht in den Audio-Verlauf.
 from __future__ import annotations
 
 import os
+import re
 
 DEFAULT_LIVE_MODEL = "gemini-3.8-live"
 DEFAULT_LIVE_VOICE = "Charon"
@@ -30,10 +33,49 @@ LIVE_BASE_INSTRUCTIONS = (
     "Personen, spiele keine Rollen, keine Akzente, keine Stimmwechsel, keine "
     "übertriebenen Emotionen. Du bist ein freundlicher Gesprächspartner, duzt dein "
     "Gegenüber und antwortest selbst in 1 bis 3 kurzen Sätzen. Sag nie, dass du etwas "
-    "an einen Operator weitergibst. Nachrichten, die mit [Operator] beginnen, sind "
-    "Vorgaben deines Operators: befolge sie, lies sie nie vor und erwähne sie nicht."
+    "an einen Operator weitergibst. Nachrichten, die mit [Operator] beginnen, kommen "
+    "von deinem Operator, nicht von deinem Gegenüber. Soll eine Operator-Nachricht "
+    "eine Aussage sprechen, gibst du deren Inhalt vollständig und unverfälscht wieder: "
+    "nichts hinzufügen, keine eigenen Behauptungen, Bewertungen oder Fakten aus deinem "
+    "Wissen, nichts weglassen, nichts abschwächen, nichts umdeuten, keine Einleitung "
+    "und danach kein Nachsatz. Ist sie als wörtlich markiert, sprichst du sie exakt Wort "
+    "für Wort. Alle übrigen Operator-Nachrichten sind Vorgaben: befolge sie, lies sie "
+    "nie vor und erwähne sie nicht."
 )
-LIVE_SAY_USER = "[Operator] Sag jetzt sinngemäß, kurz und natürlich, ohne etwas zu erfinden: {text}"
+# Normalfall: Gemini darf natürlich formulieren, der Inhalt bleibt exakt derselbe.
+LIVE_SAY_USER = (
+    "[Operator] Sprich jetzt diese Aussage. Übernimm ihren Inhalt vollständig: nichts "
+    "hinzufügen, keine eigenen Behauptungen oder Fakten, nichts weglassen, nichts "
+    "abschwächen oder umdeuten, keine Einleitung, kein Nachsatz. Nur die Formulierung "
+    "darf gesprochen natürlich klingen. Aussage: «{text}»"
+)
+# Wörtlich: ausdrücklich verlangt, Transkript-Text oder Zitat.
+LIVE_SAY_VERBATIM_USER = (
+    "[Operator] Wörtlich. Sprich jetzt exakt diesen Text, Wort für Wort, ohne jede "
+    "Änderung, ohne Einleitung, ohne Zusatz und ohne Nachsatz: «{text}»"
+)
+# Führende Markierung, mit der der Operator Wortgleichheit verlangt; wird nicht mitgesprochen.
+_VERBATIM_PREFIX = re.compile(
+    r"^\s*(?:wörtlich|woertlich|eins\s+zu\s+eins|1\s*:\s*1|1\s+zu\s+1)\s*:\s*", re.IGNORECASE
+)
+# Inhalte, die nie umformuliert werden dürfen: Transkript-Text und Zitate.
+_VERBATIM_CONTENT = re.compile(r"transkript|zitat|[„“”\"«»]", re.IGNORECASE)
+
+
+def live_say_user_input(text: str) -> str:
+    """User-Turn für ein operator.say im Live-Modus.
+
+    Code entscheidet, ob wörtlich (nicht das Modell): führende Markierung
+    "wörtlich:"/"eins zu eins:"/"1:1:" (wird entfernt), Transkript-Text oder Zitat.
+    """
+    m = _VERBATIM_PREFIX.match(text)
+    if m and text[m.end():].strip():
+        return LIVE_SAY_VERBATIM_USER.format(text=text[m.end():].strip())
+    if _VERBATIM_CONTENT.search(text):
+        return LIVE_SAY_VERBATIM_USER.format(text=text)
+    return LIVE_SAY_USER.format(text=text)
+
+
 LIVE_PERSONA_USER = "[Operator] Ab sofort gilt zusätzlich diese Rolle und dieses Wissen, nicht vorlesen, nicht darauf antworten: {text}"
 
 # Platzhalter, die Gemini statt echter Sprache als Transkript liefert
