@@ -6,10 +6,14 @@
 <script>
 /* Handy-Layout (Variante A, Oliver 02.10.): gleiche Handy-Erkennung wie VH_PHONE
    (grober Zeiger UND kurze Bildschirmseite <= 500 CSS-px). Nur dann Klasse
-   vh-phone und viewport-fit=cover (Safe Areas); Tablet und Desktop unverändert. */
+   vh-phone und viewport-fit=cover (Safe Areas); Tablet und Desktop unverändert.
+   Zusätzlich schmale Fenster ohne Touch (<= 480 CSS-px beim Laden, Oliver 02.10.):
+   dasselbe Layout A statt gequetschter Desktop-Knöpfe. Nur Layout, die Ring-
+   Kalibrierung (VH_PHONE) bleibt an der Handy-Erkennung. */
 (function () {
   try {
-    if (matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 500) {
+    if ((matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 500)
+        || matchMedia('(max-width: 480px)').matches) {
       document.documentElement.classList.add('vh-phone');
       var m = document.querySelector('meta[name="viewport"]');
       if (m) m.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover');
