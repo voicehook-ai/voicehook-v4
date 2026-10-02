@@ -146,6 +146,14 @@ def test_join_uses_cli_operator_token_and_attributes(client):
     assert "roomConfig" not in claims  # plain operator token, like invite=1
 
 
+def test_join_passes_username_as_vh_user(client):
+    _join(client, username="Oliver")
+    import base64
+    token = FakeRoom.instances[-1].connected_with[1]
+    claims = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
+    assert claims["attributes"]["vh.user"] == "Oliver"
+
+
 def test_join_with_valid_hmac_invite(client):
     inv = mint_invite(ROOM, 600, secret=SECRET)
     j = _join(client, invite_url=f"https://voicehook.ai/r/{ROOM}?invite={inv}")

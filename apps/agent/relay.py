@@ -53,12 +53,16 @@ from .alive import (
 from .board import board_block, normalize_board, status_sentence
 from .clock import now_block, system_now
 from .core import (
+    FirstLine,
+    agent_mark,
     clean_spoken,
     compose,
     core_normal,
     history_turns,
+    mark_agent_items,
     persona_block,
     sanitize_persona,
+    wait_line,
 )
 from .guide import VOICEHOOK_GUIDE, agent_refs
 from .history import HistoryKeeper
@@ -158,6 +162,9 @@ class RelayAgent(Agent):
             speakers = PrimarySpeakerFilter() if diarize_enabled() else None
         self.speakers = speakers
         self.agent_name: str | None = None  # Name des Agenten im Raum (clean_spoken)
+        # Per operator.say gesprochene Sätze des Agenten: llm_node markiert sie in der
+        # Kontextkopie als "[Name] ...", damit Delta sie nicht für eigene hält.
+        self.operator_said: list[str] = []
         # Verlauf (#9): letzte Wechsel + laufende Zusammenfassung (history.py). Ohne
         # Angabe nur kappen; der Worker gibt im Normalmodus den Gemini-Zusammenfasser mit.
         self.history = history if history is not None else HistoryKeeper(history_turns())
@@ -167,23 +174,39 @@ class RelayAgent(Agent):
     def llm_node(self, chat_ctx, tools, model_settings):  # noqa: ANN001, ANN201
         """Normal-Pipeline: Verlauf kappen/zusammenfassen (Instruktionen mit Kern,
         Persona und Status bleiben immer) und Deltas eigene Ausgabe bereinigen
-        (Markdown, Emojis, "Operator" -> Name). Live nutzt diesen Knoten nicht."""
+        (Markdown, Emojis, "Operator" -> Name). Agentensätze werden nur in der Kopie
+        markiert ("[Claude] ..." als user-Turn), der gespeicherte Verlauf bleibt. Live nutzt diesen
+        Knoten nicht."""
         items = list(chat_ctx.items)
         ctx = chat_ctx.copy()
-        ctx.items = with_clock(self.history.context(items), self.now())
+        window = mark_agent_items(self.history.context(items), self.operator_said, self.agent_name)
+        ctx.items = with_clock(window, self.now())
         return self._clean_stream(Agent.default.llm_node(self, ctx, tools, model_settings), items)
 
     async def _clean_stream(self, stream, items):  # noqa: ANN001, ANN202
+        """Bereinigen; ist die erste Zeile ein Wartesatz, nach ihr kappen (core.FirstLine):
+        gegen gestapelte Wartesätze entscheidet der Code, nicht der Prompt. Echte Antworten
+        aus Status/Wissen laufen vollständig durch (Zeilen verbunden)."""
         self.history.begin()
+        first = FirstLine(agent_mark(self.agent_name), wait_line(self.agent_name))
         try:
             async for chunk in stream:
                 if isinstance(chunk, str):
-                    yield clean_spoken(chunk, self.agent_name)
+                    text = first.feed(chunk)
+                    if text:
+                        yield clean_spoken(text, self.agent_name)
+                    if first.done:
+                        break
                     continue
                 delta = getattr(chunk, "delta", None) if isinstance(chunk, lk_llm.ChatChunk) else None
                 if delta is not None and delta.content:
-                    delta.content = clean_spoken(delta.content, self.agent_name)
+                    delta.content = clean_spoken(first.feed(delta.content), self.agent_name)
                 yield chunk
+                if first.done:
+                    break
+            rest = first.flush()
+            if rest:
+                yield clean_spoken(rest, self.agent_name)
         finally:
             self.history.end(items)  # nach der Antwort: Zusammenfassung im Hintergrund
 
@@ -355,6 +378,10 @@ def build_relay_handlers(
             operator_handles.add(id(handle))
         operator_texts.append(text)
         del operator_texts[:-20]
+        said = getattr(agent, "operator_said", None)
+        if isinstance(said, list):  # llm_node markiert diese Sätze als "[Name] ..."
+            said.append(text)
+            del said[:-50]
 
     def _drop_hold() -> None:
         task = held["task"]
@@ -455,7 +482,8 @@ def build_relay_handlers(
 
     # Werksrolle (voicehook-Guide) vs. Agent im Raum. Lock: Join/Leave/Persona dürfen
     # sich beim Umschalten nicht überholen (jedes Umschalten awaitet das Modell).
-    role = {"agent": False, "persona": None, "name": None, "board": None, "unreachable": False,
+    role = {"agent": False, "persona": None, "name": None, "user": None, "board": None,
+            "unreachable": False,
             "board_at": None, "board_stale": False}
     role_lock = asyncio.Lock()
     _now = clock or (lambda: asyncio.get_running_loop().time())
@@ -486,7 +514,7 @@ def build_relay_handlers(
             status += board_stale_note(name, mins)
         if role["unreachable"]:
             status += unreachable_block(name)
-        return compose(core_normal(name), layer, status)
+        return compose(core_normal(name, role["user"]), layer, status)
 
     def _clock_now():  # noqa: ANN202
         fn = getattr(agent, "now", None)
@@ -502,33 +530,39 @@ def build_relay_handlers(
         else:
             await agent.update_instructions(normal_instructions)
 
-    async def on_agent_presence(present: bool, name: str | None = None) -> None:
+    async def on_agent_presence(present: bool, name: str | None = None,
+                                user: str | None = None) -> None:
         """Externer Agent kommt (Werksrolle aus) oder geht (Werksrolle wieder an).
 
         `name`: Anzeigename des zuletzt beigetretenen Agenten (guide.agent_display_name,
         None = "dein Agent"). Wechselt er bei anwesendem Agent (zweiter Agent kommt,
         vh.name ändert sich), werden die Wartesätze live mit dem neuen Namen gesetzt.
-        Eine Operator-Persona ersetzt weiterhin alles: kommt sie vor dem Umschalten,
-        bleibt sie stehen. Geht der letzte Agent, gilt wieder die Werksrolle.
+        `user`: Name des Nutzers (vh.user, CLI --username), steht dann im Kern.
+        Eine Operator-Persona bleibt stehen, der Kern wird aber mit Namen neu gesetzt
+        (Bug 02.10.: Persona kam 1,3 s vor der Presence, Name blieb None). Geht der
+        letzte Agent, gilt wieder die Werksrolle.
         """
         from .live import LIVE_AGENT_LEFT_USER, live_agent_joined_user
 
         name = name if present else None
+        user = user if present else None
         async with role_lock:
-            if present == role["agent"] and name == role["name"]:
+            if present == role["agent"] and name == role["name"] and user == role["user"]:
                 return
             joined = present and not role["agent"]
             role["agent"] = present
             role["name"] = name
+            role["user"] = user
             agent.agent_name = name
             if joined or not present:
                 alive.reset()  # neuer Agent: eigenes Lebenszeichen abwarten (legacy bis dahin)
                 role["unreachable"] = False
             if present:
+                await _set_role(_normal_instructions(), live_agent_joined_user(name, user))
                 if role["persona"]:
-                    logger.info("[role] agent present (%s), operator persona bleibt", name or "-")
+                    logger.info("[role] agent present (%s), operator persona bleibt, Kern mit "
+                                "Namen neu gesetzt", name or "-")
                     return
-                await _set_role(_normal_instructions(), live_agent_joined_user(name))
                 logger.info("[role] agent %s (%s), Werksrolle aus%s",
                             "joined" if joined else "renamed", name or "-", " (live)" if live else "")
             else:

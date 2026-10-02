@@ -18,6 +18,7 @@ import pytest
 from livekit.agents import Agent, llm
 
 from agent import live
+from agent.board import board_block
 from agent.core import (
     CORE_ANCHOR,
     DEFAULT_HISTORY_TURNS,
@@ -105,7 +106,8 @@ async def test_positivkontrolle_override_persona_cannot_remove_core():
 # ===== Kern + Schichtung ==============================================================
 def test_core_lengths_under_budget():
     for name in (None, "Claude"):
-        assert len(core_normal(name)) <= 1200 and len(core_live(name)) <= 1200
+        # 1600: Regel 3 neu, Status vorlesen, Regel 8 (Oliver 02.10.) + [Name] + Nutzername
+        assert len(core_normal(name, "Oliver")) <= 1600 and len(core_live(name, "Oliver")) <= 1600
 
 
 def test_compose_order_core_role_status_anchor():
@@ -117,8 +119,9 @@ def test_compose_order_core_role_status_anchor():
 def test_core_text_matches_delta_core_md():
     # Kerntext 1:1 aus DELTA_CORE.md 3a (Platzhalter ersetzt)
     t = core_normal("Claude")
-    assert '"Kurz Moment.", "Ich frag Claude kurz.", "Sekunde, Claude schaut nach."' in t
-    assert '"Claude baut gerade den Fix."' in t and "Was Claude sagt, ist die Antwort" in t
+    assert ('genau einen kurzen Wartesatz, z. B. "Moment, Claude schaut.", und sonst nichts: '
+            "keine zweite Zeile, kein erfundener Fortschritt.\n") in t
+    assert "Was Claude sagt, ist die Antwort" in t
 
 
 def test_live_core_in_system_instruction_first():
@@ -132,12 +135,14 @@ def test_t1_t2_capability_rule_in_all_prompts():
         assert "beantwortest du nie selbst" in t
 
 
-# ===== T3 Wartesätze wechselnd ========================================================
-def test_t3_wait_lines_vary():
-    t = core_normal("Claude")
-    waits = re.findall(r'"([^"]{5,40})"', t.split("3. ", 1)[1].split("\n", 1)[0])
-    assert len(set(waits)) >= 3 and all(len(w) <= 40 for w in waits)
-    assert "nie zweimal derselbe" in t and "jedes Mal anders" in core_live("Claude")
+# ===== T3 genau ein Wartesatz, kein erfundener Fortschritt (fix/delta-core-rule3) =====
+def test_t3_single_wait_line_no_invented_progress():
+    for t in (core_normal("Claude"), core_live("Claude")):
+        rule = t.split("Steht etwas im Status", 1)[1].split("\n", 1)[0]
+        assert re.findall(r'"([^"]+)"', rule) == ["Moment, Claude schaut."]
+        assert "kurze" in rule and "kein erfundener Fortschritt" in rule
+        assert "baut gerade den Fix" not in t and "nie zweimal derselbe" not in t
+        assert "jedes Mal anders" not in t
 
 
 # ===== T4 nie "Operator", Name des Agenten ============================================
@@ -215,7 +220,7 @@ async def test_t9_status_after_persona_before_anchor():
     await h.on_status(_pkt({"doing": "baut den Ring-Fix"}, "operator.status"))
     t = _last(agent)
     _assert_core_first(t)
-    assert t.index("Projekt Ring.") < t.index("Gerade: baut den Ring-Fix.") < t.index(CORE_ANCHOR)
+    assert t.index("Projekt Ring.") < t.index("macht gerade: baut den Ring-Fix.") < t.index(CORE_ANCHOR)
 
 
 @pytest.mark.asyncio
@@ -482,10 +487,18 @@ async def test_llm_node_uses_keeper_context(monkeypatch):
 
 
 # ===== #9b Denk-Budget =================================================================
-def test_thinking_budget_default_zero(monkeypatch):
+def test_thinking_budget_default_128(monkeypatch):
+    # -1 machte Delta im Prod-Call stumm (4,4-6,7 s), 0 antwortete bei vollem Status zu oft
+    # nur "Moment" (Repro fix/delta-core-rule3)
     monkeypatch.delenv("VOICEHOOK_LLM_THINKING_BUDGET", raising=False)
-    assert thinking_budget() == 0
+    assert thinking_budget() == 128
+    assert thinking_kwargs() == {"thinking_config": {"thinking_budget": 128}}
+    monkeypatch.setenv("VOICEHOOK_LLM_THINKING_BUDGET", "0")      # Env-Schalter bleibt
     assert thinking_kwargs() == {"thinking_config": {"thinking_budget": 0}}
+    monkeypatch.setenv("VOICEHOOK_LLM_THINKING_BUDGET", "kaputt")
+    assert thinking_budget() == 128
+    monkeypatch.setenv("VOICEHOOK_LLM_THINKING_BUDGET", "-1")
+    assert thinking_budget() == -1
     monkeypatch.setenv("VOICEHOOK_LLM_THINKING_BUDGET", "512")
     assert thinking_budget() == 512
     monkeypatch.setenv("VOICEHOOK_LLM_THINKING_BUDGET", "off")
@@ -563,7 +576,7 @@ def test_live_t6_short_no_markdown():
 @pytest.mark.live_llm
 @_LIVE
 def test_live_t9_status_answer_from_board():
-    board = " Aktueller Stand von Claude (ersetzt jeden früheren Stand): Gerade: baut den Ring-Fix."
+    board = board_block({"doing": "baut den Ring-Fix", "open": [], "done": []}, "Claude")
     a = _ask(_claude_prompt(board=board), ["Was macht Claude gerade?"])[0]
     assert "Ring" in a and "Claude" in a, a
 

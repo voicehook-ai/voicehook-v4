@@ -109,6 +109,18 @@ def operator_agent_name(room: Any) -> str | None:
     return agent_display_name(attrs.get("vh.name") or getattr(last, "name", None) or "")
 
 
+def operator_user_name(room: Any) -> str | None:
+    """Name des Nutzers, wie ihn der zuletzt beigetretene Agent meldet (vh.user, CLI
+    --username). Gleiche Bereinigung wie der Agentenname; ohne Angabe None."""
+    from .guide import agent_display_name
+
+    agents = [p for p in room.remote_participants.values() if is_operator_agent(p)]
+    if not agents:
+        return None
+    attrs = getattr(agents[-1], "attributes", None) or {}
+    return agent_display_name(attrs.get("vh.user") or "")
+
+
 def _positive_env_seconds(name: str, default: float) -> float:
     raw = os.environ.get(name, "")
     try:
@@ -772,7 +784,8 @@ async def entrypoint(ctx: JobContext) -> None:
     # ist, auch ohne Persona-Push; geht der letzte Agent, ist sie wieder an.
     def _sync_role(*_args) -> None:  # noqa: ANN002
         asyncio.create_task(handlers.on_agent_presence(
-            operator_agent_present(ctx.room), operator_agent_name(ctx.room)))
+            operator_agent_present(ctx.room), operator_agent_name(ctx.room),
+            operator_user_name(ctx.room)))
 
     for _ev in ("participant_connected", "participant_disconnected", "participant_attributes_changed"):
         ctx.room.on(_ev, _sync_role)
@@ -989,7 +1002,8 @@ async def entrypoint(ctx: JobContext) -> None:
         room_options=room_io.RoomOptions(close_on_disconnect=True, delete_room_on_close=False),
     )
     # Agent war schon vor voice-ai im Raum (Operator-Join dispatcht voice-ai erst)
-    await handlers.on_agent_presence(operator_agent_present(ctx.room), operator_agent_name(ctx.room))
+    await handlers.on_agent_presence(operator_agent_present(ctx.room), operator_agent_name(ctx.room),
+                                     operator_user_name(ctx.room))
 
 
 def build_worker_options() -> WorkerOptions:

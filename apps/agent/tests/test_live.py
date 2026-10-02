@@ -331,5 +331,5 @@ def test_base_prompts_defer_capability_questions_to_operator():
     from agent.relay import DEFAULT_PERSONA
 
     for t in (live.LIVE_BASE_INSTRUCTIONS, DEFAULT_PERSONA):
-        assert "Ich frag deinen Agenten kurz." in t
+        assert "Moment, dein Agent schaut." in t
         assert "Zugriff hast" in t and "beantwortest du nie selbst" in t
