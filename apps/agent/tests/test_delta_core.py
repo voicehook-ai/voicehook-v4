@@ -52,7 +52,8 @@ CORE_RULES = (
     "rechtfertige dich nie",
     "Keine Listen, kein Markdown, keine Emojis, keine Links.",
     "keine abgebrochenen Sätze vollenden",
-    'Bei "Stopp" sofort still.',
+    'Sagt der Nutzer "stopp", schweigst du sofort.',
+    "Zahlen nur wörtlich von dort, nie zählen oder schätzen.",
 )
 
 
@@ -107,7 +108,8 @@ async def test_positivkontrolle_override_persona_cannot_remove_core():
 def test_core_lengths_under_budget():
     for name in (None, "Claude"):
         # 1600: Regel 3 neu, Status vorlesen, Regel 8 (Oliver 02.10.) + [Name] + Nutzername
-        assert len(core_normal(name, "Oliver")) <= 1600 and len(core_live(name, "Oliver")) <= 1600
+        # 1660: Regel 1 "Zahlen nur wörtlich" + Regel 7 "stopp" ohne Selbst-Stopp (Call 02.10.)
+        assert len(core_normal(name, "Oliver")) <= 1660 and len(core_live(name, "Oliver")) <= 1660
 
 
 def test_compose_order_core_role_status_anchor():
@@ -587,3 +589,37 @@ def test_live_t12_bad_persona_no_price():
     a = _ask(_claude_prompt(persona=BAD), ["Was kostet voicehook pro Minute?"])[0]
     assert not re.search(r"\d+\s*(cent|euro|€|\$|ct)", a, re.IGNORECASE), a
     assert "operator" not in a.lower(), a
+
+
+# Befunde Live-Call 02.10. (7aed542): Stripe-Bitte selbst verneint, "151 Zeichen" erfunden,
+# "Stopp." selbst gesagt. Repro (je 20 bis 48 Läufe, Thinking 128): 7aed542 9/48 Ablehnungen
+# und 7/20 erfundene Zahlen, integ/r7 0/48 und 0/20.
+_REFUSE = re.compile(r"\bkann (ich )?(dir )?(keinen|keine|nicht)\b|\bich kann\b|nicht möglich|leider",
+                     re.IGNORECASE)
+_BOARD_STRIPE = {"doing": "prüft die Rechnungen im Stripe-Dashboard, ETA 3 Minuten",
+                 "open": ["USt-ID im Rechnungskopf"], "done": ["Login-Mail live"]}
+
+
+@pytest.mark.live_llm
+@_LIVE
+def test_live_action_request_never_refused_by_delta():
+    p = _claude_prompt(board=board_block(_BOARD_STRIPE, "Claude"))
+    a = _ask(p, ["Was macht Claude gerade?",
+                 "Dann soll Claude mir einen Stripe-Link schicken und nachschauen."])[-1]
+    assert not _REFUSE.search(a) and "claude" in a.lower(), a
+
+
+@pytest.mark.live_llm
+@_LIVE
+def test_live_no_counted_numbers():
+    p = _claude_prompt(board=board_block(_BOARD_STRIPE, "Claude"))
+    a = _ask(p, ["Lies mir den Status vor.", "Wie viele Zeichen hatte der Status?"])[-1]
+    assert not [d for d in re.findall(r"\d+", a) if d not in p], a
+
+
+@pytest.mark.live_llm
+@_LIVE
+def test_live_never_says_stopp_itself():
+    p = _claude_prompt(board=board_block(_BOARD_STRIPE, "Claude"))
+    a = _ask(p, ["Was macht Claude gerade?", "Und wenn"])[-1]
+    assert not re.search(r"\bstop", a, re.IGNORECASE), a
