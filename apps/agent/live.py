@@ -203,6 +203,18 @@ LIVE_PERSONA_USER = live_persona_user("{text}")
 
 # Platzhalter, die Gemini statt echter Sprache als Transkript liefert
 NO_SPEECH_MARKERS = ("<no speech detected>", "&lt;no speech detected&gt;")
+# Varianten: "<no speech>{pause}" (Live 02.10.2026, Raum vivid-orbit-fresh-V32N),
+# "<no speech detected>", HTML-escaped, "{pause}" allein. Nur Platzhalter, keine Wörter.
+_NO_SPEECH_RE = re.compile(
+    r"^(?:\s|<[^<>]*\bno\s*speech\b[^<>]*>|&lt;[^&]*\bno\s*speech\b[^&]*&gt;|\{[a-z_ ]*\})+$",
+    re.IGNORECASE,
+)
+
+
+def is_no_speech(text: str) -> bool:
+    """True, wenn das Transkript nur aus Gemini-Platzhaltern besteht (kein echtes Wort)."""
+    t = (text or "").strip()
+    return bool(t) and (t in NO_SPEECH_MARKERS or bool(_NO_SPEECH_RE.match(t)))
 
 # Stand aller Preise in dieser Datei (live auf den offiziellen Preisseiten geprüft)
 PRICES_AS_OF = "2026-09-30"
