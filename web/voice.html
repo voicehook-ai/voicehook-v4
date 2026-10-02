@@ -2365,7 +2365,9 @@ if (VH_PHONE) {
   VH_AKKU_PRESET.normal = { pc: VH_PHONE_DEF['particle-count'], size: s0 };
   VH_AKKU_PRESET.high   = { pc: 0.20, size: +(s0 * 0.85).toFixed(3) };
   VH_AKKU_PRESET.ultra  = { pc: 0.35, size: +(s0 * 0.75).toFixed(3) };
-  Object.assign(VH_AKKU_PRESET_PAT, { eco: 0.20, normal: 0.30, high: 0.45, ultra: 0.60 });
+  // Handy-Muster höchstens ~1,5x der Paletten-Stufe (02.10.: Normal 0,30 = 12000
+  // Partikel kostete auf dem iPhone x4,8 Bildzeit; ab 0,15 ist das Fell lesbar).
+  Object.assign(VH_AKKU_PRESET_PAT, { eco: 0.10, normal: 0.15, high: 0.30, ultra: 0.50 });
 }
 const VH_AKKU_CUSTOM_KEY = 'vh-akku-custom-v1';
 // "Eigene" (Regler von Hand verstellt): der Deckel der Stufe entfällt, der Regler
@@ -2458,21 +2460,24 @@ function vhPcSet(v) {
   vhSyncDrawRange();
   try { window.vhDesignSync && window.vhDesignSync('ranges'); } catch (_) {}
 }
-// Style-Wechsel: Muster-Styles bekommen ihren Partikel-Standard sichtbar in den
-// Regler (ohne "Eigene": Preset der Stufe; mit "Eigene": mindestens VH_FUR_PC beim
-// Wechsel von Palette auf Muster). Zurück auf eine Palette: der Wert von vorher.
+// Style-Wechsel (zentrale Regel, einziger Aufrufer: applyPalette): der Partikel-Regler
+// gehört zum Style-TYP. Palette -> Muster: Wert der Palette merken (vhPcPalette),
+// Muster-Preset der Stufe setzen ("Eigene": eigener Wert, mindestens das Preset).
+// Muster -> Palette: IMMER den gemerkten Paletten-Wert zurück, auch unter "Eigene"
+// (Bug 02.10.: unter "Eigene" blieb der Fell-Wert 0,6 = 24000 Partikel in Delta
+// hängen, Ring überblendet und auf dem Handy Bildzeit x8). Ohne gemerkten Wert:
+// Paletten-Preset der Stufe. Muster -> Muster: Regler bleibt.
 let vhPcPalette = null;   // Regler-Wert des Paletten-Styles vor dem Wechsel auf ein Muster
 function vhPcForStyle(prevPat) {
   const pat = !!spatialMode, cur = parseFloat(particleInput.value);
   if (pat) {
-    if (!prevPat && vhPcPalette === null) vhPcPalette = cur;
-    const fs = VH_FUR_STYLE[lastPaletteForSpatial];
-    let want = cur;
-    if (!vhAkkuCustomOn) want = VH_AKKU_PRESET_PAT[vhAkku] || VH_FUR_PC;
-    else if (!prevPat) want = Math.max(cur, (fs && fs.pc) || VH_FUR_PC);
+    if (prevPat) return;
+    if (vhPcPalette === null) vhPcPalette = cur;
+    const preset = VH_AKKU_PRESET_PAT[vhAkku] || VH_FUR_PC;
+    const want = vhAkkuCustomOn ? Math.max(cur, preset) : preset;
     if (want !== cur) vhPcSet(want);
   } else if (prevPat) {
-    if (!vhAkkuCustomOn) vhPcSet(vhPcPalette !== null ? vhPcPalette : (VH_AKKU_PRESET[vhAkku] || VH_AKKU_PRESET.normal).pc);
+    vhPcSet(vhPcPalette !== null ? vhPcPalette : (VH_AKKU_PRESET[vhAkku] || VH_AKKU_PRESET.normal).pc);
     vhPcPalette = null;
   }
 }
@@ -4114,6 +4119,7 @@ let lastPaletteForSpatial = null;
 function applyPalette(pal) {
   const p = PALETTES[pal];
   if (!p) return;
+  const prevPat = !!spatialMode;
   lastPaletteForSpatial = pal;
   hueStart  = p.hueStart;
   hueRange  = p.hueRange;
@@ -4173,6 +4179,7 @@ function applyPalette(pal) {
   vhApplySpeakerColorsToTranscript();
   applyThemeBg();   // Blending folgt dem Style (Fell: NormalBlending)
   if (typeof vhApplyBright === 'function') vhApplyBright();   // Basis-Helligkeit des Styles
+  vhPcForStyle(prevPat);   // Partikel folgen dem Style-Typ (zentral, alle Aufrufer)
 }
 // Issue #1: when user explicitly picks a palette via swatch click, pin it so
 // auto-paths (vhActivateCallPalette / vhRestorePalette / vhSetSpeaker / applyProfile)
@@ -4188,8 +4195,7 @@ let vhActiveColorTarget = 'user';
 function vhApplyPaletteToTarget(pal) {
   if (!PALETTES[pal]) return false;
   vhUserPalettePinned = true;   // keep auto-paths off the user's choices
-  const prevPat = !!spatialMode;
-  try { applyPalette(pal); vhPcForStyle(prevPat); } catch (_) {}
+  try { applyPalette(pal); } catch (_) {}
   return true;
 }
 // Hue-Slider (nur im ausgeblendeten Panel): Feinjustage des Kringels, die
@@ -4464,8 +4470,7 @@ function vhApplyRandom(rng, forcePattern) {
   const pal = vhRandomPalette(vhOriginOf(lastPalette), rng, forcePattern);
   vhRegisterPalette('rnd', pal);
   try { localStorage.setItem(VH_RND_KEY, JSON.stringify(pal)); } catch (_) {}
-  applyPalette('rnd');
-  vhPcForStyle(!!prevSpatial);
+  applyPalette('rnd');   // Partikel folgen dem Style-Typ in applyPalette
   lastPalette = 'rnd';
   vhUserPalettePinned = true;
   if (from && prevSpatial === spatialMode) vhTweenDiscrete(from[0], from[1], from[2]);
@@ -4543,7 +4548,7 @@ function applyProfile(mode) {
   if (p.size   !== undefined) { sizeInput.value = p.size;         mat.size  = p.size; }
   // Issue #1: don't stomp on a user-pinned palette via mode-switch
   if (!vhUserPalettePinned) { applyPalette(p.palette); lastPalette = p.palette; }
-  if (spatialMode) { vhPcPalette = pcVal; vhPcForStyle(true); }   // Muster: Preset statt Profilwert
+  if (spatialMode) { vhPcPalette = pcVal; vhPcSet(VH_AKKU_PRESET_PAT[vhAkku] || VH_FUR_PC); }   // Muster: Preset statt Profilwert
   // Beim Switch in einen kleineren activeN-Bereich: alle Partikel zurück zur
   // Origin-Position setzen + velocity nullen — sonst frieren die nun inaktiven
   // Partikel an ihrer letzten Audio-getriebenen Position außerhalb des Kreises.
@@ -6682,9 +6687,7 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
   };
   sws.forEach(b => b.addEventListener('click', () => {
     activeMy = null;
-    const prevPat = !!spatialMode;
     applyPalette(b.dataset.pal); lastPalette = b.dataset.pal; vhUserPalettePinned = true;
-    vhPcForStyle(prevPat);
     saveState(); markSw();
   }));
   // Akku-Stufe
@@ -8130,16 +8133,22 @@ html.vh-phone body > canvas.vhm-notr{transition:none;}
       var q = el.getBoundingClientRect(); if (q.height > 0 && q.top < bot && q.top > top) bot = q.top;
     });
     // Dock-Oberkante; das Transkript-Sheet zählt mit seiner Zielhöhe (Animation läuft noch)
-    var wrap = $('vh-transcript-wrap'), ts = $('vhm-ts');
+    var wrap = $('vh-transcript-wrap'), ts = $('vhm-ts'), dock = bot, sheet = false;
     if (wrap && getComputedStyle(wrap).visibility !== 'hidden') {
       var wq = wrap.getBoundingClientRect();
       if (wq.height > 0) { var wt = wq.top + (ts && ts.offsetHeight ? ts.getBoundingClientRect().height - S.th : 0); if (wt > top && wt < bot) bot = wt; }
     }
     var dp = $('vh-design-panel');
-    if (dp && !dp.hidden) { var dq = dp.getBoundingClientRect(); if (dq.top > top && dq.top < bot) bot = dq.top; }
+    if (dp && !dp.hidden) { var dq = dp.getBoundingClientRect(); if (dq.top > top && dq.top < bot) bot = dq.top; sheet = true; }
+    if (S.open) sheet = true;
     bot -= 8;
     var rh = r.bottom - r.top, rw = r.right - r.left, avail = Math.max(60, bot - top);
-    var s = rw > innerWidth * 1.02 ? 1 : Math.min(1, avail / rh, (innerWidth - 16) / rw);
+    // Offenes Sheet (Design, Transkript offen): der ganze Ring passt in die Fläche
+    // darüber, mit Rand für den Ausschlag der Animation (Ring-Puls und Bewegung
+    // schieben die Punkte ~10 % je Seite über die Ruhekante; Bug 02.10.: Ring links
+    // und rechts beschnitten). Ohne Sheet bleibt der kalibrierte Standard.
+    var M = sheet ? 1.2 : 1;
+    var s = (!sheet && rw > innerWidth * 1.02) ? 1 : Math.min(1, avail / (rh * M), (innerWidth - 16) / (rw * M));
     var cy0 = (r.top + r.bottom) / 2, cx0 = (r.left + r.right) / 2, cy = (top + bot) / 2;
     var tf = 'translateY(' + (cy - cy0).toFixed(1) + 'px) scale(' + s.toFixed(4) + ')';
     var org = cx0.toFixed(1) + 'px ' + cy0.toFixed(1) + 'px';
