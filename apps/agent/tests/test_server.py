@@ -192,6 +192,20 @@ def test_invite1_carries_operator_name_and_model(monkeypatch):
     assert p["attributes"] == {"vh.role": "agent", "vh.name": "Claude", "vh.model": "opus-5.5"}
 
 
+def test_invite1_carries_username_as_vh_user(monkeypatch):
+    """fix/delta-core-rule3: CLI --username -> vh.user -> "Der Nutzer heißt ..." im Kern."""
+    import agent.server as srv
+    monkeypatch.setattr(srv, "_ensure_agent_dispatched", lambda *a, **k: None)
+    c = TestClient(app)
+    r = c.get("/api/token", params={
+        "room": "user-room", "identity": "claude-box-ab12", "invite": "1",
+        "name": "Claude", "model": "opus-5.5", "username": "Oliver",
+    })
+    assert r.status_code == 200
+    assert _jwt_payload(r.json()["token"])["attributes"] == {
+        "vh.role": "agent", "vh.name": "Claude", "vh.model": "opus-5.5", "vh.user": "Oliver"}
+
+
 def test_invite1_without_self_report_still_mints(monkeypatch):
     import agent.server as srv
     monkeypatch.setattr(srv, "_ensure_agent_dispatched", lambda *a, **k: None)

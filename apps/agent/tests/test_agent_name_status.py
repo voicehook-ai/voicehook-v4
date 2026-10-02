@@ -127,12 +127,12 @@ async def test_normal_join_names_agent_and_switches_on_new_agent():
     h = build_relay_handlers(MagicMock(), agent)
     await h.on_agent_presence(True, "Claude")
     t = agent.update_instructions.await_args.args[0]
-    assert "Ich frag Claude kurz." in t and "Sekunde, Claude schaut nach." in t
+    assert "Moment, Claude schaut." in t
     assert "deinen Agenten" not in t and "dein Agent" not in t
     await h.on_agent_presence(True, "Claude")            # gleiches Event: idempotent
     assert agent.update_instructions.await_count == 1
     await h.on_agent_presence(True, "Hermes")            # neuer zuletzt beigetretener Agent
-    assert "Ich frag Hermes kurz." in agent.update_instructions.await_args.args[0]
+    assert "Moment, Hermes schaut." in agent.update_instructions.await_args.args[0]
     await h.on_agent_presence(False)
     assert agent.update_instructions.await_args.args[0] == DEFAULT_PERSONA
 
@@ -143,7 +143,7 @@ async def test_normal_join_without_name_falls_back():
     h = build_relay_handlers(MagicMock(), agent)
     await h.on_agent_presence(True, None)
     t = agent.update_instructions.await_args.args[0]
-    assert t == OPERATOR_PERSONA and "Ich frag deinen Agenten kurz." in t
+    assert t == OPERATOR_PERSONA and "Moment, dein Agent schaut." in t
 
 
 @pytest.mark.asyncio
@@ -153,12 +153,31 @@ async def test_live_join_names_agent_in_user_turn():
     await h.on_agent_presence(True, "Claude")
     turn = agent.chat_ctx.items[-1].text_content
     assert turn.startswith("[System] Claude ist jetzt im Raum.")
-    assert "Ich frag Claude kurz." in turn
+    assert "Moment, Claude schaut." in turn
     agent.update_instructions.assert_not_awaited()
 
 
 # ----- Board: Budget, Ersetzen, Rate-Limit, Nachfrage ---------------------------------
-def test_board_budget_cuts_done_first_then_open():
+def test_board_budget_default_2000_and_env(monkeypatch):
+    from agent.board import board_budget
+    monkeypatch.delenv("VOICEHOOK_BOARD_BUDGET", raising=False)
+    assert BOARD_BUDGET == 2000 and board_budget() == 2000
+    long = "x" * 110
+    full = {"doing": "baut den Login, ETA 15 Uhr", "open": [f"o{i} {long}" for i in range(8)],
+            "done": [f"d{i} {long}" for i in range(8)]}
+    b = normalize_board(full)
+    size = len(b["doing"]) + sum(map(len, b["open"])) + sum(map(len, b["done"]))
+    assert 1800 < size <= 2000 and len(b["open"]) == 8      # 600 hätte offene gekappt
+    for bad in ("0", "-5", "abc"):
+        monkeypatch.setenv("VOICEHOOK_BOARD_BUDGET", bad)
+        assert board_budget() == 2000
+    monkeypatch.setenv("VOICEHOOK_BOARD_BUDGET", "600")
+    assert board_budget() == 600
+
+
+def test_board_budget_cuts_done_first_then_open(monkeypatch):
+    monkeypatch.setenv("VOICEHOOK_BOARD_BUDGET", "600")       # Kappung bei kleinem Budget
+    BOARD_BUDGET = 600  # noqa: N806
     long = "x" * 100
     b = normalize_board({"doing": "baut", "open": [f"o{i} {long}" for i in range(4)],
                          "done": [f"d{i} {long}" for i in range(4)]})
@@ -203,8 +222,9 @@ async def test_normal_status_replaces_never_appends():
         lengths.append(len(agent.update_instructions.await_args.args[0]))
     t = agent.update_instructions.await_args.args[0]
     assert len(set(lengths)) == 1                                 # Länge konstant
-    assert t.count("Aktueller Stand von Claude") == 1 and "Schritt 49" in t and "Schritt 48" not in t
-    assert "Kurz Moment, Claude baut gerade Schritt 49." in t     # Name + Status
+    assert t.count("Status von Claude") == 1 and "Schritt 49" in t and "Schritt 48" not in t
+    assert "macht gerade: baut gerade Schritt 49" in t           # Wissen, keine Sprechformel
+    assert "Kurz Moment" not in t
     clock.t += 6
     await h.on_status(_pkt({"doing": "fertig"}))
     assert agent.update_instructions.await_args.args[0] == operator_persona("Claude")
@@ -223,8 +243,40 @@ async def test_live_status_replaces_turn_in_local_context():
         counts.append(len(agent.chat_ctx.items))
     assert len(set(counts)) == 1                                  # Kontext wächst nicht
     status = [i for i in agent.chat_ctx.items if i.id.startswith("vh-status-")]
-    assert len(status) == 1 and "Claude baut Schritt 49" in status[0].text_content
+    assert len(status) == 1 and "Status von Claude" in status[0].text_content
+    assert "macht gerade: baut Schritt 49" in status[0].text_content
     agent.update_instructions.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_big_board_replaces_never_stacks_normal_and_live(monkeypatch):
+    monkeypatch.delenv("VOICEHOOK_BOARD_BUDGET", raising=False)
+    big = lambda i: {"doing": f"baut Schritt {i}, ETA 15 Uhr",  # noqa: E731
+                     "open": [f"offen {i}.{k} " + "y" * 100 for k in range(8)],
+                     "done": [f"fertig {i}.{k} " + "z" * 100 for k in range(8)]}
+    live_agent, clock = _live_agent(), _Clock()
+    h = build_relay_handlers(MagicMock(), live_agent, live=True, clock=clock)
+    await h.on_agent_presence(True, "Claude")
+    lens = []
+    for i in range(10):
+        clock.t += 6
+        await h.on_status(_pkt(big(i)))
+        lens.append(len(live_agent.chat_ctx.items))
+    status = [i for i in live_agent.chat_ctx.items if i.id.startswith("vh-status-")]
+    assert len(set(lens)) == 1 and len(status) == 1
+    assert "Schritt 9" in status[0].text_content and "offen 9.7" in status[0].text_content
+    assert "Schritt 8" not in status[0].text_content
+    agent, clock = _normal(), _Clock()
+    h = build_relay_handlers(MagicMock(), agent, clock=clock)
+    await h.on_agent_presence(True, "Claude")
+    sizes = []
+    for i in range(10):
+        clock.t += 6
+        await h.on_status(_pkt(big(i)))
+        sizes.append(len(agent.update_instructions.await_args.args[0]))
+    t = agent.update_instructions.await_args.args[0]
+    assert max(sizes) - min(sizes) <= 2 and t.count("Status von Claude") == 1
+    assert "offen 9.7" in t and "Schritt 8," not in t
 
 
 @pytest.mark.asyncio
@@ -242,7 +294,7 @@ async def test_status_rate_limit_last_one_wins():
     await asyncio.sleep(0.1)
     assert agent.update_instructions.await_count == 3            # genau ein weiteres Update
     t = agent.update_instructions.await_args.args[0]
-    assert "Gerade: vier." in t and "Gerade: zwei." not in t and "Gerade: drei." not in t
+    assert "macht gerade: vier." in t and "gerade: zwei" not in t and "gerade: drei" not in t
 
 
 @pytest.mark.parametrize("q", ["Was macht Claude gerade?", "wie weit bist du?", "Wie ist der Stand?",
@@ -303,11 +355,11 @@ async def test_status_answer_window_expires():
     ("live_joined_claude", live.live_agent_joined_user("Claude")),
 ])
 def test_prompts_forbid_excuses_and_vary_handoff(label, text):
-    # seit dem Delta-Kern: Rechtfertigungsverbot + wechselnde Wartesätze stehen im Kern
+    # seit dem Delta-Kern: Rechtfertigungsverbot + genau ein Wartesatz stehen im Kern
     assert "rechtfertige dich nie" in text, label
-    name = "Claude" if "claude" in label else "deinen Agenten"
-    assert f"Ich frag {name} kurz." in text
-    assert ("nie zweimal derselbe" in text) or ("jedes Mal anders" in text)
+    name = "Claude" if "claude" in label else "dein Agent"
+    assert f'"Moment, {name} schaut."' in text
+    assert "kurze" in text and "Wartesatz" in text and "kein erfundener Fortschritt" in text
 
 
 def test_handoff_variants_named():

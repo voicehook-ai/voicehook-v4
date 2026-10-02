@@ -4,7 +4,7 @@ Everything works with plain curl. The session token is a bearer secret and only
 ever travels in the `Authorization: Bearer <session>` header, never in a URL.
 
     POST /api/bridge/join    {invite_url | room [+ invite], name, model, identity?,
-                              greet?, persona?, force_persona?, idle_timeout?}
+                              username?, greet?, persona?, force_persona?, idle_timeout?}
                              -> {session, expires_in, room, identity, idle_timeout_s}
     GET  /api/bridge/next?timeout=60   one JSON object like CLI 0.5.0 `next`
     POST /api/bridge/say     {text, mode?}            like CLI `say`
@@ -57,6 +57,7 @@ class JoinRequest(BaseModel):
     invite: str | None = Field(None, max_length=512)
     name: str = Field(..., min_length=1, max_length=200)
     model: str = Field(..., min_length=1, max_length=200)
+    username: str | None = Field(None, max_length=200)  # Name des Nutzers -> vh.user
     identity: str | None = Field(None, max_length=128)
     greet: str | None = Field(None, max_length=2000)
     persona: str | None = Field(None, max_length=12000)
@@ -154,6 +155,7 @@ async def bridge_join(req: JoinRequest, request: Request) -> dict:
     tok = await asyncio.to_thread(
         srv.issue_token_get, room=room_name, identity=identity, invite="1",
         ttl_seconds=3600, name=req.name, model=req.model, op_invite=op_invite,
+        username=req.username or "",
     )
     lk_url = os.environ.get("VOICEHOOK_BRIDGE_LIVEKIT_URL") or tok.url
     slot = (room_name, ip)

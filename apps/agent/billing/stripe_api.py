@@ -40,6 +40,30 @@ INVOICE_PARAMS: dict = {
 }
 
 
+def account_tax_id() -> str:
+    """Eigene USt-ID des Verkäufers als Stripe-Tax-ID-Objekt (txi_...), z. B. für DE310620765.
+
+    Kein Secret, aber pro Konto verschieden (Live/Sandbox), deshalb Env statt Konstante.
+    Leer = Parameter entfällt, Stripe nimmt dann die Dashboard-Einstellung.
+    """
+    return os.environ.get("STRIPE_ACCOUNT_TAX_ID", "").strip()
+
+
+def invoice_params() -> dict:
+    """INVOICE_PARAMS (frische Kopie) plus, falls gesetzt, die eigene USt-ID auf der Rechnung.
+
+    invoice_creation.invoice_data.account_tax_ids setzt die Tax-ID des Kontos explizit auf
+    die Rechnung, unabhängig von der Dashboard-Voreinstellung:
+    https://docs.stripe.com/invoicing/taxes/account-tax-ids
+    https://docs.stripe.com/api/checkout/sessions/create#create_checkout_session-invoice_creation-invoice_data-account_tax_ids
+    """
+    params = {k: dict(v) for k, v in INVOICE_PARAMS.items()}
+    txi = account_tax_id()
+    if txi:
+        params["invoice_creation"]["invoice_data"] = {"account_tax_ids": [txi]}
+    return params
+
+
 class SignatureError(ValueError):
     pass
 

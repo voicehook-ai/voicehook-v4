@@ -115,7 +115,7 @@ def test_brevity_rule_never_cuts_operator_statements(mode):
 @pytest.mark.parametrize("mode", PROMPTS)
 def test_operator_rules_kept_and_scoped(mode):
     t = PROMPTS[mode]
-    assert "Ich frag deinen Agenten kurz." in t
+    assert "Moment, dein Agent schaut." in t
     assert "beantwortest du nie selbst" in t
     # ohne Agent: voicehook-Fragen aus dem Wissen, fremde Fähigkeiten nicht behaupten
     assert "Solange kein Agent im Raum ist" in t
@@ -194,7 +194,7 @@ def _persona_pkt(text):
 def test_neutral_prompts_carry_no_guide():
     for t in (OPERATOR_PERSONA, live.LIVE_CORE_INSTRUCTIONS):
         assert VOICEHOOK_GUIDE not in t and "Werksrolle" not in t and "Verkäufer" not in t
-        assert "Ich frag deinen Agenten kurz." in t
+        assert "Moment, dein Agent schaut." in t
     # Positivkontrolle: die Werks-Prompts tragen den Guide
     assert VOICEHOOK_GUIDE in DEFAULT_PERSONA and VOICEHOOK_GUIDE in live.LIVE_BASE_INSTRUCTIONS
     assert live.LIVE_BASE_INSTRUCTIONS.startswith(live.LIVE_CORE_INSTRUCTIONS)
@@ -229,12 +229,13 @@ async def test_live_agent_join_and_leave_switch_role_via_user_turn():
 async def test_persona_push_wins_over_join_switch_and_leave_restores_guide():
     agent, h = _normal_handlers()
     await h.on_persona(_persona_pkt("Du bist Coach"))
-    await h.on_agent_presence(True)                  # Persona steht schon: bleibt
-    assert agent.update_instructions.await_count == 1
+    await h.on_agent_presence(True)                  # Persona bleibt, Kern neu gesetzt
+    assert agent.update_instructions.await_count == 2
     await h.on_persona(_persona_pkt("Du bist Tutor"))
     await h.on_agent_presence(False)                 # Agent weg: Werksrolle wieder an
     got = [c.args[0] for c in agent.update_instructions.await_args_list]
-    assert "«Du bist Coach»" in got[0] and "«Du bist Tutor»" in got[1] and got[2] == DEFAULT_PERSONA
+    assert "«Du bist Coach»" in got[0] and "«Du bist Coach»" in got[1]
+    assert "«Du bist Tutor»" in got[2] and got[3] == DEFAULT_PERSONA
     assert all(g.startswith(core_normal(None)) for g in got)
 
 

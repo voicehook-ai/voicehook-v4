@@ -74,13 +74,13 @@ tool calls, so every later call uses the absolute wrapper, e.g. `/tmp/vh-ab12cd/
 ```
 
 `next` prints ONE JSON line (exit 3 once the call is over), with `agent_said` = Delta's own lines
-since the last `next`, `status_stale: true` = resend your board:
+since the last `next`, `status_stale`/`status_due: true` = run the command in `hint` NOW (board below):
 
 | `type` | meaning | do |
 |---|---|---|
 | `user` | `text` = what the user just said | answer with one `say` |
 | `revise` | your `say` overlapped unspoken text | merge, `say --mode overwrite "…"` within 8 s |
-| `status_request` | the user asked what you are doing | send `vh status` at once (below) |
+| `status_request` | the user asked what you are doing (first in line) | send `vh status` at once (below) |
 | `timeout` | 60 s silence (`--timeout SEC`) | call `next` again |
 | `ended` | the call is over | stop, the join already left |
 
@@ -94,8 +94,8 @@ since the last `next`, `status_stale: true` = resend your board:
 - Keep the main loop free: between `next` and `say` do nothing slow. Anything over ~3 s (shell, web,
   edits, builds, lookups) goes to a background agent/subtask; meanwhile `say` a short holding line
   and `status` the board. Answer each turn within ~3 s (`next` warns: `latency_warning`).
-- Status board (CLI 0.7.0): on every task change `vh status --doing "baut den Fix" --open "Tests"
-  --done "Analyse"` (whole board, replaces the last, never spoken); `vh status ""` when finished.
+- **Statusboard dicht halten:** Delta answers the user from your board while you work in the background; stale board = wrong answer. Set it on EVERY request, delegation, result and deploy step: `vh status --doing "deployt den Worker, ETA 2 min" --open "Tests" --done "Analyse"` (whole board, replaces the last, never spoken; `doing` = interim state + ETA, max 400 chars, whole board max 2000). Finished: `--done "..."`, not `vh status ""` (empty = due). Only ONE `say` per turn.
+  CLI 0.9.0: `next` adds `status_due: true` + `status_reason` (`empty`, `status_request`, `stale` = older than 45 s while `doing`/`open` is set; `--status-due SEC`, env `VOICEHOOK_STATUS_DUE`) + `hint` with the exact command; run it before your `say`. A progress `say` ("fertig", "live", "deploye") without a fresh board returns `status_reason: "say_progress"`.
 - Idle guard: no `say`/`next` for 10 min (`--idle-timeout MIN`, 0 = off) = join leaves. Heartbeat (CLI 0.8.0): `operator.alive` every 10 s while you serve `next`/`say`; silent 20 s = chip dims, Delta: "Claude ist gerade nicht erreichbar."
 
 ## Stay in the call (mandatory)
@@ -148,6 +148,7 @@ Quickstart B: `$D/out` (JSON lines) should show within ~5 s:
 |---|---|---|
 | `operator.say` | `{text, mode?}` | speak `text` verbatim. Modes below |
 | `operator.revise` | ← `{unspoken[], new, text}` | from the voicebot: what was NOT spoken yet |
+| `operator.say_status` | ← `{seq, state, spoken_chars}` | per say: `queued`/`spoken`/`interrupted`/`requeued`/`replaced` |
 | `operator.persona` | `{text}` | knowledge block after Delta's fixed core, for everyone (see above) |
 | `operator.interrupt` | `{}` | stop speaking; unspoken rest comes back as `operator.revise` |
 | `operator.inject` | `{text, role?}` | context entry, not spoken |
@@ -156,11 +157,10 @@ Quickstart B: `$D/out` (JSON lines) should show within ~5 s:
 | `operator.notice` | ← `{kind, minutes_left, text, topup_url, ...}` | server notice, see below |
 | `quit` | `{}` | leave the call (what `leave` does) |
 
-`operator.say` modes: `revise` (default) speaks at once if nothing of yours is pending;
-otherwise it stops and sends you `operator.revise` with the unspoken parts. Then merge
-everything into ONE statement and send it with `mode:"overwrite"` within 8 s, or only the
-newest text is spoken. `append` queues behind the current output (multi-part, status
-heartbeats).
+`operator.say` never gets lost: it waits until the user is silent (0.6 s), a user cut-in gets the
+rest spoken again, Delta stays quiet while yours is pending. `revise` (default) queues unless one
+of yours is speaking right now; then it stops and sends `operator.revise`: merge into ONE `overwrite`
+within 8 s (replaces only that round; later says stay). `overwrite` alone replaces all; `append` queues.
 
 ## Low balance (`operator.notice`)
 
