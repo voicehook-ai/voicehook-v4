@@ -238,3 +238,24 @@ async def test_clean_stream_replaces_impersonation_with_wait_line(monkeypatch):
 
 def test_core_explains_mark():
     assert "Sätze mit [Claude] davor hat Claude gesagt, nicht du." in core_normal("Claude")
+
+
+# ----- Board: neutraler Wissensblock statt Sprechformel (doppeltes "Claude, Claude") -----
+def test_board_block_no_spoken_formula_no_double_name():
+    from agent.board import board_block, normalize_board, status_sentence
+    b = normalize_board({"doing": "Claude baut gerade den Fix für Regel drei",
+                         "open": ["Tests"], "done": ["Analyse"]})
+    blk = board_block(b, "Claude")
+    assert "Kurz Moment" not in blk and "Claude Claude" not in blk and "Statt eines" not in blk
+    assert blk.strip().startswith("Status von Claude")
+    assert "macht gerade: Claude baut gerade den Fix für Regel drei; offen: Tests; " \
+           "erledigt: Analyse." in blk
+    # Code-Satz auf Nachfrage: kein doppelter Name
+    assert status_sentence(b, "Claude") == "Claude baut gerade den Fix für Regel drei."
+    assert status_sentence(normalize_board({"doing": "baut den Fix"}), "Claude") == "Claude baut den Fix."
+
+
+def test_board_doing_400_items_200():
+    from agent.board import normalize_board
+    b = normalize_board({"doing": "d" * 500, "open": ["o" * 300], "done": []})
+    assert len(b["doing"]) == 400 and len(b["open"][0]) == 200

@@ -18,6 +18,7 @@ import pytest
 from livekit.agents import Agent, llm
 
 from agent import live
+from agent.board import board_block
 from agent.core import (
     CORE_ANCHOR,
     DEFAULT_HISTORY_TURNS,
@@ -219,7 +220,7 @@ async def test_t9_status_after_persona_before_anchor():
     await h.on_status(_pkt({"doing": "baut den Ring-Fix"}, "operator.status"))
     t = _last(agent)
     _assert_core_first(t)
-    assert t.index("Projekt Ring.") < t.index("Gerade: baut den Ring-Fix.") < t.index(CORE_ANCHOR)
+    assert t.index("Projekt Ring.") < t.index("macht gerade: baut den Ring-Fix.") < t.index(CORE_ANCHOR)
 
 
 @pytest.mark.asyncio
@@ -486,13 +487,17 @@ async def test_llm_node_uses_keeper_context(monkeypatch):
 
 
 # ===== #9b Denk-Budget =================================================================
-def test_thinking_budget_default_dynamic(monkeypatch):
+def test_thinking_budget_default_128(monkeypatch):
+    # -1 machte Delta im Prod-Call stumm (4,4-6,7 s), 0 antwortete bei vollem Status zu oft
+    # nur "Moment" (Repro fix/delta-core-rule3)
     monkeypatch.delenv("VOICEHOOK_LLM_THINKING_BUDGET", raising=False)
-    assert thinking_budget() == -1
-    assert thinking_kwargs() == {"thinking_config": {"thinking_budget": -1}}
+    assert thinking_budget() == 128
+    assert thinking_kwargs() == {"thinking_config": {"thinking_budget": 128}}
     monkeypatch.setenv("VOICEHOOK_LLM_THINKING_BUDGET", "0")      # Env-Schalter bleibt
     assert thinking_kwargs() == {"thinking_config": {"thinking_budget": 0}}
     monkeypatch.setenv("VOICEHOOK_LLM_THINKING_BUDGET", "kaputt")
+    assert thinking_budget() == 128
+    monkeypatch.setenv("VOICEHOOK_LLM_THINKING_BUDGET", "-1")
     assert thinking_budget() == -1
     monkeypatch.setenv("VOICEHOOK_LLM_THINKING_BUDGET", "512")
     assert thinking_budget() == 512
@@ -571,7 +576,7 @@ def test_live_t6_short_no_markdown():
 @pytest.mark.live_llm
 @_LIVE
 def test_live_t9_status_answer_from_board():
-    board = " Aktueller Stand von Claude (ersetzt jeden früheren Stand): Gerade: baut den Ring-Fix."
+    board = board_block({"doing": "baut den Ring-Fix", "open": [], "done": []}, "Claude")
     a = _ask(_claude_prompt(board=board), ["Was macht Claude gerade?"])[0]
     assert "Ring" in a and "Claude" in a, a
 

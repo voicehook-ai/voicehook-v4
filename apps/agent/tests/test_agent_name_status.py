@@ -222,8 +222,9 @@ async def test_normal_status_replaces_never_appends():
         lengths.append(len(agent.update_instructions.await_args.args[0]))
     t = agent.update_instructions.await_args.args[0]
     assert len(set(lengths)) == 1                                 # Länge konstant
-    assert t.count("Aktueller Stand von Claude") == 1 and "Schritt 49" in t and "Schritt 48" not in t
-    assert "Kurz Moment, Claude baut gerade Schritt 49." in t     # Name + Status
+    assert t.count("Status von Claude") == 1 and "Schritt 49" in t and "Schritt 48" not in t
+    assert "macht gerade: baut gerade Schritt 49" in t           # Wissen, keine Sprechformel
+    assert "Kurz Moment" not in t
     clock.t += 6
     await h.on_status(_pkt({"doing": "fertig"}))
     assert agent.update_instructions.await_args.args[0] == operator_persona("Claude")
@@ -242,7 +243,8 @@ async def test_live_status_replaces_turn_in_local_context():
         counts.append(len(agent.chat_ctx.items))
     assert len(set(counts)) == 1                                  # Kontext wächst nicht
     status = [i for i in agent.chat_ctx.items if i.id.startswith("vh-status-")]
-    assert len(status) == 1 and "Claude baut Schritt 49" in status[0].text_content
+    assert len(status) == 1 and "Status von Claude" in status[0].text_content
+    assert "macht gerade: baut Schritt 49" in status[0].text_content
     agent.update_instructions.assert_not_awaited()
 
 
@@ -273,7 +275,7 @@ async def test_big_board_replaces_never_stacks_normal_and_live(monkeypatch):
         await h.on_status(_pkt(big(i)))
         sizes.append(len(agent.update_instructions.await_args.args[0]))
     t = agent.update_instructions.await_args.args[0]
-    assert max(sizes) - min(sizes) <= 2 and t.count("Aktueller Stand von Claude") == 1
+    assert max(sizes) - min(sizes) <= 2 and t.count("Status von Claude") == 1
     assert "offen 9.7" in t and "Schritt 8," not in t
 
 
@@ -292,7 +294,7 @@ async def test_status_rate_limit_last_one_wins():
     await asyncio.sleep(0.1)
     assert agent.update_instructions.await_count == 3            # genau ein weiteres Update
     t = agent.update_instructions.await_args.args[0]
-    assert "Gerade: vier." in t and "Gerade: zwei." not in t and "Gerade: drei." not in t
+    assert "macht gerade: vier." in t and "gerade: zwei" not in t and "gerade: drei" not in t
 
 
 @pytest.mark.parametrize("q", ["Was macht Claude gerade?", "wie weit bist du?", "Wie ist der Stand?",

@@ -120,7 +120,7 @@ def live_status_user(board: dict | None, name: str | None = None) -> str:
     der Worker entfernt den alten Status-Turn deshalb aus dem lokalen Chat-Kontext
     (konstant, Reconnect spielt nur den letzten ein) und dieser Text erklärt jeden
     früheren Stand für ungültig. Server-seitig bleibt je Update ein kurzer Turn
-    (Rate-Limit 5 s, Budget 600 Zeichen, Kontext-Kompression räumt ab)."""
+    (Rate-Limit 5 s, Budget board.board_budget() Zeichen, Kontext-Kompression räumt ab)."""
     nom = agent_refs(name)["nom"]
     block = board_block(board, nom).strip()
     if not block:
