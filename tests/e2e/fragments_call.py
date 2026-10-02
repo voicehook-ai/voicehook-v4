@@ -32,6 +32,14 @@ Requests-API des Projekts; Google als echte Mengen (TTS-Zeichen, die gesprochen 
     env LIVEKIT_SERVER=/pfad/livekit-server .venv/bin/python tests/e2e/fragments_call.py \\
       --repo . --label neu --out /tmp/fragcall-neu
   # Positivkontrolle: --repo <worktree auf 7aed542> --label alt
+
+Szenario `--scenario kontext` (integ/r8, Oliver 02.10.): reicher Kontext für Delta. Der
+Operator schickt ein Board OHNE doing, mit faq, und alle 5 s den Aktivitäts-Feed
+(operator.activity {lines, ts}, wie der CLI-Hook). Der Nutzer stellt Fragen, die nur aus faq,
+Feed, Board oder Claudes eigenen Sätzen beantwortbar sind. Gemessen je Frage-Turn: antwortet
+Delta inhaltlich oder nur mit einem Wartesatz ("Moment"), dazu die Antwortzeit aus der
+`[timing]`-Zeile des Workers (play = VAD-Ende bis Wiedergabe, ab #148; ältere Worker: nur
+Energie-Messung). Alt gegen neu: derselbe Lauf mit --repo <origin/main>.
 """
 
 from __future__ import annotations
@@ -104,6 +112,49 @@ SAYS: list[tuple[int, int, float, str, dict | None]] = [
     (11, 2, 0.4, "Danke dir, Claude meldet sich, sobald die Tests grün sind.", None),
 ]
 
+# ----- Szenario kontext: faq + Aktivitäts-Feed, Board ohne doing ----------------------
+TURNS_K: list[tuple[bool, list[str]]] = [
+    (True, ["Hallo Delta.", "Hörst du mich?"]),
+    (True, ["Was macht Claude", "eigentlich gerade?"]),
+    (False, ["Okay.", "Gut."]),
+    (True, ["Und wann ist das", "live?"]),
+    (True, ["Woran hat er", "zuletzt gearbeitet?"]),
+    (False, ["Hm.", "Moment,", "ich überleg kurz."]),
+    (True, ["Was ist denn", "noch offen?"]),
+    (True, ["Geht der Login", "schon wieder?"]),
+    (True, ["Was hat Claude", "denn schon fertig?"]),
+    (True, ["Wie lange dauert", "das noch?"]),
+    (True, ["Was hat er", "vorhin über die Queue gesagt?"]),
+    (True, ["Kostet das", "eigentlich extra?"]),
+    (True, ["Hat er die Tests", "schon laufen lassen?"]),
+    (True, ["Okay.", "Bis gleich."]),
+]
+BOARD_K = {"doing": "", "open": ["Pull Request aufmachen", "Login-Bug"],
+           "done": ["Analyse des Calls", "Fix für die Say-Queue gebaut"],
+           "faq": [{"q": "Wann ist das live?", "a": "Nach Olivers Review, heute Abend."},
+                   {"q": "Geht der Login wieder?", "a": "Noch nicht, der Login-Bug ist als Nächstes dran."},
+                   {"q": "Wie lange dauert das noch?", "a": "Etwa zehn Minuten bis zum Pull Request."},
+                   {"q": "Kostet das extra?", "a": "Nein, das gehört zum normalen Paket."}]}
+SAYS_K: list[tuple[int, int, float, str, dict | None]] = [
+    (2, 0, 0.3, "Kurz von Claude: die Queue spricht jetzt nichts mehr doppelt, der Fehler war ein "
+                "zu frühes Nachsprechen nach einer Unterbrechung.", None),
+    (6, 0, 0.3, "Claude meldet: die Tests der Say-Queue sind grün, als Nächstes kommt der Pull Request.",
+     None),
+]
+# (Sekunden ab Szenario-Start, Zeile) wie der Hook: "HH:MM:SS Tool: Beschreibung"
+ACTIVITY_K: list[tuple[float, str]] = [
+    (0, "Read: Say-Queue im Relay gelesen"),
+    (4, "Edit: Nachsprechen nach Abbruch in Live entfernt"),
+    (12, "Bash: Tests der Say-Queue laufen lassen"),
+    (30, "Bash: Ruff über das Repo laufen lassen"),
+    (55, "Edit: Doku zum Aktivitäts-Feed ergänzt"),
+    (80, "Bash: Tests der Say-Queue laufen lassen"),
+    (110, "Bash: Pull Request vorbereiten"),
+]
+SCENARIOS = {"standard": (TURNS, SAYS, BOARD_1, [], [BOARD_1, BOARD_2]),
+             "kontext": (TURNS_K, SAYS_K, BOARD_K, ACTIVITY_K, [BOARD_K])}
+ACTIVITY_EVERY_S = 5.0  # wie die CLI: höchstens alle 5 s, nur bei Änderung
+
 PROGRESS_WORDS = re.compile(r"\b(fertig|deployt|deployed|live|erledigt|gemerged|grün|bestanden|"
                             r"abgeschlossen|offen|aufgemacht|eröffnet)\b", re.I)
 WAIT_LINE = re.compile(r"\b(moment|sekunde|ich frag)\b", re.I)
@@ -119,7 +170,7 @@ def now() -> float:
 
 
 def frag_texts() -> list[str]:
-    return [f for _w, frs in TURNS for f in frs]
+    return [f for turns in (TURNS, TURNS_K) for _w, frs in turns for f in frs]
 
 
 def frag_path(cache: Path, text: str) -> Path:
@@ -251,7 +302,10 @@ async def deepgram_usd(since_iso: str) -> dict:
 
 
 class Call:
-    def __init__(self, cache: Path) -> None:
+    def __init__(self, cache: Path, scenario: str = "standard") -> None:
+        self.turns, self.says_plan, self.board, self.activity_plan, self.boards = SCENARIOS[scenario]
+        self.scenario_name = scenario
+        self.scenario_t0: float | None = None
         self.t0 = now()
         self.ev: list[dict] = []
         self.cache = cache
@@ -261,7 +315,6 @@ class Call:
         self.says: list[dict] = []
         self.seq = 0
         self.ops: dict[str, dict] = {}  # transcript.live id -> {start, end, text}
-        self.board = BOARD_1
         self.stop = False
 
     def t(self) -> float:
@@ -307,7 +360,7 @@ class Call:
         while "start" not in f:
             await asyncio.sleep(0.005)
         self.log("user_frag_start", turn=ti, frag=fi, text=text)
-        for s in [s for s in SAYS if s[0] == ti and s[1] == fi]:
+        for s in [s for s in self.says_plan if s[0] == ti and s[1] == fi]:
             asyncio.create_task(self.say_later(s[2], s[3], s[4]))
         await f["done"].wait()
         self.log("user_frag_end", turn=ti, frag=fi)
@@ -360,6 +413,21 @@ class Call:
             self.log("status_sent", board=board)
         await self.say(text)
 
+    async def activity(self) -> None:
+        """Aktivitäts-Feed wie der CLI-Hook: letzte 15 Zeilen, nur bei Änderung, alle 5 s."""
+        last: list[str] | None = None
+        while not self.stop:
+            if self.scenario_t0 is not None and self.activity_plan:
+                el = now() - self.scenario_t0
+                wall = time.time()
+                lines = [time.strftime("%H:%M:%S", time.gmtime(wall - (el - off))) + " " + line
+                         for off, line in self.activity_plan if off <= el][-15:]
+                if lines and [x[9:] for x in lines] != [x[9:] for x in (last or [])]:
+                    await self.send(self.op, "operator.activity", {"lines": lines, "ts": wall})
+                    self.log("activity_sent", lines=len(lines), last=lines[-1][9:])
+                    last = lines
+            await asyncio.sleep(ACTIVITY_EVERY_S)
+
     async def alive(self) -> None:
         while not self.stop:
             await self.send(self.op, "operator.alive", {"alive": True, "ts": time.time(), "idle_s": 0})
@@ -406,7 +474,8 @@ class Call:
 
     async def scenario(self) -> None:
         rnd = random.Random(SEED)
-        for ti, (wait, frs) in enumerate(TURNS):
+        self.scenario_t0 = now()
+        for ti, (wait, frs) in enumerate(self.turns):
             for fi, text in enumerate(frs):
                 await self.speak(ti, fi, text)
                 if fi < len(frs) - 1:
@@ -434,8 +503,9 @@ async def run(args: argparse.Namespace) -> dict:
     fd, cred_path = memfd_credentials()
     since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 5))
     lk = worker = None
-    call = Call(cache)
-    res: dict = {"label": args.label, "repo": str(args.repo), "fragments_tts_chars": gen_chars}
+    call = Call(cache, args.scenario)
+    res: dict = {"label": args.label, "repo": str(args.repo), "fragments_tts_chars": gen_chars,
+                 "scenario": args.scenario}
     try:
         res["sha"] = subprocess.run(["git", "-C", str(args.repo), "rev-parse", "--short", "HEAD"],
                                     capture_output=True, text=True).stdout.strip()
@@ -472,9 +542,10 @@ async def run(args: argparse.Namespace) -> dict:
                                         {"vh.role": "agent", "vh.name": "Claude", "vh.model": "e2e",
                                          "vh.user": "Oliver"}))
             alive = asyncio.create_task(call.alive())
+            feed = asyncio.create_task(call.activity())
             await asyncio.sleep(1)
-            await call.send(op, "operator.status", BOARD_1)
-            call.log("status_sent", board=BOARD_1)
+            await call.send(op, "operator.status", call.board)
+            call.log("status_sent", board=call.board)
             await asyncio.sleep(3)
             call.log("scenario_start")
             await asyncio.wait_for(call.scenario(), timeout=CALL_CAP_S - 30)
@@ -490,6 +561,7 @@ async def run(args: argparse.Namespace) -> dict:
             call.log("end")
             call.stop = True
             alive.cancel()
+            feed.cancel()
             await asyncio.sleep(0.3)
             pump.cancel()
             with contextlib.suppress(Exception):
@@ -505,6 +577,7 @@ async def run(args: argparse.Namespace) -> dict:
     await asyncio.sleep(20)  # Deepgram bucht mit Verzug
     res["deepgram"] = await deepgram_usd(since)
     res.update(analyse(call, out))
+    res.update(timing_lines(out / "worker.log"))
     (out / "events.json").write_text(json.dumps({"events": call.ev, "says": call.says,
                                                  "frags": call.frags, "agent_seg": call.agent_seg,
                                                  "ops": call.ops}, ensure_ascii=False, indent=1))
@@ -578,15 +651,14 @@ def analyse(call: Call, out: Path) -> dict:
             return bool(st) and st[-1][1] in ("queued", "requeued")
         pending = any(s["sent"] < te and _open(s) for s in call.says)
         silence = (first if first is not None else (nxt_user or call.ev[-1]["t"])) - te
-        rows.append({"turn": ti, "wait": TURNS[ti][0], "end_t": te, "first_audio_t": first,
+        rows.append({"turn": ti, "wait": call.turns[ti][0], "end_t": te, "first_audio_t": first,
                      "latency_s": None if first is None else round(first - te, 2), "who": who,
                      "say_pending": pending, "silence_s": round(silence, 2)})
     delta_lat = [r["latency_s"] for r in rows if r["who"] == "delta" and not r["say_pending"]]
     wait_sil = [r["silence_s"] for r in rows if r["wait"]]
     # Transkript-Markierungen
     flags = []
-    board_txt = " ".join([BOARD_1["doing"], *BOARD_1["open"], *BOARD_1["done"], BOARD_2["doing"],
-                          *BOARD_2["open"], *BOARD_2["done"]]).lower()
+    board_txt = " ".join(x for b in call.boards for x in [b["doing"], *b["open"], *b["done"]]).lower()
     for t, line in agent_lines:
         f = []
         if len(re.findall(r"\bclaude\b", line, re.I)) >= 2:
@@ -598,7 +670,30 @@ def analyse(call: Call, out: Path) -> dict:
         for w in PROGRESS_WORDS.findall(line):
             f.append(f"Fortschritt '{w}' prüfen")
         flags.append({"t": t, "text": line, "flags": f})
+    # Inhaltlich oder "Moment": Delta-Zeilen (role agent) zwischen Ende dieses Frage-Turns und
+    # Ende des nächsten Turns. Nur Wartesätze (<= 10 Wörter, Muster WAIT_LINE) = "moment".
+    ends = [turn_end.get(i) for i in range(len(call.turns))]
+    answers = []
+    for ti, te in sorted(turn_end.items()):
+        if not call.turns[ti][0] or ti == 0:
+            continue  # nur Fragen, Begrüßung zählt nicht
+        nxt = next((ends[j] for j in range(ti + 1, len(ends)) if ends[j] is not None), call.ev[-1]["t"])
+        lines = [x for t, x in agent_lines if te < t <= nxt]
+        if not lines:
+            kind = "keine"
+        elif all(WAIT_LINE.search(x) and len(words(x)) <= 10 for x in lines):
+            kind = "moment"
+        else:
+            kind = "inhaltlich"
+        answers.append({"turn": ti, "frage": " ".join(call.turns[ti][1]), "kind": kind, "delta": lines})
+    n_q = len(answers)
+
     return {
+        "answers": answers,
+        "answers_inhaltlich": sum(a["kind"] == "inhaltlich" for a in answers),
+        "answers_moment": sum(a["kind"] == "moment" for a in answers),
+        "answers_keine": sum(a["kind"] == "keine" for a in answers),
+        "answers_n": n_q,
         "says": says,
         "says_total": len(says),
         "says_delivered": sum(s["delivered"] for s in says),
@@ -616,10 +711,33 @@ def analyse(call: Call, out: Path) -> dict:
     }
 
 
+def timing_lines(log: Path) -> dict:
+    """`[timing]`-Zeilen des Workers (#148): play/ttft in ms ab VAD-Ende, Median + p90."""
+    if not log.exists():
+        return {}
+    vals: dict[str, list[float]] = {"play": [], "ttft": [], "eot": []}
+    n = 0
+    for line in log.read_text(errors="replace").splitlines():
+        if "[timing]" not in line:
+            continue
+        n += 1
+        for k in vals:
+            m = re.search(rf"\b{k}=(\d+)", line)
+            if m:
+                vals[k].append(float(m.group(1)))
+    out: dict = {"timing_turns": n}
+    for k, xs in vals.items():
+        out[f"timing_{k}_n"] = len(xs)
+        out[f"timing_{k}_median_ms"] = round(statistics.median(xs)) if xs else None
+        out[f"timing_{k}_p90_ms"] = pct(xs, 0.9)
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", default=str(Path(__file__).resolve().parents[2]))
     ap.add_argument("--label", default="neu")
+    ap.add_argument("--scenario", choices=sorted(SCENARIOS), default="standard")
     ap.add_argument("--out", default="/tmp/fragcall")
     ap.add_argument("--frag-dir", default=str(Path.home() / ".cache" / "voicehook-e2e" / "fragments-v1"))
     args = ap.parse_args()
@@ -628,9 +746,13 @@ def main() -> int:
             print(f"fehlt: {k}", file=sys.stderr)
             return 2
     res = asyncio.run(run(args))
-    print(json.dumps({k: res[k] for k in ("label", "sha", "says_total", "says_delivered", "says_lost",
-                                          "delta_latency_median_s", "delta_latency_p90_s",
-                                          "longest_wait_silence_s", "deepgram")}, ensure_ascii=False))
+    print(json.dumps({k: res.get(k) for k in (
+        "label", "scenario", "sha", "says_total", "says_delivered", "says_lost",
+        "answers_n", "answers_inhaltlich", "answers_moment", "answers_keine",
+        "delta_latency_median_s", "delta_latency_p90_s", "timing_play_median_ms", "timing_play_p90_ms",
+        "timing_play_n", "longest_wait_silence_s", "deepgram")}, ensure_ascii=False))
+    for a in res["answers"]:
+        print(f"frage {a['turn']:>2} {a['kind']:<10} {a['frage'][:40]:<40} | {' / '.join(a['delta'])[:120]}")
     for s in res["says"]:
         print(f"say {s['seq']:>2} {s['mode']:<9} {'->'.join(s['chain']) or '-':<60} "
               f"gesprochen {s['spoken_words_pct']:>3}% {'OK' if s['delivered'] else 'VERLOREN'}")
