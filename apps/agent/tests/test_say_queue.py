@@ -295,21 +295,96 @@ async def test_append_is_serial_and_in_order_after_requeue():
     assert session.said[1:] == ["Der Pull Request wartet auf deine Freigabe.", "Danach das."]
 
 
+def _revises(room: MagicMock) -> list[dict]:
+    return [json.loads(c.kwargs["payload"].decode())
+            for c in room.local_participant.publish_data.await_args_list
+            if c.kwargs.get("topic") == "operator.revise"]
+
+
 @pytest.mark.asyncio
-async def test_revise_with_requeued_rest_asks_brain():
-    """Default revise: ein offener (nachzusprechender) Rest geht wie bisher per
-    operator.revise ans Brain, die neue Aussage wird gehalten."""
+async def test_new_say_while_rest_only_waits_is_appended_without_revise():
+    """Seit integ/r7: wartet der Rest nur (requeued, spricht nicht), hängt eine neue say
+    ohne revise-Runde an (E2E 02.10.: 4 von 11 says liefen unnötig über revise)."""
     session, _agent, room, h = _build()
     await h.on_say(_pkt({"text": LONG, "seq": 1}))
     session.user("speaking")
     session.handles[0].finish("Der Fix ist gebaut und getestet.", interrupted=True)
     await h.on_say(_pkt({"text": "Noch was.", "seq": 2}))
+    session.user("listening")
+    await asyncio.sleep(QUIET * 3)
+    session.handles[-1].finish()
+    await asyncio.sleep(QUIET * 3)
+    assert _revises(room) == []
+    assert session.said[1:] == ["Der Pull Request wartet auf deine Freigabe.", "Noch was."]
+    assert (1, "replaced") not in _status(room)
+
+
+@pytest.mark.asyncio
+async def test_new_say_while_first_only_queued_is_appended():
+    session, _agent, room, h = _build()
+    session.user("speaking")                              # Nutzer spricht: A wartet
+    await h.on_say(_pkt({"text": "A.", "seq": 1}))
+    await h.on_say(_pkt({"text": "B.", "seq": 2}))
+    session.user("listening")
+    await asyncio.sleep(QUIET * 3)
+    session.handles[0].finish()
+    await asyncio.sleep(QUIET * 3)
+    session.handles[1].finish()
     await _drain()
-    rev = [json.loads(c.kwargs["payload"].decode())
-           for c in room.local_participant.publish_data.await_args_list
-           if c.kwargs.get("topic") == "operator.revise"]
+    assert session.said == ["A.", "B."] and _revises(room) == []
+    assert _status(room).count((1, "spoken")) == 1 and _status(room).count((2, "spoken")) == 1
+
+
+@pytest.mark.asyncio
+async def test_revise_only_when_replacing_mid_speech():
+    session, _agent, room, h = _build()
+    await h.on_say(_pkt({"text": LONG, "seq": 1}))        # spricht gerade
+    session.handles[0].cut_at = "Der Fix ist gebaut und getestet."
+    await h.on_say(_pkt({"text": "Noch was.", "seq": 2}))
+    await _drain()
+    rev = _revises(room)
     assert rev[-1]["unspoken"] == ["Der Pull Request wartet auf deine Freigabe."]
     assert (1, "replaced") in _status(room)
+
+
+@pytest.mark.asyncio
+async def test_overwrite_after_revise_keeps_newer_say():
+    """Variante A: overwrite als Antwort auf operator.revise ersetzt nur, was beim revise
+    offen war. Eine say, die danach kam, bleibt und spricht nach der Zusammenfassung."""
+    session, _agent, room, h = _build()
+    await h.on_say(_pkt({"text": LONG, "seq": 1}))
+    session.handles[0].cut_at = "Der Fix ist gebaut und getestet."
+    await h.on_say(_pkt({"text": "Noch was.", "seq": 2}))          # -> revise, 2 gehalten
+    session.user("speaking")
+    await h.on_say(_pkt({"text": "Und das Neue.", "seq": 3}))      # während revise: anhängen
+    await h.on_say(_pkt({"text": "PR wartet. Noch was.", "seq": 4, "mode": "overwrite"}))
+    session.user("listening")
+    await asyncio.sleep(QUIET * 3)
+    session.handles[-1].finish()
+    await asyncio.sleep(QUIET * 3)
+    session.handles[-1].finish()
+    await _drain()
+    assert session.said[1:] == ["PR wartet. Noch was.", "Und das Neue."]
+    st = _status(room)
+    assert (2, "replaced") in st and (3, "spoken") in st and (4, "spoken") in st
+    assert (3, "replaced") not in st and len(_revises(room)) == 1
+
+
+@pytest.mark.asyncio
+async def test_hold_timeout_speaks_held_before_newer_say():
+    session, _agent, room, h = _build()
+    h2 = build_relay_handlers(session, _agent, room=room, say_quiet=QUIET, hold_s=0.05)
+    await h2.on_say(_pkt({"text": LONG, "seq": 1}))
+    session.handles[0].cut_at = "Der Fix ist gebaut und getestet."
+    await h2.on_say(_pkt({"text": "Noch was.", "seq": 2}))         # revise, gehalten
+    session.user("speaking")
+    await h2.on_say(_pkt({"text": "Und das Neue.", "seq": 3}))
+    await asyncio.sleep(0.1)                                        # Hold-Frist um
+    session.user("listening")
+    await asyncio.sleep(QUIET * 3)
+    session.handles[-1].finish()
+    await asyncio.sleep(QUIET * 3)
+    assert session.said[1:] == ["Noch was.", "Und das Neue."]
 
 
 # ── operator.interrupt: kein Nachsprechen ───────────────────────────────────────────

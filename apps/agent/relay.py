@@ -405,6 +405,10 @@ def build_relay_handlers(
     operator_handles: set[int] = set()
     operator_texts: list[str] = []
     held: dict = {"text": None, "task": None, "seq": None}
+    # revise-Runde offen (operator.revise gesendet, overwrite steht aus): ein overwrite
+    # ersetzt dann nur, was beim revise offen war (schon abgebrochen + gehaltene Aussage),
+    # says, die danach kamen, bleiben in der Queue (E2E 02.10.: say 9 verschluckt).
+    rev = {"open": False}
     spoke: dict = {"handle": None}  # Handle der letzten _speak-Ausgabe
 
     def _speak(text: str, seq: object = None, *, live_input: str | None = None) -> None:
@@ -595,6 +599,7 @@ def build_relay_handlers(
             _on("user_state_changed", on_user_state)
 
     def _drop_hold() -> None:
+        rev["open"] = False
         task = held["task"]
         if task is not None and not task.done():
             task.cancel()
@@ -672,8 +677,9 @@ def build_relay_handlers(
         await asyncio.sleep(hold_s)
         if held["text"] == text:
             held["text"], held["task"], held["seq"] = None, None, None
+            rev["open"] = False
             logger.info("[operator.say] kein overwrite in %.1fs, spreche gehaltene Aussage", hold_s)
-            _enqueue(text, seq)
+            _enqueue(text, seq, front=True)  # vor says, die während des Haltens kamen
 
     async def on_say(packet: DataPacket) -> None:
         data = _decode(packet.data)
@@ -686,14 +692,28 @@ def build_relay_handlers(
             _enqueue(text, seq)
             return
         if mode == "overwrite":
-            # Zusammenfassung vom Brain: ersetzt alles Offene, Gehaltene und Eingereihte
+            if rev["open"]:
+                # Antwort auf operator.revise: ersetzt nur die gehaltene Aussage (die alten
+                # Reste sind schon abgebrochen). Neuere says bleiben, die Zusammenfassung
+                # kommt vor sie, weil sie den älteren Stand ersetzt.
+                _drop_hold()
+                _enqueue(text, seq, front=True)
+                return
+            # Zusammenfassung ohne revise-Runde: ersetzt alles Offene, Gehaltene und Eingereihte
             _drop_hold()
             await _cancel_open("replaced")
             _enqueue(text, seq)
             return
         # Default revise
+        interrupt = data.get("priority") == "interrupt"
+        if not interrupt and (rev["open"] or not _cur_open()):
+            # Nichts von uns spricht gerade (nur Wartendes: queued/requeued) oder eine
+            # revise-Runde läuft schon: anhängen, keine neue revise-Runde. Revise nur, wenn
+            # wirklich mitten im Sprechen ersetzt würde (E2E 02.10.: 4 von 11 says).
+            _enqueue(text, seq)
+            return
         _drop_hold()
-        if data.get("priority") == "interrupt":
+        if interrupt:
             _stop_session()          # nur ausdrücklich: laufende Ausgabe abbrechen
         if not _has_open():
             # Nichts Eigenes offen: einreihen. Eine laufende Eigenantwort des Agents
@@ -707,6 +727,7 @@ def build_relay_handlers(
             return
         held["text"], held["seq"] = text, seq
         held["task"] = asyncio.create_task(_speak_after_hold(text, seq))
+        rev["open"] = True
         _say_status(seq, "queued")
         await _ask_revise(unspoken, text)
 

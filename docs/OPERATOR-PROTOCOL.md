@@ -144,8 +144,8 @@ leaving `next` to your next `say`; over 8 s the following `next` carries
 
 | mode | behaviour |
 |---|---|
-| `revise` (default) | Nothing unspoken pending: queued and spoken (operator queue, below). A running answer of the agent itself finishes first, the operator does not cut in. Something of yours still unspoken: output stops, the new text is held, and you get `operator.revise` with the unspoken parts. Send one merged statement with `mode:"overwrite"`; without it the held text is spoken after 8 s (`HOLD_S`). |
-| `overwrite` | Your merged statement. Cancels everything open, held and queued (including a requeued rest), then speaks. |
+| `revise` (default) | Nothing of yours is speaking right now (queue empty, or your says only wait: `queued`/`requeued`), or a revise round is already open: appended to the queue like `append`, no revise round. A running answer of the agent itself finishes first, the operator does not cut in. One of your says is speaking at this moment: output stops, the new text is held, and you get `operator.revise` with the unspoken parts. Send one merged statement with `mode:"overwrite"`; without it the held text is spoken after 8 s (`HOLD_S`), ahead of says that came in meanwhile. |
+| `overwrite` | Your merged statement. As the answer to an open `operator.revise`: replaces only the held text (the unspoken parts were already cancelled at the revise); says you sent after the revise stay queued and play after the merged statement. Without an open revise: cancels everything open, held and queued (including a requeued rest), then speaks. |
 | `append` | Queued behind what is running and queued. Use for multi-part statements and status heartbeats. |
 
 ### Operator queue: a say never gets lost

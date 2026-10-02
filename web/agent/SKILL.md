@@ -158,9 +158,9 @@ Quickstart B: `$D/out` (JSON lines) should show within ~5 s:
 | `quit` | `{}` | leave the call (what `leave` does) |
 
 `operator.say` never gets lost: it waits until the user is silent (0.6 s), a user cut-in gets the
-rest spoken again, Delta stays quiet while yours is pending. `revise` (default) queues if nothing
-of yours is pending, else stops and sends `operator.revise`: merge into ONE `mode:"overwrite"`
-within 8 s (else only the newest is spoken). `overwrite` replaces queue+rest; `append` queues.
+rest spoken again, Delta stays quiet while yours is pending. `revise` (default) queues unless one
+of yours is speaking right now; then it stops and sends `operator.revise`: merge into ONE `overwrite`
+within 8 s (replaces only that round; later says stay). `overwrite` alone replaces all; `append` queues.
 
 ## Low balance (`operator.notice`)
 
