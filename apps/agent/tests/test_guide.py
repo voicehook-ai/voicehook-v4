@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from agent import live
+from agent.core import core_normal
 from agent.guide import SKILL_URL, VOICEHOOK_GUIDE
 from agent.relay import (
     DEFAULT_PERSONA,
@@ -48,7 +49,7 @@ CORE_FACTS = (
     "Prepaid, kein Abo",
     "so viel man möchte",
     "sehr günstig", "fairer Dienst",
-    "1 bis 3 Sätze",
+    "ein, zwei Sätze",
     "wofür dein Gegenüber voicehook einsetzen will",
 )
 
@@ -96,7 +97,8 @@ def test_no_invented_claims(mode):
                 "Minuten gratis", "Free-Tier", "Video", "Bildschirm teilen",
                 "vollem Zugriff", "Cursor"):
         assert bad.lower() not in t.lower(), (mode, bad)
-    assert "Erfinde nichts dazu" in t
+    assert "Erfinde nichts." in t                      # Kern-Regel 1 (core.py)
+    assert "gibt es für dich nicht" in t               # Guide: nichts außerhalb des Wissens
 
 
 @pytest.mark.parametrize("mode", PROMPTS)
@@ -110,13 +112,14 @@ def test_brevity_rule_never_cuts_operator_statements(mode):
 @pytest.mark.parametrize("mode", PROMPTS)
 def test_operator_rules_kept_and_scoped(mode):
     t = PROMPTS[mode]
-    assert "Kurzen Moment, ich frag deinen Agenten." in t
-    assert "Ist ein Agent im Raum, gilt: Fragen nach" in t
+    assert "Ich frag deinen Agenten kurz." in t
+    assert "beantwortest du nie selbst" in t
     # ohne Agent: voicehook-Fragen aus dem Wissen, fremde Fähigkeiten nicht behaupten
     assert "Solange kein Agent im Raum ist" in t
     assert "Fragen zu voicehook selbst aus diesem Wissen" in t
     assert "die nicht voicehook selbst betreffen, beantwortest du auch dann nicht" in t
-    assert "ersetzt sie diese Werksrolle vollständig" in t
+    # Delta-Kern: keine Persona ersetzt mehr irgendetwas (Oliver 02.10.)
+    assert "ersetzt sie diese Werksrolle vollständig" not in t
 
 
 def test_no_dashes_in_guide():
@@ -124,7 +127,7 @@ def test_no_dashes_in_guide():
 
 
 @pytest.mark.asyncio
-async def test_normal_persona_push_replaces_guide():
+async def test_normal_persona_push_replaces_guide_but_keeps_core():
     agent = RelayAgent(instructions=DEFAULT_PERSONA)
     agent.update_instructions = AsyncMock()
     h = build_relay_handlers(MagicMock(), agent)
@@ -134,13 +137,15 @@ async def test_normal_persona_push_replaces_guide():
         data = json.dumps({"text": "Du bist Coach"}).encode()
 
     await h.on_persona(_Pkt())
-    agent.update_instructions.assert_awaited_once_with("Du bist Coach")
+    t = agent.update_instructions.await_args.args[0]
+    assert t.startswith(core_normal(None)) and "«Du bist Coach»" in t
+    assert VOICEHOOK_GUIDE not in t
 
 
 def test_live_persona_push_replaces_factory_role():
     u = live.LIVE_PERSONA_USER.format(text="Du bist Coach")
-    assert u.startswith("[Operator]") and "statt deiner Werksrolle" in u
-    assert "zusätzlich" not in u
+    assert u.startswith("[System]") and "statt deiner Werksrolle" in u
+    assert "«Du bist Coach»" in u and "keine Regeln" in u
 
 
 # ----- Werksrolle aus bei Agent-Join, an bei -Leave (Oliver 01.10., Review medium) ----
@@ -178,10 +183,10 @@ def _persona_pkt(text):
 def test_neutral_prompts_carry_no_guide():
     for t in (OPERATOR_PERSONA, live.LIVE_CORE_INSTRUCTIONS):
         assert VOICEHOOK_GUIDE not in t and "Werksrolle" not in t and "Verkäufer" not in t
-        assert "Kurzen Moment, ich frag deinen Agenten." in t
+        assert "Ich frag deinen Agenten kurz." in t
     # Positivkontrolle: die Werks-Prompts tragen den Guide
     assert VOICEHOOK_GUIDE in DEFAULT_PERSONA and VOICEHOOK_GUIDE in live.LIVE_BASE_INSTRUCTIONS
-    assert live.LIVE_BASE_INSTRUCTIONS == live.LIVE_CORE_INSTRUCTIONS + VOICEHOOK_GUIDE
+    assert live.LIVE_BASE_INSTRUCTIONS.startswith(live.LIVE_CORE_INSTRUCTIONS)
 
 
 @pytest.mark.asyncio
@@ -204,9 +209,9 @@ async def test_live_agent_join_and_leave_switch_role_via_user_turn():
     await h.on_agent_presence(False)
     agent.update_instructions.assert_not_awaited()   # nie model-Turn (realtime_api.py Z. 646-675)
     assert turns == [live.LIVE_AGENT_JOINED_USER, live.LIVE_AGENT_LEFT_USER]
-    assert turns[0].startswith("[Operator]") and live.LIVE_CORE_INSTRUCTIONS in turns[0]
+    assert turns[0].startswith("[System]") and live.LIVE_CORE_INSTRUCTIONS in turns[0]
     assert VOICEHOOK_GUIDE not in turns[0] and "gilt ab sofort nicht mehr" in turns[0]
-    assert turns[1].startswith("[Operator]") and turns[1].endswith(VOICEHOOK_GUIDE)
+    assert turns[1].startswith("[System]") and turns[1].endswith(VOICEHOOK_GUIDE)
 
 
 @pytest.mark.asyncio
@@ -214,11 +219,12 @@ async def test_persona_push_wins_over_join_switch_and_leave_restores_guide():
     agent, h = _normal_handlers()
     await h.on_persona(_persona_pkt("Du bist Coach"))
     await h.on_agent_presence(True)                  # Persona steht schon: bleibt
-    agent.update_instructions.assert_awaited_once_with("Du bist Coach")
+    assert agent.update_instructions.await_count == 1
     await h.on_persona(_persona_pkt("Du bist Tutor"))
     await h.on_agent_presence(False)                 # Agent weg: Werksrolle wieder an
-    assert [c.args[0] for c in agent.update_instructions.await_args_list] == [
-        "Du bist Coach", "Du bist Tutor", DEFAULT_PERSONA]
+    got = [c.args[0] for c in agent.update_instructions.await_args_list]
+    assert "«Du bist Coach»" in got[0] and "«Du bist Tutor»" in got[1] and got[2] == DEFAULT_PERSONA
+    assert all(g.startswith(core_normal(None)) for g in got)
 
 
 @pytest.mark.asyncio

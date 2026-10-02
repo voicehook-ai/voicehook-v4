@@ -16,7 +16,8 @@ Topics handled here:
                         das Brain mit mode "overwrite" die Zusammenfassung schickt
                         (nach HOLD_S spricht die gehaltene). mode "append": anhängen.
 - operator.revise     — (Agent -> Operator) {unspoken:[...], new, text:Anweisung}
-- operator.persona    — replace the agent's instructions (live-injected knowledge)
+- operator.persona    — Wissen des Agenten: bereinigt und als eigener Block HINTER den
+                        festen Delta-Kern gehängt (core.py); ersetzt den Kern nie.
 - operator.mode       — switch strict/auto generation ({"mode":"strict"|"auto"})
 - operator.interrupt  — alles stoppen, ungesprochene Aussagen per operator.revise melden
 - operator.inject     — synthetic user-turn (test harness; operator reads transcript)
@@ -38,6 +39,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from livekit.agents import Agent, StopResponse
+from livekit.agents import llm as lk_llm
 
 from .alive import (
     TOPIC_ALIVE,
@@ -48,7 +50,16 @@ from .alive import (
     unreachable_sentence,
 )
 from .board import board_block, normalize_board, status_sentence
-from .guide import VOICEHOOK_GUIDE, agent_refs, handoff_rule, wait_lines
+from .core import (
+    clean_spoken,
+    compose,
+    core_normal,
+    history_turns,
+    persona_block,
+    sanitize_persona,
+)
+from .guide import VOICEHOOK_GUIDE, agent_refs
+from .history import HistoryKeeper
 from .speaker import PrimarySpeakerFilter, diarize_enabled
 
 if TYPE_CHECKING:
@@ -77,39 +88,35 @@ HOLD_S = 8.0  # Olli-Regel "Stille ist der Killer, ab 8s ansagen": so lange wart
              # zurückgehaltenes say auf das zusammengefasste overwrite des Brains
 
 # Neutrale Sprachrohr-Rolle ohne Werksrolle: gilt, sobald ein externer Agent
-# (vh.role=agent) im Raum ist und noch keine eigene Persona geschickt hat. Der Name des
-# Agenten (vh.name, guide.agent_display_name) steht in den Wartesätzen; zum Nutzer nie
-# "Operator" (Oliver 02.10.2026).
+# (vh.role=agent) im Raum ist und noch keine eigene Persona geschickt hat. Kern
+# (core.py) steht immer vorn; Wartesätze, Name statt "Operator", keine
+# Rechtfertigung stehen dort (Oliver 02.10.2026).
+def agent_role(name: str | None = None) -> str:
+    """Schicht 2 bei Agent im Raum ohne Persona: neutrales Sprachrohr, kein Verkäufer."""
+    nom = agent_refs(name)["nom"]
+    who = nom[:1].upper() + nom[1:]
+    return (f"Rolle: {who} ist im Raum. Du bist jetzt die Stimme von {agent_refs(name)['dat']}, "
+            "keine Werbung für voicehook. Simple Fragen zum Gespräch "
+            f"beantwortest du kurz, alles Inhaltliche, Technische oder Unbekannte beantwortet {who}.")
+
+
 def operator_persona(name: str | None = None) -> str:
-    ask, hand = wait_lines(name)
-    dat = agent_refs(name)["dat"]
-    return (
-        "Du bist die Stimme von voicehook.ai. Du antwortest aus deinem Kontext "
-        f"(was dir {dat} als Persona/Graph gegeben hat). Simple Fragen "
-        "beantwortest du selbst, kurz und praezise. Fuer alles Substantielle, "
-        f"Technische oder Unbekannte sagst du '{hand}' "
-        "und wartest auf die Antwort. Du erfindest NICHTS. Fragen nach Faehigkeiten, "
-        "Zugriff, ob etwas funktioniert, oder alles, was du annehmen muesstest, "
-        "beantwortest du NIE selbst, verneinst und behauptest nichts, sondern sagst nur "
-        f"'{ask}' und wartest auf die Antwort. Fragt dein Gegenueber, was "
-        f"{agent_refs(name)['nom']} gerade macht, und es gibt keinen aktuellen Stand, "
-        f"sagst du ebenfalls '{ask}' " + handoff_rule(name)
-    )
+    """Vollständige Instructions: Agent im Raum, keine Persona (Kern + Rolle + Anker)."""
+    return compose(core_normal(name), agent_role(name))
 
 
 OPERATOR_PERSONA = operator_persona()  # ohne Namen: "dein Agent"
 
-_ASK, _HAND = wait_lines(None)
-DEFAULT_PERSONA = VOICEHOOK_GUIDE + (
-    "Du antwortest aus deinem Kontext (dieses voicehook-Wissen oder was dir der "
-    "Agent als Persona/Graph gegeben hat). Simple Fragen beantwortest du selbst, "
-    "kurz und praezise. Ist ein Agent im Raum, sagst du fuer alles Substantielle, "
-    f"Technische oder Unbekannte '{_HAND}' und wartest auf "
-    "die Antwort. Du erfindest NICHTS. Ist ein Agent im Raum, gilt: Fragen nach "
-    "Faehigkeiten, Zugriff, ob etwas funktioniert, oder alles, was du annehmen "
-    "muesstest, beantwortest du NIE selbst, verneinst und behauptest nichts, sondern "
-    f"sagst nur '{_ASK}' und wartest auf die Antwort. " + handoff_rule(None)
-)
+# Werksrolle ohne Agent: Kern + voicehook-Guide + Anker.
+DEFAULT_PERSONA = compose(core_normal(None), VOICEHOOK_GUIDE)
+
+BOARD_STALE_S = 300.0  # Status älter als 5 min: Delta verkauft ihn nicht als aktuell
+
+
+def board_stale_note(name: str | None, minutes: int) -> str:
+    akk = agent_refs(name)["akk"]
+    return (f" Dieser Stand ist von vor {minutes} Minuten und kann veraltet sein. Fragt "
+            f"dein Gegenüber nach dem Stand, sag: Ich frag {akk} kurz.")
 
 
 _AUTO = object()  # RelayAgent(speakers=...) nicht angegeben -> Schalter entscheidet
@@ -122,7 +129,8 @@ class RelayAgent(Agent):
       - strict: StopResponse on every turn — the LLM never speaks on its own."""
 
     def __init__(  # noqa: ANN001, ANN003
-        self, *, instructions: str = "", strict: bool = False, gate=None, speakers=_AUTO, **kwargs
+        self, *, instructions: str = "", strict: bool = False, gate=None, speakers=_AUTO,
+        history=None, **kwargs
     ) -> None:
         super().__init__(instructions=instructions, **kwargs)
         self.strict = strict
@@ -132,6 +140,33 @@ class RelayAgent(Agent):
         if speakers is _AUTO:
             speakers = PrimarySpeakerFilter() if diarize_enabled() else None
         self.speakers = speakers
+        self.agent_name: str | None = None  # Name des Agenten im Raum (clean_spoken)
+        # Verlauf (#9): letzte Wechsel + laufende Zusammenfassung (history.py). Ohne
+        # Angabe nur kappen; der Worker gibt im Normalmodus den Gemini-Zusammenfasser mit.
+        self.history = history if history is not None else HistoryKeeper(history_turns())
+
+    def llm_node(self, chat_ctx, tools, model_settings):  # noqa: ANN001, ANN201
+        """Normal-Pipeline: Verlauf kappen/zusammenfassen (Instruktionen mit Kern,
+        Persona und Status bleiben immer) und Deltas eigene Ausgabe bereinigen
+        (Markdown, Emojis, "Operator" -> Name). Live nutzt diesen Knoten nicht."""
+        items = list(chat_ctx.items)
+        ctx = chat_ctx.copy()
+        ctx.items = self.history.context(items)
+        return self._clean_stream(Agent.default.llm_node(self, ctx, tools, model_settings), items)
+
+    async def _clean_stream(self, stream, items):  # noqa: ANN001, ANN202
+        self.history.begin()
+        try:
+            async for chunk in stream:
+                if isinstance(chunk, str):
+                    yield clean_spoken(chunk, self.agent_name)
+                    continue
+                delta = getattr(chunk, "delta", None) if isinstance(chunk, lk_llm.ChatChunk) else None
+                if delta is not None and delta.content:
+                    delta.content = clean_spoken(delta.content, self.agent_name)
+                yield chunk
+        finally:
+            self.history.end(items)  # nach der Antwort: Zusammenfassung im Hintergrund
 
     def stt_node(self, audio, model_settings):  # noqa: ANN001, ANN201
         if self.gate is not None:
@@ -401,23 +436,38 @@ def build_relay_handlers(
 
     # Werksrolle (voicehook-Guide) vs. Agent im Raum. Lock: Join/Leave/Persona dürfen
     # sich beim Umschalten nicht überholen (jedes Umschalten awaitet das Modell).
-    role = {"agent": False, "persona": None, "name": None, "board": None, "unreachable": False}
+    role = {"agent": False, "persona": None, "name": None, "board": None, "unreachable": False,
+            "board_at": None, "board_stale": False}
     role_lock = asyncio.Lock()
     _now = clock or (lambda: asyncio.get_running_loop().time())
     alive = OperatorAlive()  # operator.alive (alive.py): hört der Agent noch zu?
 
+    def _board_minutes() -> int | None:
+        at = role["board_at"]
+        if role["board"] is None or at is None:
+            return None
+        age = _now() - at
+        return int(age // 60) if age > BOARD_STALE_S else None
+
     def _normal_instructions() -> str:
-        """Grundrolle + fester Board-Platz (ersetzt, nie angehängt)."""
+        """KERN + Rolle (Persona-Wissen / Sprachrohr / Werks-Guide) + Status + Anker.
+
+        Der Kern steht immer vorn und ist über den Datenkanal nicht änderbar; die
+        Persona ist nur Wissen (core.persona_block). Board: fester Platz, ersetzt."""
+        name = role["name"]
         if role["persona"]:
-            base = role["persona"]
+            layer = persona_block(role["persona"], name)
         elif role["agent"]:
-            base = operator_persona(role["name"])
+            layer = agent_role(name)
         else:
             return DEFAULT_PERSONA
-        out = base + board_block(role["board"], agent_refs(role["name"])["nom"])
+        status = board_block(role["board"], agent_refs(name)["nom"])
+        mins = _board_minutes()
+        if status and mins is not None:
+            status += board_stale_note(name, mins)
         if role["unreachable"]:
-            out += unreachable_block(role["name"])
-        return out
+            status += unreachable_block(name)
+        return compose(core_normal(name), layer, status)
 
     async def _set_role(normal_instructions: str, live_turn: str) -> None:
         if live:
@@ -446,6 +496,7 @@ def build_relay_handlers(
             joined = present and not role["agent"]
             role["agent"] = present
             role["name"] = name
+            agent.agent_name = name
             if joined or not present:
                 alive.reset()  # neuer Agent: eigenes Lebenszeichen abwarten (legacy bis dahin)
                 role["unreachable"] = False
@@ -459,20 +510,37 @@ def build_relay_handlers(
             else:
                 role["persona"] = None
                 role["board"] = None
+                role["board_at"] = None
                 await _set_role(DEFAULT_PERSONA, LIVE_AGENT_LEFT_USER)
                 logger.info("[role] agent left, Werksrolle an%s", " (live)" if live else "")
 
     async def on_persona(packet: DataPacket) -> None:
+        """Persona = Wissen des Agenten, nie Regeln: bereinigt, gekappt, Override-Sätze
+        gestrichen (Code entscheidet) und HINTER den festen Kern gehängt."""
         data = _decode(packet.data)
-        text = (data.get("text") or "").strip()
-        if not text:
+        raw = (data.get("text") or "").strip()
+        if not raw:
             return
-        from .live import LIVE_PERSONA_USER
+        from .live import live_persona_user
 
+        clean = sanitize_persona(raw)
+        if clean.removed or clean.truncated:
+            logger.warning("[operator.persona] %d Override-Saetze gestrichen%s: %s",
+                           len(clean.removed), ", gekappt" if clean.truncated else "",
+                           " | ".join(r[:80] for r in clean.removed)[:400])
+            await publish_notice(room, {
+                "kind": "persona_sanitized", "removed": len(clean.removed),
+                "truncated": clean.truncated,
+                "text": "Persona ist nur Wissen: Regel-Overrides wurden gestrichen, der "
+                        "Delta-Kern gilt immer.",
+            })
+        if not clean.text:
+            return
         async with role_lock:
-            role["persona"] = text
-            await _set_role(_normal_instructions(), LIVE_PERSONA_USER.format(text=text))
-        logger.info("[operator.persona]%s %d chars injected", " (live)" if live else "", len(text))
+            role["persona"] = clean.text
+            await _set_role(_normal_instructions(), live_persona_user(clean.text, role["name"]))
+        logger.info("[operator.persona]%s %d chars injected (raw %d)", " (live)" if live else "",
+                    len(clean.text), len(raw))
 
     # ----- Status-Board (operator.status) + Nachfrage (operator.status_request) -----
     st: dict = {"last": None, "pending": None, "task": None, "request_at": None, "n": 0}
@@ -494,6 +562,8 @@ def build_relay_handlers(
         st["last"] = _now()
         async with role_lock:
             role["board"] = board
+            role["board_at"] = st["last"]
+            role["board_stale"] = False
             if live:
                 await _apply_status_live()
             else:
@@ -553,6 +623,12 @@ def build_relay_handlers(
         Wartesätze werden zum festen Satz. Wird vom Worker im Takt und bei jedem
         Lebenszeichen aufgerufen; schaltet nur bei Zustandswechsel um."""
         async with role_lock:
+            stale = _board_minutes() is not None
+            if stale != role["board_stale"]:
+                # Status wird alt: einmal neu setzen (Normal; Live behält den Turn)
+                role["board_stale"] = stale
+                if stale and not live:
+                    await agent.update_instructions(_normal_instructions())
             unreach = role["agent"] and not alive.reachable(role["agent"], _now())
             if unreach == role["unreachable"]:
                 return

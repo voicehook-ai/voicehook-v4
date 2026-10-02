@@ -116,12 +116,17 @@ async def test_say_ignores_empty_or_missing_text():
 
 
 @pytest.mark.asyncio
-async def test_persona_replaces_agent_instructions():
+async def test_persona_is_appended_after_core():
+    # Delta-Kern (Oliver 02.10.): Persona ersetzt nicht mehr, sie hängt hinter dem Kern
+    from agent.core import CORE_ANCHOR, core_normal
+
     session, agent = _fake_session(), _fake_agent()
     h = build_relay_handlers(session, agent)
     new_persona = "Du bist heute Marie. Du sprichst nur Deutsch."
     await h.on_persona(_pkt(TOPIC_PERSONA, {"text": new_persona}))
-    assert agent.instructions == new_persona  # update_instructions is awaited
+    t = agent.instructions  # update_instructions is awaited
+    assert t.startswith(core_normal(None)) and f"«{new_persona}»" in t
+    assert t.index(core_normal(None)) < t.index(new_persona) and t.endswith(CORE_ANCHOR)
 
 
 @pytest.mark.asyncio
@@ -150,9 +155,11 @@ def test_topic_dispatch_maps_all_seven_topics():
 
 def test_default_persona_includes_relay_discipline():
     # Oliver 02.10.: zum Nutzer nie "Operator", Wartesatz mit Agent statt Operator
-    assert "Operator" not in DEFAULT_PERSONA and "operator.say" not in DEFAULT_PERSONA
-    assert "Kurzen Moment, ich geb das an deinen Agenten." in DEFAULT_PERSONA
-    assert "erfindest NICHTS" in DEFAULT_PERSONA  # no invention
+    # nur das Verbot selbst (Kern-Regel 4) nennt das Wort
+    assert DEFAULT_PERSONA.replace('Sag nie "Operator"', "").count("Operator") == 0
+    assert "operator.say" not in DEFAULT_PERSONA
+    assert "Ich frag deinen Agenten kurz." in DEFAULT_PERSONA
+    assert "Erfinde nichts." in DEFAULT_PERSONA  # no invention
 
 
 # ── Revise: ungesprochene Aussagen gehen zurück ans Brain, das zusammenfasst ──

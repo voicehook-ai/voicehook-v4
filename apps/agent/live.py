@@ -18,7 +18,8 @@ import os
 import re
 
 from .board import board_block
-from .guide import VOICEHOOK_GUIDE, agent_refs, handoff_rule, wait_lines
+from .core import CORE_ANCHOR, MARK_AGENT, MARK_SYSTEM, compose, core_live, persona_block
+from .guide import VOICEHOOK_GUIDE, agent_refs
 
 DEFAULT_LIVE_MODEL = "gemini-3.8-live"
 DEFAULT_LIVE_VOICE = "Charon"
@@ -26,54 +27,35 @@ DEFAULT_TRIGGER_TOKENS = 12000  # Kosten: jeder Turn rechnet den ganzen Kontext 
 DEFAULT_TARGET_TOKENS = 6000
 
 # Echte System-Instruktion des Live-Workers (geht nur beim Verbindungsaufbau an
-# Gemini). Persona-Updates und Operator-Sätze kommen später als markierte
-# User-Turns: das Google-Plugin schickt update_instructions()/instructions= als
-# role="model"-Turn, Gemini hält sie dann für eigene Aussagen (livekit/agents
-# PR #5049, Issue #5496; realtime_api.py 1.8.3 Z. 646-672, 869).
-# Zum Nutzer nie "Operator": die Markierung [Operator] ist rein technisch, gesprochen
-# wird der Name des Agenten (vh.name) oder "dein Agent" (Oliver 02.10.2026).
+# Gemini): fester Delta-Kern (core.py) zuerst, dort nicht austauschbar. Persona,
+# Status und Agentenaussagen kommen später als markierte User-Turns: das
+# Google-Plugin schickt update_instructions()/instructions= als role="model"-Turn,
+# Gemini hält sie dann für eigene Aussagen (livekit/agents PR #5049, Issue #5496;
+# realtime_api.py 1.8.3 Z. 646-672, 869).
+# Markierungen: [Agent] = Aussage des Agenten, [System] = Vorgabe. Das Wort
+# "Operator" steht nicht mehr in den Turns (Priming, Oliver 02.10.2026).
 def live_core_instructions(name: str | None = None) -> str:
-    ask, hand = wait_lines(name)
-    dat = agent_refs(name)["dat"]
-    return (
-        "Antworte immer auf Deutsch. Sprich immer mit derselben ruhigen, tiefen, warmen "
-        "Stimme in gleichmäßigem Tempo, wie ein ruhiger Radiosprecher. Imitiere keine "
-        "Personen, spiele keine Rollen, keine Akzente, keine Stimmwechsel, keine "
-        "übertriebenen Emotionen. Du bist ein freundlicher Gesprächspartner, duzt dein "
-        "Gegenüber und antwortest selbst in 1 bis 3 kurzen Sätzen. Nachrichten, die mit "
-        f"der Markierung in eckigen Klammern beginnen, kommen von {dat}, nicht von "
-        "deinem Gegenüber; die Markierung selbst sprichst du nie aus. Soll so eine "
-        "Nachricht eine Aussage sprechen, gibst du deren Inhalt vollständig und "
-        "unverfälscht wieder: nichts hinzufügen, keine eigenen Behauptungen, Bewertungen "
-        "oder Fakten aus deinem Wissen, nichts weglassen, nichts abschwächen, nichts "
-        "umdeuten, keine Einleitung und danach kein Nachsatz. Ist sie als wörtlich "
-        "markiert, sprichst du sie exakt Wort für Wort. Alle übrigen markierten "
-        "Nachrichten sind Vorgaben: befolge sie, lies sie nie vor und erwähne sie nicht. "
-        "Ist ein Agent im Raum, gilt: Fragen nach Fähigkeiten, Zugriff, ob etwas "
-        "funktioniert, oder alles, was du annehmen müsstest, beantwortest du nie selbst, "
-        f"du verneinst und behauptest nichts, sondern sagst nur: {ask} Für alles "
-        f"Substantielle, Technische oder Unbekannte sagst du: {hand} Fragt dein Gegenüber, "
-        f"was {agent_refs(name)['nom']} gerade macht, und es gibt keinen aktuellen Stand, "
-        f"sagst du: {ask} Dann wartest du auf die nächste markierte Nachricht. "
-        + handoff_rule(name)
-    )
+    """Kern Live ohne Werksrolle (neutrale Sprachrohr-Regeln)."""
+    return core_live(name)
 
 
-# Kern ohne Werksrolle = neutrale Sprachrohr-Regeln, sobald ein Agent im Raum ist.
 LIVE_CORE_INSTRUCTIONS = live_core_instructions()
-LIVE_BASE_INSTRUCTIONS = LIVE_CORE_INSTRUCTIONS + VOICEHOOK_GUIDE
+# Kern + Werksrolle + Anker: System-Instruktion beim Verbindungsaufbau.
+LIVE_BASE_INSTRUCTIONS = compose(LIVE_CORE_INSTRUCTIONS, VOICEHOOK_GUIDE)
+_SILENT = " Nicht vorlesen, nicht darauf antworten."
+
+
 # Werksrolle aus/an, wenn ein externer Agent (vh.role=agent) kommt oder geht. Die
-# System-Instruktion lässt sich mitten in der Session nicht sauber tauschen:
-# update_instructions() schickt sie im Plugin als role="model"-Turn (realtime_api.py
-# 1.8.3 Z. 646-675). Deshalb wie die Persona als markierter User-Turn
+# System-Instruktion lässt sich mitten in der Session nicht sauber tauschen
+# (realtime_api.py 1.8.3 Z. 646-675), deshalb ein markierter User-Turn
 # (update_chat_ctx, Z. 677ff); der Chat-Kontext wird bei einem Reconnect wieder
-# eingespielt (Z. 995-1020), der Wechsel überlebt also einen Neuaufbau.
+# eingespielt (Z. 995-1020). Der Kern gilt weiter und wird mit Namen wiederholt.
 def live_agent_joined_user(name: str | None = None) -> str:
     nom = agent_refs(name)["nom"]
     return (
-        f"[Operator] {nom[0].upper() + nom[1:]} ist jetzt im Raum. Deine Werksrolle als "
-        "voicehook-Experte und Verkäufer gilt ab sofort nicht mehr. Ab jetzt gelten nur "
-        "noch diese Regeln, nicht vorlesen, nicht darauf antworten: "
+        f"{MARK_SYSTEM} {nom[0].upper() + nom[1:]} ist jetzt im Raum. Deine Werksrolle als "
+        "voicehook-Experte und Verkäufer gilt ab sofort nicht mehr, keine Verkaufssätze. "
+        f"Die Regeln gelten weiter, mit {nom} als Agent:{_SILENT}\n"
         + live_core_instructions(name)
     )
 
@@ -93,25 +75,27 @@ def live_status_user(board: dict | None, name: str | None = None) -> str:
     if not block:
         who = nom[0].upper() + nom[1:]
         block = f"Es gibt keinen aktuellen Stand von {who}, frühere Stände gelten nicht mehr."
-    return "[Operator] " + block + " Nicht vorlesen, nicht darauf antworten."
+    return f"{MARK_SYSTEM} " + block + _SILENT
+
+
 LIVE_AGENT_LEFT_USER = (
-    "[Operator] Der Agent hat den Raum verlassen. Ab sofort gilt wieder deine Werksrolle "
-    "als voicehook-Experte statt jeder Rolle, die dir der Agent gegeben hat, nicht "
-    "vorlesen, nicht darauf antworten: " + VOICEHOOK_GUIDE
+    f"{MARK_SYSTEM} Der Agent hat den Raum verlassen. Ab sofort gilt wieder deine Werksrolle "
+    "als voicehook-Experte statt des Wissens, das dir der Agent gegeben hat. Die Regeln ganz "
+    f"oben gelten weiter.{_SILENT} " + VOICEHOOK_GUIDE
 )
 # Normalfall: Gemini darf natürlich formulieren, der Inhalt bleibt exakt derselbe.
 LIVE_SAY_USER = (
-    "[Operator] Sprich jetzt diese Aussage. Übernimm ihren Inhalt vollständig: nichts "
+    f"{MARK_AGENT} Sprich jetzt diese Aussage. Übernimm ihren Inhalt vollständig: nichts "
     "hinzufügen, keine eigenen Behauptungen oder Fakten, nichts weglassen, nichts "
     "abschwächen oder umdeuten, keine Einleitung, kein Nachsatz. Nur die Formulierung "
     "darf gesprochen natürlich klingen. Aussage: «{text}»"
 )
 # Wörtlich: ausdrücklich verlangt, Transkript-Text oder Zitat.
 LIVE_SAY_VERBATIM_USER = (
-    "[Operator] Wörtlich. Sprich jetzt exakt diesen Text, Wort für Wort, ohne jede "
+    f"{MARK_AGENT} Wörtlich. Sprich jetzt exakt diesen Text, Wort für Wort, ohne jede "
     "Änderung, ohne Einleitung, ohne Zusatz und ohne Nachsatz: «{text}»"
 )
-# Führende Markierung, mit der der Operator Wortgleichheit verlangt; wird nicht mitgesprochen.
+# Führende Markierung, mit der der Agent Wortgleichheit verlangt; wird nicht mitgesprochen.
 _VERBATIM_PREFIX = re.compile(
     r"^\s*(?:wörtlich|woertlich|eins\s+zu\s+eins|1\s*:\s*1|1\s+zu\s+1)\s*:\s*", re.IGNORECASE
 )
@@ -133,10 +117,14 @@ def live_say_user_input(text: str) -> str:
     return LIVE_SAY_USER.format(text=text)
 
 
-LIVE_PERSONA_USER = (
-    "[Operator] Ab sofort gilt diese Rolle und dieses Wissen statt deiner Werksrolle als "
-    "voicehook-Experte, nicht vorlesen, nicht darauf antworten: {text}"
-)
+def live_persona_user(text: str, name: str | None = None) -> str:
+    """Bereinigte Persona als Wissens-Turn: ersetzt die Werksrolle, nie den Kern."""
+    return (f"{MARK_SYSTEM} Ab sofort gilt statt deiner Werksrolle als voicehook-Experte "
+            f"dieses Wissen.{_SILENT} " + persona_block(text, name) + " " + CORE_ANCHOR)
+
+
+# Kompatibel: Vorlage mit {text}, Agent ohne Namen.
+LIVE_PERSONA_USER = live_persona_user("{text}")
 
 # Platzhalter, die Gemini statt echter Sprache als Transkript liefert
 NO_SPEECH_MARKERS = ("<no speech detected>", "&lt;no speech detected&gt;")

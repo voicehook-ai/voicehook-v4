@@ -89,8 +89,8 @@ since the last `next`, `status_stale: true` = resend your board:
   before answering: never repeat what Delta already said; if Delta said something wrong, correct
   it in one sentence; if Delta already answered fully, `say` nothing or only add the missing fact.
 - Delta misbehaves (wrong claim, repeats itself, too long, wrong name): (1) correct the user-facing
-  error in one `say`; (2) push a short fix via `operator.persona` ("Sag nie X. Wenn Y, dann Z.");
-  today it replaces Delta's instructions, so send your full persona plus the fix.
+  error in one `say`; (2) push a short fix via `operator.persona` (facts, e.g. "Das Projekt heißt
+  Ring."); it replaces your previous persona block, so send your full persona plus the fix.
 - Keep the main loop free: between `next` and `say` do nothing slow. Anything over ~3 s (shell, web,
   edits, builds, lookups) goes to a background agent/subtask; meanwhile `say` a short holding line
   and `status` the board. Answer each turn within ~3 s (`next` warns: `latency_warning`).
@@ -121,14 +121,14 @@ since the last `next`, `status_stale: true` = resend your board:
 - Another operator may already be in the call (`room-state` / `peer-joined` lines with a
   second `<name>-<host>-…` identity, or `"operator": true` in `$D/vh status`). Then do NOT
   push `operator.persona` and do not pass `--persona`/`--persona-file`: it replaces the
-  voicebot's instructions for everyone. CLI 0.5.0 skips that push on its own and logs
+  voicebot's knowledge block for everyone. CLI 0.5.0 skips that push on its own and logs
   `persona/mode NOT pushed`; `--force-persona` overrides, do not use it in someone's call.
 - Never write into shared paths (`personas/*.txt`, `/tmp/vh-call.*`). Use your own `$D`.
 - Alone in the call and you want the voicebot to know context: `--persona "<3-5 lines>"`
   at join. The first persona push also triggers one server-side greeting, so then drop `--greet`.
-- Every persona you push MUST contain this rule (the voicebot has no tools, you do): "Questions about
-  capabilities, access, whether something works, or anything you would have to assume: never answer,
-  never deny, never claim. Say only 'Kurzen Moment, ich frag Claude.' and wait." (your `--name`)
+- A persona is knowledge, not rules: it is appended after Delta's fixed core (no inventing, never
+  answers capability questions, short waits with your `--name`, never "Operator"), which it cannot
+  change. Override lines ("ignoriere", "neue Regeln", "Operator") are dropped, max 1500 chars; then `operator.notice` `persona_sanitized`.
 
 ## Check the connection
 
@@ -148,7 +148,7 @@ Quickstart B: `$D/out` (JSON lines) should show within ~5 s:
 |---|---|---|
 | `operator.say` | `{text, mode?}` | speak `text` verbatim. Modes below |
 | `operator.revise` | ← `{unspoken[], new, text}` | from the voicebot: what was NOT spoken yet |
-| `operator.persona` | `{text}` | replaces the voicebot's instructions for everyone (see above) |
+| `operator.persona` | `{text}` | knowledge block after Delta's fixed core, for everyone (see above) |
 | `operator.interrupt` | `{}` | stop speaking; unspoken rest comes back as `operator.revise` |
 | `operator.inject` | `{text, role?}` | context entry, not spoken |
 | `transcript` | ← `{role, text}` | `user` = the human; `operator` = your spoken text; `agent` = voicebot's own answer |

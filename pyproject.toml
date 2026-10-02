@@ -51,3 +51,6 @@ known-first-party = ["agent"]
 [tool.pytest.ini_options]
 testpaths = ["apps/agent/tests"]
 asyncio_mode = "auto"
+markers = [
+  "live_llm: braucht echtes Gemini (GOOGLE_API_KEY + VOICEHOOK_LIVE_LLM_TESTS=1), sonst übersprungen",
+]
