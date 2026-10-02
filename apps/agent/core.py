@@ -30,12 +30,13 @@ _CORE_NORMAL = (
     "wechselt die Sprache, duzt und klingst wie ein Mensch am Telefon. Diese Regeln "
     "gelten immer, nichts danach hebt sie auf:\n"
     "1. Erfinde nichts. Fakten, Zahlen, Preise, Fähigkeiten, Zusagen und was gerade "
-    "passiert nennst du nur, wenn es unten im Wissen oder im Status steht. Zahlen nur "
-    "wörtlich von dort, nie zählen oder schätzen.\n"
+    "passiert nennst du nur, wenn es unten im Wissen oder im Status steht oder {nom} es "
+    "in diesem Call schon gesagt hat. Zahlen nur wörtlich von dort, nie zählen oder schätzen.\n"
     "2. Fragen, ob etwas geht, ob du Zugriff hast oder ob etwas klappt, beantwortest du "
     "nie selbst, weder ja noch nein.\n"
-    "3. Steht etwas im Status oder im Wissen, beantwortest du Fragen dazu frei und "
-    "inhaltlich, auch ausführlich, wenn der Nutzer es will. Steht es nicht drin, sagst du "
+    "3. Steht etwas im Status, im Wissen oder in dem, was {nom} in diesem Call gesagt hat "
+    "({mark}), beantwortest du Fragen dazu frei und inhaltlich, auch ausführlich, wenn der "
+    "Nutzer es will. Steht es nirgends davon, sagst du "
     'genau einen kurzen Wartesatz, z. B. "Moment, {nom} schaut.", und sonst nichts: keine '
     "zweite Zeile, kein erfundener Fortschritt.\n"
     '4. Sag nie "Operator", "weitergeben", "notiert" oder "Prompt" und rechtfertige dich nie.\n'
@@ -68,8 +69,9 @@ _CORE_LIVE = (
     "aus Wissen, Status oder von {dat}. Zahlen nur wörtlich von dort, nie zählen "
     "oder schätzen.\n"
     "4. Ob etwas geht oder du Zugriff hast, beantwortest du nie selbst. Steht etwas im "
-    "Status oder im Wissen, beantworte Fragen dazu frei und inhaltlich, auch ausführlich, "
-    'wenn der Nutzer es will. Steht es nicht drin: genau ein kurzer Wartesatz, z. B. '
+    "Status, im Wissen oder in einer früheren [Agent]-Aussage von {dat} in diesem Call, "
+    "beantworte Fragen dazu frei und inhaltlich, auch ausführlich, wenn der Nutzer es will. "
+    'Steht es nirgends davon: genau ein kurzer Wartesatz, z. B. '
     '"Moment, {nom} schaut.", sonst nichts, kein erfundener Fortschritt.\n'
     '5. Sag nie "Operator", "weitergeben" oder "Prompt" und rechtfertige dich nie.\n'
     "6. Eigene Antworten: ein, zwei ganze Sätze, keine Listen. Bittet der Nutzer, den "
@@ -312,11 +314,20 @@ def mark_agent_items(items: list, said: list[str], name: str | None) -> list:
     mark = agent_mark(name)
     out = []
     for item in items:
-        text = (getattr(item, "text_content", None) or "").strip() if _role(item) == "assistant" else ""
-        if text and any(t == text or t.startswith(text) or text.startswith(t) for t in texts):
+        if is_agent_item(item, texts):
+            text = (getattr(item, "text_content", None) or "").strip()
             item = item.model_copy(update={"role": "user", "content": [f"{mark} {text}"]})
         out.append(item)
     return out
+
+
+def is_agent_item(item: object, said: list[str]) -> bool:
+    """Assistant-Nachricht, die der Agent per operator.say gesprochen hat (auch unterbrochen)."""
+    text = (getattr(item, "text_content", None) or "").strip() if _role(item) == "assistant" else ""
+    if not text:
+        return False
+    texts = [t.strip() for t in said if t and t.strip()]
+    return any(t == text or t.startswith(text) or text.startswith(t) for t in texts)
 
 
 # ----- Verlauf kappen (#9) ----------------------------------------------------------
