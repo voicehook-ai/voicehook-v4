@@ -589,3 +589,23 @@ def test_next_flags_stale_board_only_after_user_spoke(client, monkeypatch):
     client.post("/api/bridge/send", headers=h, json={"topic": "operator.status", "payload": {"doing": "x"}})
     r2 = client.get("/api/bridge/next", headers=h, params={"timeout": 0.05}).json()
     assert "status_stale" not in r2                    # frisches Board
+
+
+def test_next_carries_agent_said_not_operator_echo(client):
+    j = _join(client)
+    room = FakeRoom.instances[-1]
+    h = _h(j["session"])
+    for role, text in (("agent", "Gern geschehen!"), ("operator", "Echo meines say"),
+                       ("agent", "Noch was?"), ("agent", "Teil", )):
+        _call(client, room.emit, "data_received", FakePacket("transcript", {"role": role, "text": text}, "voice-ai-1"))
+    _call(client, room.emit, "data_received", FakePacket("transcript", {"role": "agent", "text": "zwischen", "final": False}, "voice-ai-1"))
+    _call(client, room.emit, "data_received", FakePacket("transcript", {"role": "user", "text": "Danke"}, "voice-ai-1"))
+    r = client.get("/api/bridge/next", headers=h, params={"timeout": 1}).json()
+    assert r["type"] == "user" and r["agent_said"] == ["Gern geschehen!", "Noch was?", "Teil"]
+    r2 = client.get("/api/bridge/next", headers=h, params={"timeout": 0.05}).json()
+    assert "agent_said" not in r2
+    for i in range(5):
+        _call(client, room.emit, "data_received", FakePacket("transcript", {"role": "agent", "text": f"s{i} " + "x" * 150}, "voice-ai-1"))
+    r3 = client.get("/api/bridge/next", headers=h, params={"timeout": 0.05}).json()
+    assert r3["type"] == "timeout" and [t[:2] for t in r3["agent_said"]] == ["s3", "s4"]
+    assert sum(map(len, r3["agent_said"])) <= 400

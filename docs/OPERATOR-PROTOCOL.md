@@ -59,7 +59,7 @@ in the header `Authorization: Bearer <session>`, never in a URL.
 | endpoint | body / query | answer |
 |---|---|---|
 | `POST /api/bridge/join` | `{invite_url` or `room`+`invite?, name, model, identity?, greet?, persona?, force_persona?, idle_timeout?}` (`idle_timeout` in minutes, default 10, 0 = off) | `{session, expires_in, room, identity, idle_timeout_s, peers, notes}` |
-| `GET /api/bridge/next?timeout=50` | max 120 s | one object like CLI `next`: `{type: user\|revise\|status_request\|timeout\|ended, text, ...}`; plus `status_stale: true` when the board is older than 5 min and the user spoke since |
+| `GET /api/bridge/next?timeout=50` | max 120 s | one object like CLI `next`: `{type: user\|revise\|status_request\|timeout\|ended, text, ...}`; plus `status_stale: true` when the board is older than 5 min and the user spoke since; `agent_said: [..]` = what the voicebot said on its own since the last `next` (max 3 lines / 400 chars, never your own echoes) |
 | `POST /api/bridge/say` | `{text, mode?}` | `{ok, seq}`; payload on the wire `{text, _seq, _ts, mode?}` like the CLI |
 | `POST /api/bridge/leave` | `{say?}` (optional) | `{ok, type: "leaving"}`; `say` is spoken with `mode:"append"` first |
 | `GET /api/bridge/status` | | `{connected, pending, idle_s, peers[], sse_clients, ...}` |

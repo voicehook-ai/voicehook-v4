@@ -151,6 +151,35 @@ def revise_event(payload: dict) -> dict:
     return ev
 
 
+AGENT_SAID_MAX = 3          # entries in `agent_said`
+AGENT_SAID_CHARS = 400      # total chars in `agent_said`
+
+
+class AgentSaid:
+    """What the voicebot (Delta) said on its own since the last `next` (transcript
+    role=agent, never echoes of your own say). `next` hands it out as `agent_said`
+    so you do not repeat it and can correct it. Oldest entries drop first."""
+
+    def __init__(self) -> None:
+        self._items: list[str] = []
+
+    def add(self, text: str) -> None:
+        text = " ".join(str(text or "").split())
+        if not text:
+            return
+        self._items.append(text[:AGENT_SAID_CHARS])
+        del self._items[:-AGENT_SAID_MAX]
+        while sum(map(len, self._items)) > AGENT_SAID_CHARS and len(self._items) > 1:
+            self._items.pop(0)
+
+    def take(self) -> dict:
+        """{"agent_said": [...]} (chronological) and reset, or {} when nothing new."""
+        if not self._items:
+            return {}
+        out, self._items = self._items, []
+        return {"agent_said": out}
+
+
 class EventQueue:
     """FIFO for `next` (user turns, operator.revise, final `ended`). Bounded."""
 
@@ -226,6 +255,7 @@ class Session:
         self.loop = asyncio.get_running_loop()  # LiveKit callbacks + guard run here
         self.status_at = self.created          # letztes operator.status (Join zählt als Start)
         self.user_at: float | None = None      # letzter Nutzer-Turn
+        self.agent_said = AgentSaid()          # Deltas eigene Sätze seit dem letzten `next`
 
     # ---- liveness ------------------------------------------------------- #
     def touch(self) -> None:
@@ -341,6 +371,8 @@ def wire(session: Session) -> None:
         if not isinstance(payload, dict):
             return
         if topic == "transcript":
+            if payload.get("role") == "agent" and _is_final(payload):
+                session.agent_said.add(payload.get("text", ""))
             ev = user_turn_event(payload)
             if ev is not None:
                 session.user_at = time.monotonic()
