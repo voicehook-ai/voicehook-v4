@@ -344,6 +344,17 @@ def api_wallet_recover(req: RecoverRequest) -> dict:
     return {"wallet_token": token, "recovery_url": _recovery_url(code), **_wallet_view(acc)}
 
 
+@router.post("/api/logout")
+def api_logout(request: Request) -> dict:
+    """Abmelden auf diesem Gerät: widerruft genau das Token aus X-Wallet-Token.
+    Immer 200 (ohne/unbekanntes Token: no-op, revoked false). Andere Geräte
+    desselben Kontos bleiben angemeldet."""
+    revoked = db.revoke_wallet_token(wallet_token(request) or None)
+    if revoked:
+        logger.info("[logout] wallet token revoked")
+    return {"ok": True, "revoked": revoked}
+
+
 # ----- Magic-Link-Login -----------------------------------------------------------
 _EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
 # Ratenlimits Magic-Link (Re-Review PR #93):

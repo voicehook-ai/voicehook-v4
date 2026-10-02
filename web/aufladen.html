@@ -115,6 +115,9 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
 .login input{ flex:1 1 auto; min-width:0; font-family:var(--vh-mono); font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid var(--vh-btn-border-hov); background:transparent; color:var(--vh-fg-0); }
 .login form .cta{ width:auto; padding:0 14px; font-size:13px; min-height:44px; white-space:nowrap; }
 .em{ text-transform:none; letter-spacing:.02em; color:var(--vh-fg-0); }
+/* Konto-Zeile (Oliver 02.10.): "Angemeldet als … · Abmelden" */
+.acct-line{ font-size:12px; line-height:1.5; color:var(--vh-fg-2); text-align:center; max-width:100%; overflow-wrap:anywhere; margin-bottom:12px; }
+.acct-line .linkbtn{ padding:2px 2px; font-size:12px; }
 .tagline{ margin-top:28px; font-size:11px; color:var(--vh-fg-3); letter-spacing:.04em; white-space:nowrap; }
 @media (max-width:480px){ .dial-box{ width:260px; height:260px; } .center .amt{ font-size:40px; } .wrap{ gap:20px; } }
 </style>
@@ -130,6 +133,7 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
 </script>
 <div class="brand"><a href="/"><span class="dlt"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span>by</span><span class="tld"> voicehook</span></a><span class="by">·</span><span id="t-brand">Aufladen</span></div>
 <button id="btn-theme" type="button" aria-label="Theme"></button>
+<div class="acct-line" id="acct-line" aria-live="polite" hidden></div>
 
 <main class="wrap" id="view-topup">
   <h1 id="t-h1">Guthaben aufladen</h1>
@@ -228,7 +232,8 @@ const T = {
         badRec:'Dieser Wiederherstellungs-Link ist ungültig.', restored:'Guthaben wiederhergestellt',
         doneH:'Guthaben aufgeladen', doneBal:'Aktuelles Guthaben', recH:'Wiederherstellungs-Link',
         recTxt:'Speichere diesen Link. Damit holst du dein Guthaben auf ein anderes Gerät oder nach dem Löschen der Browserdaten zurück. Wer den Link hat, kann dein Guthaben nutzen.',
-        copy:'Link kopieren', copied:'Kopiert', call:'Zum Call', more:'Weiter aufladen', amount:'Betrag', theme:'Hell oder dunkel' },
+        copy:'Link kopieren', copied:'Kopiert', call:'Zum Call', more:'Weiter aufladen', amount:'Betrag', theme:'Hell oder dunkel',
+        acctAs:'Angemeldet als', logout:'Abmelden', loggedOut:'Abgemeldet. Dieses Gerät nutzt wieder das Gratis-Kontingent.' },
   en: { brand:'Top up', h1:'Top up credit', sub:'credit incl. VAT', rate:'You pay for actual usage',
         cta:a=>'Top up · '+a, busy:'Connecting to Stripe …', soon:'Top-up coming soon',
         soonMsg:'Payments are not enabled yet.', err:'That did not work. Please try again.',
@@ -248,7 +253,8 @@ const T = {
         badRec:'This recovery link is not valid.', restored:'Credit restored',
         doneH:'Credit topped up', doneBal:'Current credit', recH:'Recovery link',
         recTxt:'Keep this link safe. It restores your credit on another device or after clearing browser data. Anyone with the link can use your credit.',
-        copy:'Copy link', copied:'Copied', call:'Start a call', more:'Top up more', amount:'Amount', theme:'Light or dark' },
+        copy:'Copy link', copied:'Copied', call:'Start a call', more:'Top up more', amount:'Amount', theme:'Light or dark',
+        acctAs:'Logged in as', logout:'Log out', loggedOut:'Logged out. This device uses the free allowance again.' },
 }[LANG];
 const $ = id => document.getElementById(id);
 const TOKEN_KEY = 'vh-wallet-v1';
@@ -256,7 +262,7 @@ const NONCE_KEY = 'vh_login_nonce';  // localStorage: der Mail-Link öffnet eine
 const getNonce = () => { try { return localStorage.getItem(NONCE_KEY) || ''; } catch { return ''; } };
 const setNonce = n => { try { if (n) localStorage.setItem(NONCE_KEY, n); else localStorage.removeItem(NONCE_KEY); } catch {} };
 const getToken = () => { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } };
-const setToken = t => { try { localStorage.setItem(TOKEN_KEY, t); } catch {} };
+const setToken = t => { try { localStorage.setItem(TOKEN_KEY, t); } catch {} refreshAcct(); };
 const eurFmt = new Intl.NumberFormat(LANG === 'de' ? 'de-DE' : 'en-IE', { style:'currency', currency:'EUR' });
 const eurWhole = new Intl.NumberFormat(LANG === 'de' ? 'de-DE' : 'en-IE', { style:'currency', currency:'EUR', maximumFractionDigits:0, minimumFractionDigits:0 });
 
@@ -408,6 +414,44 @@ $('rec-copy').addEventListener('click', async () => {
 $('go-call').addEventListener('click', () => { location.href = '/'; });
 $('more').addEventListener('click', () => { $('view-done').hidden = true; $('view-topup').hidden = false; loadBalance(); });
 
+
+// ---- Konto-Zeile + Abmelden (Oliver 02.10.) ----
+// Angemeldet = GET /api/me meldet email_verified true bzw. email_masked (keine andere Quelle).
+// Abmelden: POST /api/logout widerruft genau dieses Token, dann Token + Login-Nonce
+// aus localStorage; Zustand ohne Reload (Gerät = Gast).
+function isIn(me){ return !!(me && (me.email_verified === true || me.email_masked)); }
+function renderAcct(me){
+  const el = $('acct-line'); el.textContent = '';
+  if (!isIn(me)) { el.hidden = true; return false; }
+  const sp = document.createElement('span'); sp.className = 'em'; sp.textContent = me.email_masked || '';
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'linkbtn'; b.id = 'acct-out'; b.textContent = T.logout;
+  b.addEventListener('click', () => { b.disabled = true; logout(); });
+  el.append(T.acctAs + ' ', sp, ' \u00b7 ', b); el.hidden = false;
+  return true;
+}
+let acctSeq = 0;
+async function refreshAcct(){
+  const seq = ++acctSeq;
+  let me = null;
+  if (getToken()) { try { const r = await fetch('/api/me', { cache:'no-store', headers:headers() }); if (r.ok) me = await r.json(); } catch {} }
+  if (seq !== acctSeq) return isIn(me);
+  const inn = renderAcct(me); onAcct(inn); return inn;
+}
+async function logout(){
+  const t = getToken();
+  if (t) { try { await fetch('/api/logout', { method:'POST', headers:{ 'X-Wallet-Token':t } }); } catch {} }
+  try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(NONCE_KEY); } catch {}
+  acctSeq++; renderAcct(null); onAcct(false, true);
+}
+window.addEventListener('storage', e => { if (e.key === TOKEN_KEY) refreshAcct(); });
+function onAcct(inn, justOut){
+  if (!justOut) return;
+  $('balance').hidden = true; $('balance').textContent = '';
+  $('view-done').hidden = true; $('view-ask').hidden = true; $('view-topup').hidden = false;
+  $('confirm-box').hidden = true; $('recovery-box').hidden = true; $('login-box').hidden = false;
+  showMsg(T.loggedOut);
+}
+
 // ---- Anmelden: Link auf /login?next=<diese Seite> (Google, GitHub, E-Mail-Link) ----
 function loginHref(){ return '/login?next=' + encodeURIComponent(location.pathname + location.search); }
 
@@ -536,6 +580,7 @@ async function init(){
   const sid = q.get('session_id'), rec = hash.get('r'), login = hash.get('login');
   if (sid || q.get('topup') || rec || login || q.has('wallet')) history.replaceState(null, '', location.pathname);
   $('login-open').href = loginHref();
+  if (!login) refreshAcct();
   try {
     const r = await fetch('/api/billing/config');
     if (r.ok) {

@@ -124,7 +124,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'menu.aria': 'Menü',
       'menu.topup': 'Aufladen', 'menu.setup': 'Setup', 'menu.privacy': 'Datenschutz',
       'menu.imprint': 'Impressum', 'menu.security': 'Sicherheit', 'menu.github': 'GitHub ↗',
-      'menu.mic': 'Mikrofon', 'menu.style': 'Style',
+      'menu.mic': 'Mikrofon',
       'style.lagoon': 'Wasser',
       'style.ice': 'Delta', 'style.earth': 'Erde', 'style.fire': 'Feuer', 'style.water': 'Deepsea',
       'style.air': 'Luft', 'style.forest': 'Wald', 'style.zebra': 'Zebra', 'style.giraffe': 'Giraffe',
@@ -262,7 +262,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'menu.aria': 'menu',
       'menu.topup': 'Top up', 'menu.setup': 'Setup', 'menu.privacy': 'Privacy',
       'menu.imprint': 'Imprint', 'menu.security': 'Security', 'menu.github': 'GitHub ↗',
-      'menu.mic': 'Microphone', 'menu.style': 'Style',
+      'menu.mic': 'Microphone',
       'style.lagoon': 'Water',
       'style.ice': 'Delta', 'style.earth': 'Earth', 'style.fire': 'Fire', 'style.water': 'Deepsea',
       'style.air': 'Air', 'style.forest': 'Forest', 'style.zebra': 'Zebra', 'style.giraffe': 'Giraffe',
@@ -369,6 +369,29 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
   Object.assign(D.en, {
     'hint.show': 'Show hint', 'hint.hide': 'Hide hint',
     'mmin.min': 'Minimize panel', 'mmin.restore': 'Restore panel'
+  });
+  // Konto-Knopf oben rechts (Oliver 02.10.: sichtbarer Login-Zustand + Abmelden)
+  Object.assign(D.de, {
+    'acct.login': 'Anmelden', 'acct.menu': 'Konto', 'acct.as': 'Angemeldet als',
+    'acct.bal': 'Guthaben: {v}', 'acct.topup': 'Aufladen', 'acct.logout': 'Abmelden',
+    'auth.save': 'Bitte anmelden, um Styles zu speichern.',
+    'auth.google': 'Mit Google fortfahren', 'auth.github': 'Mit GitHub fortfahren', 'auth.soon': 'bald verfügbar',
+    'auth.or': 'oder per E-Mail-Link', 'auth.ph': 'deine@email.de', 'auth.send': 'Link senden',
+    'auth.hint': 'Wir schicken dir einen Anmelde-Link.', 'auth.sent': 'Link gesendet. Öffne ihn aus deinem Postfach.',
+    'auth.bad': 'Bitte eine gültige E-Mail eingeben', 'auth.unavail': 'E-Mail-Link bald verfügbar',
+    'auth.rate': 'Zu viele Versuche. Bitte warte ein paar Minuten.', 'auth.mailfail': 'Die E-Mail ließ sich nicht senden. Bitte versuch es später noch einmal.',
+    'auth.err': 'Das hat nicht geklappt. Bitte versuch es noch einmal.', 'auth.redirect': 'Weiter zu {p} …'
+  });
+  Object.assign(D.en, {
+    'acct.login': 'Log in', 'acct.menu': 'Account', 'acct.as': 'Logged in as',
+    'acct.bal': 'Credit: {v}', 'acct.topup': 'Top up', 'acct.logout': 'Log out',
+    'auth.save': 'Please sign in to save styles.',
+    'auth.google': 'Continue with Google', 'auth.github': 'Continue with GitHub', 'auth.soon': 'coming soon',
+    'auth.or': 'or with an email link', 'auth.ph': 'you@example.com', 'auth.send': 'Send link',
+    'auth.hint': 'We will send you a login link.', 'auth.sent': 'Link sent. Open it from your inbox.',
+    'auth.bad': 'Please enter a valid email', 'auth.unavail': 'Email link coming soon',
+    'auth.rate': 'Too many attempts. Please wait a few minutes.', 'auth.mailfail': 'The email could not be sent. Please try again later.',
+    'auth.err': 'That did not work. Please try again.', 'auth.redirect': 'Continuing to {p} …'
   });
   window.VH_LANG = lang;
   window.VH_I18N = D;
@@ -1412,11 +1435,92 @@ body.theme-light .vh-dp-my .vh-dp-sw-img { background: var(--img) center / cover
 .vh-dp-reset { appearance: none; margin-top: 10px; width: 100%; font: inherit; font-size: 11px; padding: 7px 10px; border-radius: 8px; cursor: pointer;
   background: transparent; color: inherit; border: 1px solid var(--vh-btn-border-hov, rgba(255,255,255,0.3)); }
 .vh-dp-reset:hover { background: var(--vh-btn-bg-hover); }
+/* Konto-Knopf (Oliver 02.10.): links neben Design, gleiche Größe. Abgemeldet
+   Personen-Icon, angemeldet Initiale der E-Mail in Akzentfarbe. */
+#btn-vh-account {
+  position: fixed; top: 18px; right: 138px;
+  width: 34px; height: 34px; padding: 0; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--vh-btn-bg); border: 1px solid var(--vh-btn-border);
+  color: var(--vh-btn-fg); border-radius: 50%; cursor: pointer; z-index: 20;
+  backdrop-filter: var(--vh-btn-blur); -webkit-backdrop-filter: var(--vh-btn-blur);
+  transition: color .3s, border-color .3s, background .3s;
+  font-family: var(--vh-mono); font-size: 14px; font-weight: 600; letter-spacing: 0;
+}
+#btn-vh-account svg { width: 16px; height: 16px; display: block; }
+#btn-vh-account:hover, #btn-vh-account.on { color: var(--vh-btn-fg-hov); border-color: var(--vh-btn-border-hov); background: var(--vh-btn-bg-hover); }
+#btn-vh-account.in, #btn-vh-account.in:hover, #btn-vh-account.in.on { background: #6dc9d9; border-color: #6dc9d9; color: #000; }
+#btn-vh-account.in:hover, #btn-vh-account.in.on { filter: brightness(1.08); }
+body.theme-light #btn-vh-account.in { background: #1f7f90; border-color: #1f7f90; color: #fff; }
+#vh-acct-pop {
+  position: fixed; top: 62px; right: 18px; z-index: 40;
+  width: min(300px, calc(100vw - 24px)); box-sizing: border-box;
+  padding: 14px 16px; border-radius: 12px;
+  background: rgba(14,16,22,0.90); border: 1px solid var(--vh-btn-border);
+  backdrop-filter: var(--vh-btn-blur); -webkit-backdrop-filter: var(--vh-btn-blur);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+  font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.5; color: var(--vh-btn-fg-hov, #eee);
+  display: flex; flex-direction: column; gap: 6px;
+}
+#vh-acct-pop[hidden] { display: none; }
+body.theme-light #vh-acct-pop { background: rgba(250,250,252,0.94); box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
+#vh-acct-pop .vh-acct-lbl { color: var(--vh-btn-fg); opacity: .7; font-size: 11px; }
+#vh-acct-pop .vh-acct-mail { overflow-wrap: anywhere; }
+#vh-acct-pop .vh-acct-row { display: flex; gap: 8px; margin-top: 6px; }
+#vh-acct-pop .vh-acct-row > * {
+  flex: 1 1 0; appearance: none; font: inherit; font-size: 11.5px; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  text-align: center; text-decoration: none; letter-spacing: .02em;
+  background: transparent; color: inherit; border: 1px solid var(--vh-btn-border-hov, rgba(255,255,255,0.3));
+}
+#vh-acct-pop .vh-acct-row > *:hover { background: var(--vh-btn-bg-hover); }
+#vh-acct-pop #vh-acct-topup { border-color: #6dc9d9; color: #6dc9d9; }
+body.theme-light #vh-acct-pop #vh-acct-topup { border-color: #1f7f90; color: #1f7f90; }
+/* Anmelde-Dialog vor "Style speichern" (Oliver 02.10.): Anbieter wie /login. */
+#vh-auth-modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 16px; }
+#vh-auth-modal[hidden] { display: none; }
+#vh-auth-modal .vh-auth-bg { position: absolute; inset: 0; background: rgba(10,12,18,0.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+#vh-auth-modal .vh-auth-card { position: relative; width: min(360px, 100%); box-sizing: border-box; padding: 26px 20px 20px; border-radius: 12px;
+  background: #101218; border: 1px solid var(--vh-btn-border); box-shadow: 0 12px 60px rgba(0,0,0,0.55);
+  font-family: var(--vh-mono); color: var(--vh-fg-0, #f4f4f7); display: flex; flex-direction: column; gap: 10px; }
+body.theme-light #vh-auth-modal .vh-auth-bg { background: rgba(244,244,247,0.72); }
+body.theme-light #vh-auth-modal .vh-auth-card { background: #fafafc; box-shadow: 0 12px 48px rgba(0,0,0,0.14); color: #0b0b0f; }
+#vh-auth-modal h2 { margin: 0 22px 6px 0; font-size: 13px; font-weight: 500; line-height: 1.5; letter-spacing: .02em; }
+#vh-auth-modal .vh-auth-x { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; padding: 0; border-radius: 8px; border: 0;
+  background: transparent; color: inherit; opacity: .6; font-size: 20px; line-height: 1; cursor: pointer; }
+#vh-auth-modal .vh-auth-x:hover { opacity: 1; background: var(--vh-btn-bg-hover); }
+#vh-auth-modal .vh-auth-btn { appearance: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; row-gap: 2px;
+  width: 100%; min-height: 44px; padding: 10px 14px; border-radius: 12px; cursor: pointer; font: inherit; font-size: 13px; letter-spacing: .02em;
+  background: transparent; color: inherit; border: 1px solid var(--vh-btn-border-hov, rgba(255,255,255,0.3)); transition: background .15s; }
+#vh-auth-modal .vh-auth-btn:hover:not(:disabled) { background: var(--vh-btn-bg-hover); }
+#vh-auth-modal .vh-auth-btn:disabled { opacity: .45; cursor: not-allowed; }
+#vh-auth-modal .vh-auth-btn svg { width: 18px; height: 18px; flex: 0 0 18px; }
+#vh-auth-modal .vh-auth-btn .gh { fill: currentColor; }
+#vh-auth-modal .vh-auth-soon { flex-basis: 100%; text-align: center; font-size: 10.5px; opacity: .8; }
+#vh-auth-modal .vh-auth-or { display: flex; align-items: center; gap: 10px; font-size: 11px; opacity: .6; letter-spacing: .04em; margin-top: 4px; }
+#vh-auth-modal .vh-auth-or::before, #vh-auth-modal .vh-auth-or::after { content: ""; flex: 1; height: 1px; background: currentColor; opacity: .35; }
+#vh-auth-modal form { display: flex; gap: 8px; }
+#vh-auth-modal input { flex: 1 1 auto; min-width: 0; font: inherit; font-size: 16px; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--vh-btn-border-hov, rgba(255,255,255,0.3)); background: transparent; color: inherit; }
+#vh-auth-modal form .vh-auth-btn { width: auto; min-height: 40px; padding: 0 12px; font-size: 12px; white-space: nowrap; }
+#vh-auth-modal .vh-auth-msg { font-size: 11.5px; line-height: 1.5; text-align: center; opacity: .8; }
+#vh-auth-modal .vh-auth-msg.warn { color: #f2a65a; opacity: 1; }
+body.theme-light #vh-auth-modal .vh-auth-msg.warn { color: #b8641a; }
+@media (max-width: 640px) {
+  #btn-vh-account { width: 38px; height: 38px; top: 14px; right: 152px; font-size: 15px; }
+  #btn-vh-account svg { width: 18px; height: 18px; }
+  #vh-acct-pop { top: 60px; right: 12px; }
+}
 @media (max-width: 640px) {
   #btn-vh-design { width: 38px; height: 38px; top: 14px; right: 106px; }
   #btn-vh-design svg { width: 17px; height: 17px; }
   #vh-design-panel { top: 60px; right: 12px; left: 12px; width: auto; max-height: calc(100vh - 136px); max-height: calc(100dvh - 136px); }
   .vh-dp-row input[type="range"] { height: 28px; }
+}
+/* Sehr schmal (320 px): vier Knöpfe + Logo passen nur mit 34 px (Desktop-Größe) und
+   4 px Abstand in die obere Reihe; das Logo bleibt vollständig. */
+@media (max-width: 360px) {
+  #btn-theme, #btn-info, #btn-vh-design, #btn-vh-account { width: 34px; height: 34px; top: 16px; }
+  #btn-theme { right: 14px; } #btn-info { right: 52px; } #btn-vh-design { right: 90px; } #btn-vh-account { right: 128px; }
 }
 /* Sehr schmal: oben ist kein Platz neben dem Logo, Knopf in die zweite Reihe rechts. */
 /* UI-Paket 6: Musik-Knopf ist in die Modus-Leiste gezogen; der Design-Knopf passt
@@ -1447,6 +1551,31 @@ body.theme-light .vh-dp-my .vh-dp-sw-img { background: var(--img) center / cover
 <button id="btn-vh-design" type="button" title="Design" aria-label="Design" aria-expanded="false" aria-controls="vh-design-panel" data-i18n-title="dp.btn" data-i18n-aria="dp.btn">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2.2" fill="currentColor"/><circle cx="15" cy="12" r="2.2" fill="currentColor"/><circle cx="7" cy="18" r="2.2" fill="currentColor"/></svg>
 </button>
+<button id="btn-vh-account" type="button" title="Anmelden" aria-label="Anmelden" aria-expanded="false" aria-controls="vh-acct-pop" data-i18n-title="acct.login" data-i18n-aria="acct.login">
+  <svg class="vh-acct-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.2-3.6 4.1-5.5 7.5-5.5s6.3 1.9 7.5 5.5"/></svg>
+  <span class="vh-acct-ini" aria-hidden="true" hidden></span>
+</button>
+<div id="vh-acct-pop" role="dialog" aria-label="Konto" data-i18n-aria="acct.menu" hidden>
+  <div><span class="vh-acct-lbl" data-i18n="acct.as">Angemeldet als</span><br><span class="vh-acct-mail" id="vh-acct-mail"></span></div>
+  <div id="vh-acct-bal" hidden></div>
+  <div class="vh-acct-row">
+    <a href="/aufladen" id="vh-acct-topup" data-i18n="acct.topup">Aufladen</a>
+    <button type="button" id="vh-acct-out" data-i18n="acct.logout">Abmelden</button>
+  </div>
+</div>
+<div id="vh-auth-modal" role="dialog" aria-modal="true" aria-labelledby="vh-auth-h" hidden>
+  <div class="vh-auth-bg" id="vh-auth-bg"></div>
+  <div class="vh-auth-card">
+    <button type="button" class="vh-auth-x" id="vh-auth-close" aria-label="Schließen" data-i18n-aria="dp.close">&#215;</button>
+    <h2 id="vh-auth-h" data-i18n="auth.save">Bitte anmelden, um Styles zu speichern.</h2>
+    <button type="button" class="vh-auth-btn" data-provider="google"><svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg><span data-i18n="auth.google">Mit Google fortfahren</span><span class="vh-auth-soon" data-i18n="auth.soon" hidden>bald verfügbar</span></button>
+    <button type="button" class="vh-auth-btn" data-provider="github"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="gh" d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span data-i18n="auth.github">Mit GitHub fortfahren</span><span class="vh-auth-soon" data-i18n="auth.soon" hidden>bald verfügbar</span></button>
+    <div class="vh-auth-or" data-i18n="auth.or">oder per E-Mail-Link</div>
+    <form id="vh-auth-form" novalidate><input type="email" id="vh-auth-email" autocomplete="email" inputmode="email" placeholder="deine@email.de" aria-label="E-Mail" data-i18n-aria="auth.ph"><button type="submit" class="vh-auth-btn" id="vh-auth-send" data-i18n="auth.send">Link senden</button></form>
+    <div class="vh-auth-msg" id="vh-auth-msg" aria-live="polite" hidden></div>
+  </div>
+</div>
+<script src="/auth.js"></script>
 <div id="vh-design-panel" role="dialog" aria-labelledby="vh-dp-title" hidden>
   <div class="vh-dp-head"><span id="vh-dp-title" data-i18n="dp.title">Design</span>
     <button type="button" class="vh-dp-x" id="vh-dp-close" aria-label="Schließen" data-i18n-aria="dp.close">&#215;</button></div>
@@ -2118,7 +2247,7 @@ document.addEventListener('visibilitychange', vhLoopKick);
   } catch (_) {}
 })();
 const VH_AKKU = {
-  eco:    { cap: 0.10, fps: 30, pr: 0.75 },
+  eco:    { cap: 0.10, capPat: 0.25, fps: 30, pr: 0.75 },   // capPat: Deckel bei Muster-Styles
   normal: { cap: 1.00, fps: 0,  pr: 0    },
   high:   { cap: 1.00, fps: 0,  pr: 0    },
   ultra:  { cap: 1.00, fps: 0,  pr: 0    },
@@ -2134,7 +2263,19 @@ const VH_AKKU_PRESET = {
   high:   { pc: 0.50, size: 0.150 },
   ultra:  { pc: 1.00, size: 0.140 },
 };
+// Muster-Styles (Fell, Gletscher, Zufallsmuster) brauchen mehr Partikel für ein
+// geschlossenes Muster: eigene Preset-Werte, Normal = bisheriger Standard 60 %
+// (Oliver 02.10.: Normal und Hoch waren bei Mustern gleich, der Regler unter 60 %
+// wirkungslos). Paletten-Styles behalten VH_AKKU_PRESET.
+const VH_AKKU_PRESET_PAT = { eco: 0.25, normal: 0.60, high: 0.80, ultra: 1.00 };
 const VH_AKKU_CUSTOM_KEY = 'vh-akku-custom-v1';
+// "Eigene" (Regler von Hand verstellt): der Deckel der Stufe entfällt, der Regler
+// wirkt voll. Spiegel des localStorage-Flags, weil vhEffectiveN je Bild läuft.
+let vhAkkuCustomOn = (() => { try { return localStorage.getItem(VH_AKKU_CUSTOM_KEY) === '1'; } catch (_) { return false; } })();
+function vhSetAkkuCustom(on) {
+  vhAkkuCustomOn = !!on;
+  try { if (on) localStorage.setItem(VH_AKKU_CUSTOM_KEY, '1'); else localStorage.removeItem(VH_AKKU_CUSTOM_KEY); } catch (_) {}
+}
 // Schwaches Gerät (Punkt 15): Touch/grob + kleiner Viewport, oder <= 4 Kerne.
 // Die Bildzeit der ersten 2 s prüft vhAkkuAutoCheck() zusätzlich.
 function vhAkkuDefault() {
@@ -2195,18 +2336,45 @@ function animate() {
     vhRingPerf._frames = 0; vhRingPerf._t0 = t1;
   }
 }
-// Effektive Partikelzahl je Bild: Slider-Wert, für Felle mindestens VH_FUR_PC
-// (feines, geschlossenes Muster), gedeckelt durch die Akku-Stufe.
+// Effektive Partikelzahl je Bild: Regler-Wert, gedeckelt durch die Akku-Stufe
+// (nicht bei "Eigene"). VH_FUR_PC ist der Muster-Standard, den ein Style-Wechsel
+// sichtbar in den Regler schreibt (vhPcForStyle); eine feste Untergrenze gibt es
+// nicht mehr (Oliver 02.10.: "Partikel < 50 bewirkt nichts").
 const VH_FUR_PC = 0.6;
 // Paket 8 (Punkt 0, Oliver: Standard soll wieder der 467f26a-Look sein): die
 // Giraffe/Leopard-Sonderwerte aus UI-Paket 6 (pc 0,95, Punkte x1,15) sind raus,
 // alle Felle wieder mit VH_FUR_PC und Punktgröße x1 wie in 467f26a.
 const VH_FUR_STYLE = {};
 function vhEffectiveN() {
-  const cap = Math.floor(N * (VH_AKKU[vhAkku] || VH_AKKU.full).cap);
-  const fs = VH_FUR_STYLE[lastPaletteForSpatial];
-  const want = spatialMode ? Math.max(activeN, Math.floor(N * ((fs && fs.pc) || VH_FUR_PC))) : activeN;
-  return Math.max(1, Math.min(N, cap, want));
+  const a = VH_AKKU[vhAkku] || VH_AKKU.normal;
+  const capF = vhAkkuCustomOn ? 1 : (spatialMode && a.capPat ? a.capPat : a.cap);
+  return Math.max(1, Math.min(N, Math.floor(N * capF), activeN));
+}
+// Regler-Wert sichtbar setzen, ohne "Eigene" auszulösen (kein input-Event).
+function vhPcSet(v) {
+  v = Math.max(parseFloat(particleInput.min) || 0, Math.min(parseFloat(particleInput.max) || 1, v));
+  particleInput.value = String(v);
+  activeN = Math.floor(N * parseFloat(particleInput.value));
+  vhSyncDrawRange();
+  try { window.vhDesignSync && window.vhDesignSync('ranges'); } catch (_) {}
+}
+// Style-Wechsel: Muster-Styles bekommen ihren Partikel-Standard sichtbar in den
+// Regler (ohne "Eigene": Preset der Stufe; mit "Eigene": mindestens VH_FUR_PC beim
+// Wechsel von Palette auf Muster). Zurück auf eine Palette: der Wert von vorher.
+let vhPcPalette = null;   // Regler-Wert des Paletten-Styles vor dem Wechsel auf ein Muster
+function vhPcForStyle(prevPat) {
+  const pat = !!spatialMode, cur = parseFloat(particleInput.value);
+  if (pat) {
+    if (!prevPat && vhPcPalette === null) vhPcPalette = cur;
+    const fs = VH_FUR_STYLE[lastPaletteForSpatial];
+    let want = cur;
+    if (!vhAkkuCustomOn) want = VH_AKKU_PRESET_PAT[vhAkku] || VH_FUR_PC;
+    else if (!prevPat) want = Math.max(cur, (fs && fs.pc) || VH_FUR_PC);
+    if (want !== cur) vhPcSet(want);
+  } else if (prevPat) {
+    if (!vhAkkuCustomOn) vhPcSet(vhPcPalette !== null ? vhPcPalette : (VH_AKKU_PRESET[vhAkku] || VH_AKKU_PRESET.normal).pc);
+    vhPcPalette = null;
+  }
 }
 let vhDrawN = -1;
 // Zeichenbereich sofort aus vhEffectiveN setzen und den Cache mitführen. Direktes
@@ -2832,17 +3000,9 @@ function applyHd() {
   try { vhRingLayout(true); } catch (_) {}  // TDZ beim ersten Aufruf, danach aktiv
   btnHd.classList.toggle('on', hdOn);
   btnHd.textContent = hdOn ? 'HD' : 'SD';
-  const footHd = document.getElementById('vh-foot-hd');
-  if (footHd) {
-    footHd.classList.toggle('on', hdOn);
-    footHd.textContent = hdOn ? 'HD' : 'SD';
-    footHd.setAttribute('aria-checked', String(hdOn));
-  }
   try { localStorage.setItem(HD_KEY, hdOn ? '1' : '0'); } catch {}
 }
 btnHd.addEventListener('click', () => { hdOn = !hdOn; applyHd(); });
-{ const footHd = document.getElementById('vh-foot-hd');
-  if (footHd) footHd.addEventListener('click', (e) => { e.stopPropagation(); hdOn = !hdOn; applyHd(); }); }
 applyHd();
 
 // Theme-Toggle (mond/sonne) — body.theme-light togglen + persist
@@ -3886,7 +4046,8 @@ let vhActiveColorTarget = 'user';
 function vhApplyPaletteToTarget(pal) {
   if (!PALETTES[pal]) return false;
   vhUserPalettePinned = true;   // keep auto-paths off the user's choices
-  try { applyPalette(pal); } catch (_) {}
+  const prevPat = !!spatialMode;
+  try { applyPalette(pal); vhPcForStyle(prevPat); } catch (_) {}
   return true;
 }
 // Hue-Slider (nur im ausgeblendeten Panel): Feinjustage des Kringels, die
@@ -3960,6 +4121,7 @@ function saveState() {
       cl:     clusterInput.value,
       zoom:   vhZoomUser ? String(Math.round(vhZoomTarget * 100) / 100) : '',
       palette: lastPalette,
+      pcv: 1, pcp: vhPcPalette,   // pcv: Regler ohne Muster-Untergrenze gespeichert (02.10.)
     }));
   } catch {}
 }
@@ -3981,6 +4143,10 @@ function loadState() {
   if (s.zoom)   { const z = parseFloat(s.zoom); if (z > 0) { vhZoomUser = true; vhZoomTarget = Math.max(VH_ZOOM_MIN, Math.min(vhZoomMax, z)); zoom = vhZoomTarget; } }
   if (s.palette && PALETTES[s.palette]) { applyPalette(s.palette); lastPalette = s.palette;
     if (s.hue !== undefined) { hueInput.value = s.hue; hueShift = parseFloat(s.hue); } }
+  // Alter Stand (vor 02.10.) bei Muster-Style: gezeichnet wurde mindestens VH_FUR_PC;
+  // den Regler einmal auf den Muster-Standard heben, damit der Look gleich bleibt.
+  if (s.pcv) vhPcPalette = typeof s.pcp === 'number' ? s.pcp : null;
+  else if (spatialMode) vhPcForStyle(false);
 }
 
 [fxInput, ringFxInput, satInput, particleInput, islandInput, hueInput, brightnessInput, sizeInput, patternDensityInput, clusterInput].forEach(el => {
@@ -4157,6 +4323,7 @@ function vhApplyRandom(rng, forcePattern) {
   vhRegisterPalette('rnd', pal);
   try { localStorage.setItem(VH_RND_KEY, JSON.stringify(pal)); } catch (_) {}
   applyPalette('rnd');
+  vhPcForStyle(!!prevSpatial);
   lastPalette = 'rnd';
   vhUserPalettePinned = true;
   if (from && prevSpatial === spatialMode) vhTweenDiscrete(from[0], from[1], from[2]);
@@ -4168,7 +4335,7 @@ window.vhRandomPalette = vhRandomPalette;
 // Lesezugriff für Tests/Diagnose: aktiver Style und seine Palette
 window.vhStyleState = () => ({ palette: lastPalette, pal: PALETTES[lastPalette] || null,
   hues: discreteHues && Array.from(discreteHues), sats: discreteSats && Array.from(discreteSats), lits: discreteLits && Array.from(discreteLits),
-  spatial: spatialMode, litMul, colorBoost, n: activeN, size: mat.size, intensity, ringFx, satFraction, cluster: vhCluster, zoom: vhZoomTarget, zoomUser: vhZoomUser, hd: hdOn, akku: vhAkku });
+  spatial: spatialMode, litMul, colorBoost, n: activeN, drawN: vhDrawN, akkuCustom: vhAkkuCustomOn, size: mat.size, intensity, ringFx, satFraction, cluster: vhCluster, zoom: vhZoomTarget, zoomUser: vhZoomUser, hd: hdOn, akku: vhAkku });
 // Zuletzt gewürfelte Palette und eigene Styles VOR loadState registrieren,
 // damit ein gespeichertes palette:'rnd' / 'my-<id>' den Reload überlebt.
 try { const r = JSON.parse(localStorage.getItem(VH_RND_KEY) || 'null'); if (r) vhRegisterPalette('rnd', r); } catch (_) {}
@@ -4231,6 +4398,7 @@ function applyProfile(mode) {
   if (p.size   !== undefined) { sizeInput.value = p.size;         mat.size  = p.size; }
   // Issue #1: don't stomp on a user-pinned palette via mode-switch
   if (!vhUserPalettePinned) { applyPalette(p.palette); lastPalette = p.palette; }
+  if (spatialMode) { vhPcPalette = pcVal; vhPcForStyle(true); }   // Muster: Preset statt Profilwert
   // Beim Switch in einen kleineren activeN-Bereich: alle Partikel zurück zur
   // Origin-Position setzen + velocity nullen — sonst frieren die nun inaktiven
   // Partikel an ihrer letzten Audio-getriebenen Position außerhalb des Kreises.
@@ -4742,7 +4910,8 @@ function vhModeInfoRender() {
 // (Billing-Runde 4). Solange das Backend /api/me noch nicht hat (404): Fallback
 // auf /api/free/remaining + /api/wallet wie bisher.
 let vhMe = null;
-function vhLoggedIn() { return !!vhWalletToken() || !!(vhMe && vhMe.email_masked); }
+// Angemeldet = /api/me meldet eine (bestätigte) Konto-Mail. Keine andere Quelle.
+function vhLoggedIn() { return !!(vhMe && (vhMe.email_verified === true || vhMe.email_masked)); }
 async function vhFreeRefresh() {
   let me = null, meOk = false;
   try {
@@ -4770,8 +4939,134 @@ async function vhFreeRefresh() {
     }
   }
   vhModeInfoRender();
+  vhAcctRender();
   vhPayAfterRefresh();
+  window.vhMeReady = true;
+  if (window.vhSaveResume) window.vhSaveResume(vhLoggedIn());
 }
+// ── Konto-Knopf oben rechts (Oliver 02.10.) ──────────────────────────────────
+// Abgemeldet: Personen-Icon, Klick -> /login?next=<diese Seite>. Angemeldet:
+// Initiale der maskierten Mail, Klick -> Popover (Mail, Guthaben, Aufladen,
+// Abmelden). Esc oder Klick daneben schließt.
+const vhAcctBtn = document.getElementById('btn-vh-account');
+const vhAcctPop = document.getElementById('vh-acct-pop');
+function vhAcctOpen(on) {
+  if (!vhAcctPop || !vhAcctBtn) return;
+  on = !!on && vhLoggedIn();
+  vhAcctPop.hidden = !on;
+  vhAcctBtn.classList.toggle('on', on);
+  vhAcctBtn.setAttribute('aria-expanded', String(on));
+}
+function vhAcctRender() {
+  if (!vhAcctBtn) return;
+  const inn = vhLoggedIn();
+  const mail = inn && vhMe && vhMe.email_masked ? String(vhMe.email_masked) : '';
+  const ini = (mail.match(/[\p{L}\p{N}]/u) || [''])[0].toUpperCase();
+  vhAcctBtn.classList.toggle('in', inn);
+  vhAcctBtn.querySelector('.vh-acct-icon').style.display = inn && ini ? 'none' : '';
+  const iniEl = vhAcctBtn.querySelector('.vh-acct-ini');
+  iniEl.textContent = ini; iniEl.hidden = !(inn && ini);
+  const lbl = inn ? vhT('acct.menu') + (mail ? ': ' + mail : '') : vhT('acct.login');
+  vhAcctBtn.title = lbl; vhAcctBtn.setAttribute('aria-label', lbl);
+  if (inn) vhAcctBtn.setAttribute('aria-haspopup', 'dialog'); else vhAcctBtn.removeAttribute('aria-haspopup');
+  const m = document.getElementById('vh-acct-mail'); if (m) m.textContent = mail;
+  const b = document.getElementById('vh-acct-bal');
+  if (b) {
+    const has = inn && vhMe && typeof vhMe.balance_eur === 'number' && isFinite(vhMe.balance_eur);
+    b.textContent = has ? vhT('acct.bal', { v: vhEur ? vhEur.format(vhMe.balance_eur) : vhMe.balance_eur.toFixed(2) + ' €' }) : '';
+    b.hidden = !has;
+  }
+  if (!inn) vhAcctOpen(false);
+}
+// Abmelden: Token serverseitig widerrufen (POST /api/logout), dann Wallet-Token und
+// Login-Nonce aus localStorage; Zustand ohne Reload neu laden (Gerät = Gast).
+const VH_LOGIN_NONCE_KEY = 'vh_login_nonce';
+async function vhLogout() {
+  const w = vhWalletToken();
+  if (w) { try { await fetch('/api/logout', { method: 'POST', headers: { 'X-Wallet-Token': w } }); } catch (_) {} }
+  try { localStorage.removeItem(VH_WALLET_KEY); localStorage.removeItem(VH_LOGIN_NONCE_KEY); } catch (_) {}
+  vhMe = null;
+  vhAcctOpen(false);
+  vhAcctRender(); vhModeInfoRender();
+  await vhFreeRefresh();
+}
+if (vhAcctBtn) vhAcctBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!vhLoggedIn()) { vhLoginGo(); return; }
+  vhAcctOpen(vhAcctPop.hidden);
+});
+{ const o = document.getElementById('vh-acct-out'); if (o) o.addEventListener('click', () => { o.disabled = true; vhLogout().finally(() => { o.disabled = false; }); }); }
+document.addEventListener('pointerdown', (e) => {
+  if (vhAcctPop && !vhAcctPop.hidden && !vhAcctPop.contains(e.target) && !vhAcctBtn.contains(e.target)) vhAcctOpen(false);
+});
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && vhAcctPop && !vhAcctPop.hidden) { e.stopImmediatePropagation(); vhAcctOpen(false); vhAcctBtn.focus(); }
+}, true);
+vhAcctRender();
+
+// ── Anmelde-Dialog vor "Style speichern" (Oliver 02.10.) ─────────────────────
+// Gleiche Anbieter und Endpunkte wie /login (web/auth.js): Google/GitHub über
+// /api/auth/<p>/start (Nonce in vh_login_nonce), E-Mail-Link über /api/login.
+// Ausgegraut, was /api/auth/providers nicht anbietet. Schließen mit x, Esc, Klick daneben.
+const vhAuthModal = document.getElementById('vh-auth-modal');
+const vhAuthMsgEl = document.getElementById('vh-auth-msg');
+let vhAuthBefore = null, vhAuthPrevFocus = null;
+function vhAuthMsg(t, warn) { if (!vhAuthMsgEl) return; vhAuthMsgEl.textContent = t || ''; vhAuthMsgEl.className = 'vh-auth-msg' + (warn ? ' warn' : ''); vhAuthMsgEl.hidden = !t; }
+function vhAuthProv(p, on) {
+  const b = vhAuthModal && vhAuthModal.querySelector('[data-provider="' + p + '"]'); if (!b) return;
+  b.disabled = !on; const s = b.querySelector('.vh-auth-soon'); if (s) s.hidden = !!on;
+}
+function vhAuthMail(on) {
+  const i = document.getElementById('vh-auth-email'), g = document.getElementById('vh-auth-send');
+  if (i) i.disabled = !on; if (g) g.disabled = !on;
+  vhAuthMsg(on ? vhT('auth.hint') : vhT('auth.unavail'));
+}
+function vhAuthClose() {
+  if (!vhAuthModal || vhAuthModal.hidden) return;
+  vhAuthModal.hidden = true; vhAuthBefore = null;
+  try { if (vhAuthPrevFocus) vhAuthPrevFocus.focus(); } catch (_) {}
+}
+async function vhAuthGate(beforeRedirect) {
+  if (!vhAuthModal || !window.vhAuth) return;
+  vhAuthBefore = beforeRedirect || null; vhAuthPrevFocus = document.activeElement;
+  ['google', 'github'].forEach((p) => vhAuthProv(p, false));
+  vhAuthMail(false); vhAuthMsg('');
+  const em = document.getElementById('vh-auth-email'); if (em) { em.value = ''; em.placeholder = vhT('auth.ph'); }
+  vhAuthModal.hidden = false;
+  document.getElementById('vh-auth-close').focus();
+  const cfg = await window.vhAuth.providers();
+  vhAuthProv('google', cfg.google === true); vhAuthProv('github', cfg.github === true); vhAuthMail(cfg.email === true);
+}
+if (vhAuthModal) {
+  vhAuthModal.querySelectorAll('[data-provider]').forEach((b) => b.addEventListener('click', async () => {
+    if (b.disabled) return;
+    const p = b.dataset.provider;
+    b.disabled = true; vhAuthMsg(vhT('auth.redirect', { p: p === 'google' ? 'Google' : 'GitHub' }));
+    try { if (vhAuthBefore) vhAuthBefore(); } catch (_) {}
+    const res = await window.vhAuth.start(p, location.pathname + location.search);
+    if (res.ok) return;
+    try { sessionStorage.removeItem('vh-save-after-login-v1'); } catch (_) {}
+    if (res.status === 503) { vhAuthProv(p, false); vhAuthMsg(''); return; }
+    vhAuthMsg(res.status === 429 ? vhT('auth.rate') : vhT('auth.err'), true);
+    b.disabled = false;
+  }));
+  document.getElementById('vh-auth-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const i = document.getElementById('vh-auth-email'), g = document.getElementById('vh-auth-send'), email = i.value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) { vhAuthMsg(vhT('auth.bad'), true); return; }
+    g.disabled = true;
+    const r = await window.vhAuth.sendLink(email);
+    if (r.ok) { vhAuthMsg(vhT('auth.sent')); i.disabled = true; return; }
+    if (r.status === 503) { vhAuthMail(false); return; }
+    vhAuthMsg(r.status === 400 ? vhT('auth.bad') : r.status === 429 ? vhT('auth.rate') : r.status === 502 ? vhT('auth.mailfail') : vhT('auth.err'), true);
+    g.disabled = false;
+  });
+  document.getElementById('vh-auth-close').addEventListener('click', vhAuthClose);
+  document.getElementById('vh-auth-bg').addEventListener('click', vhAuthClose);
+}
+window.addEventListener('keydown', (e) => {   // vor dem Esc des Design-Panels: nur der Dialog schließt
+  if (e.key === 'Escape' && vhAuthModal && !vhAuthModal.hidden) { e.stopImmediatePropagation(); vhAuthClose(); }
+}, true);
 let vhFreeTimer = null;
 function vhFreeRefreshSoon() {  // nach Call-Ende einmal (vhEndCall läuft dabei mehrfach)
   clearTimeout(vhFreeTimer);
@@ -6103,20 +6398,8 @@ document.addEventListener('keydown', (e) => {
 // Räume schließen, die Liste bringt nichts). Alten Eintrag einmalig aufräumen.
 try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
 
-// Style-Sektion im Foot-Menü → applyPalette + .on-Highlight (Olli 2026-05-28
-// "style sektion wieder hinzufügen").
-(() => {
-  const styleBtns = document.querySelectorAll('.vh-foot-style[data-pal]');
-  if (!styleBtns.length) return;
-  const refresh = (pal) => styleBtns.forEach(b => b.classList.toggle('on', b.dataset.pal === pal));
-  styleBtns.forEach(b => b.addEventListener('click', () => {
-    const pal = b.dataset.pal;
-    try { applyPalette(pal); } catch (e) { console.error('[style]', e); }
-    try { lastPalette = pal; vhUserPalettePinned = true; } catch (_) {}
-    refresh(pal);
-  }));
-  try { refresh(typeof lastPalette !== 'undefined' ? lastPalette : 'ice'); } catch (_) {}
-})();
+// Styles gibt es nur noch im Design-Panel (Oliver 02.10.: Style-Sektion aus dem
+// Burger-Menü entfernt).
 
 // ── Design-Panel (Olli 01.10.): alte Regler aus #fx-ctl, Styles, HD/SD, Akku ──
 // Alle Regler sind die bisherigen Inputs (gleiche IDs, gleiche Listener) und
@@ -6149,6 +6432,7 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
   zoomCtl.addEventListener('input', () => { vhSetZoomTarget(parseFloat(zoomCtl.value), true); saveState(); });
   let zoomSaveT = null;
   window.vhDesignSync = (what) => {
+    if (what === 'ranges') { ranges.forEach(syncOut); return; }
     if (what === 'zoom') {
       zoomCtl.value = String(vhZoomTarget); syncOut(zoomCtl);
       clearTimeout(zoomSaveT); zoomSaveT = setTimeout(saveState, 400);
@@ -6165,12 +6449,12 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
     if (rb) rb.classList.toggle('on', lastPalette === 'rnd');
   };
   sws.forEach(b => b.addEventListener('click', () => {
-    const foot = document.querySelector(`.vh-foot-style[data-pal="${b.dataset.pal}"]`);
     activeMy = null;
-    if (foot) foot.click(); else { applyPalette(b.dataset.pal); lastPalette = b.dataset.pal; vhUserPalettePinned = true; }
+    const prevPat = !!spatialMode;
+    applyPalette(b.dataset.pal); lastPalette = b.dataset.pal; vhUserPalettePinned = true;
+    vhPcForStyle(prevPat);
     saveState(); markSw();
   }));
-  document.querySelectorAll('.vh-foot-style[data-pal]').forEach(b => b.addEventListener('click', () => setTimeout(() => { saveState(); markSw(); }, 0)));
   // Akku-Stufe
   const akkuBtns = [...panel.querySelectorAll('[data-akku]')];
   const customEl = document.getElementById('vh-dp-akku-custom');
@@ -6188,12 +6472,14 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
     // schalten HD (volle Pixeldichte) ein; Eco/Normal lassen HD wie es ist.
     if ((k === 'high' || k === 'ultra') && !(opts && opts.auto)) { hdOn = true; try { localStorage.setItem(HD_KEY, '1'); } catch (_) {} }
     if (!(opts && opts.auto)) { try { localStorage.setItem(VH_AKKU_KEY, k); } catch (_) {} }
-    try { localStorage.removeItem(VH_AKKU_CUSTOM_KEY); } catch (_) {}
-    // Punkt 9: Regler springen sichtbar auf das Preset der Stufe
+    vhSetAkkuCustom(false);   // erneuter Klick auf eine Stufe setzt den Preset inkl. Deckel
+    // Punkt 9: Regler springen sichtbar auf das Preset der Stufe (Muster-Styles: eigene Werte)
     const pr = VH_AKKU_PRESET[k];
     if (pr) {
       presetting = true;
-      [['particle-count', pr.pc], ['size', pr.size]].forEach(([id, v]) => {
+      const pc = spatialMode ? (VH_AKKU_PRESET_PAT[k] || VH_FUR_PC) : pr.pc;
+      if (spatialMode) vhPcPalette = pr.pc;
+      [['particle-count', pc], ['size', pr.size]].forEach(([id, v]) => {
         const el = document.getElementById(id); if (!el) return;
         el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true }));
       });
@@ -6206,14 +6492,15 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
   window.vhSetAkku = setAkku;
   akkuBtns.forEach(b => b.addEventListener('click', () => setAkku(b.dataset.akku)));
   // Punkt 4: Auflösung von Hand umschalten = eigene Einstellung ("Eigene"), wie die Regler.
-  [document.getElementById('btn-hd'), document.getElementById('vh-foot-hd')].forEach((hb) => {
-    if (hb) hb.addEventListener('click', () => { try { localStorage.setItem(VH_AKKU_CUSTOM_KEY, '1'); } catch (_) {} markAkku(); });
+  [document.getElementById('btn-hd')].forEach((hb) => {
+    if (hb) hb.addEventListener('click', () => { vhSetAkkuCustom(true); markAkku(); });
   });
   ['particle-count', 'size'].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', () => {
       if (presetting) return;
-      try { localStorage.setItem(VH_AKKU_CUSTOM_KEY, '1'); } catch (_) {}
+      vhSetAkkuCustom(true);   // "Eigene": Deckel der Stufe entfällt, Regler wirkt voll
+      vhSyncDrawRange();
       markAkku();
     });
   });
@@ -6276,7 +6563,7 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
     }
   }, true);
   document.addEventListener('pointerdown', (e) => {
-    if (!panel.hidden && !panel.contains(e.target) && !btn.contains(e.target)) open(false);
+    if (!panel.hidden && !panel.contains(e.target) && !btn.contains(e.target) && !(vhAuthModal && vhAuthModal.contains(e.target))) open(false);
   });
   // ── Zufall + Meine Styles (01.10.) ─────────────────────────────────────────
   const randBtn = document.getElementById('vh-dp-rand');
@@ -6359,7 +6646,7 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
     // Zeichenbereich neu aus der Stufe ableiten lassen (Eco kappt die Partikel; der
     // Regler-Listener setzt activeN ungekappt, sonst decken Restpunkte im hellen Theme).
     vhDrawN = -1;
-    try { if (it.akkuCustom) localStorage.setItem(VH_AKKU_CUSTOM_KEY, '1'); else localStorage.removeItem(VH_AKKU_CUSTOM_KEY); } catch (_) {}
+    vhSetAkkuCustom(!!it.akkuCustom); vhPcPalette = null;
     hdOn = it.hd !== false; applyHd();
     if (it.zoom) vhSetZoomTarget(it.zoom, true);
     else { vhZoomUser = false; vhZoomTarget = vhZoomDefault; }
@@ -6443,7 +6730,39 @@ try { localStorage.removeItem('vh-recent-invites:v1'); } catch (_) {}
     }
     closeEdit(); renderMy();
   };
-  saveBtn.addEventListener('click', () => { if (editMode === 'save') closeEdit(); else openEdit('save'); });
+  // Neues Speichern verlangt Login (Oliver 02.10.); gespeicherte Styles bleiben auch
+  // abgemeldet sichtbar und ladbar. Vor dem Redirect zum Anbieter wird der aktuelle
+  // Look (Palette inkl. Zufallsfarben, Regler) in sessionStorage gemerkt; nach der
+  // Rückkehr angemeldet: Look zurück, Panel offen, Namensfeld offen.
+  const VH_SAVE_PENDING_KEY = 'vh-save-after-login-v1';
+  const stashLook = () => {
+    try {
+      const it = capture(''); it.img = '';
+      sessionStorage.setItem(VH_SAVE_PENDING_KEY, JSON.stringify({ t: Date.now(), look: it }));
+    } catch (_) {}
+  };
+  saveBtn.addEventListener('click', () => {
+    if (editMode === 'save') { closeEdit(); return; }
+    if (!vhLoggedIn()) { closeEdit(); vhAuthGate(stashLook); return; }
+    openEdit('save');
+  });
+  window.vhSaveResume = (loggedIn) => {
+    let p = null;
+    try { p = JSON.parse(sessionStorage.getItem(VH_SAVE_PENDING_KEY) || 'null'); sessionStorage.removeItem(VH_SAVE_PENDING_KEY); } catch (_) {}
+    if (!p || !p.look || !(Date.now() - p.t < 30 * 60 * 1000)) return;
+    const it = p.look;
+    try {
+      if (it.palette) {   // Zufalls-/eigene Palette als 'rnd' zurück (überlebt so auch einen Reload)
+        vhRegisterPalette('rnd', it.palette);
+        try { localStorage.setItem(VH_RND_KEY, JSON.stringify(it.palette)); } catch (_) {}
+        it.pal = 'rnd'; it.palette = null;
+      }
+      loadMy(it); activeMy = null; markSw();
+    } catch (e) { console.warn('[style] restore', e); }
+    if (!loggedIn) return;
+    open(true); openEdit('save');
+  };
+  if (window.vhMeReady) window.vhSaveResume(vhLoggedIn());
   okBtn.addEventListener('click', commit);
   noBtn.addEventListener('click', closeEdit);
   nameIn.addEventListener('keydown', (e) => {
@@ -6975,7 +7294,6 @@ async function vhMusicOffForCall() {
 #vh-foot-menu .vh-foot-meta{padding:6px 14px 4px;font-size:0.62rem;color:var(--vh-btn-fg);opacity:0.5;letter-spacing:0.08em;text-transform:uppercase;}
 #vh-foot-mics{display:flex;flex-direction:column;gap:4px;padding:4px 10px 6px;width:0;min-width:100%;box-sizing:border-box;}
 .vh-foot-mic{text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
-#vh-foot-styles{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px 10px 6px;}
 .vh-foot-style{background:var(--vh-btn-bg);border:1px solid var(--vh-btn-border);color:var(--vh-btn-fg);padding:5px 6px;border-radius:5px;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;cursor:pointer;letter-spacing:0.02em;backdrop-filter:var(--vh-btn-blur);-webkit-backdrop-filter:var(--vh-btn-blur);transition:background .15s,border-color .15s,color .15s;}
 .vh-foot-style:hover{background:rgba(109,201,217,0.12);border-color:rgba(109,201,217,0.45);color:#6dc9d9;}
 .vh-foot-style.on{background:rgba(109,201,217,0.18);border-color:#6dc9d9;color:#6dc9d9;}
@@ -7007,24 +7325,6 @@ body.settings-collapsed #vh-build{display:none !important;}
     <div class="vh-foot-sep"></div>
     <div class="vh-foot-meta" data-i18n="menu.mic">Mikrofon</div>
     <div id="vh-foot-mics" class="vh-foot-mics"></div>
-    <div class="vh-foot-sep"></div>
-    <div class="vh-foot-meta" data-i18n="menu.style">Style</div>
-    <div id="vh-foot-styles" class="vh-foot-styles">
-      <button type="button" class="vh-foot-style" data-pal="ice"     role="menuitem" data-i18n="style.ice">Ice</button>
-      <button type="button" class="vh-foot-style" data-pal="earth"   role="menuitem" data-i18n="style.earth">Earth</button>
-      <button type="button" class="vh-foot-style" data-pal="fire"    role="menuitem" data-i18n="style.fire">Fire</button>
-      <button type="button" class="vh-foot-style" data-pal="lagoon"  role="menuitem" data-i18n="style.lagoon">Water</button>
-      <button type="button" class="vh-foot-style" data-pal="water"   role="menuitem" data-i18n="style.water">Water</button>
-      <button type="button" class="vh-foot-style" data-pal="air"     role="menuitem" data-i18n="style.air">Air</button>
-      <button type="button" class="vh-foot-style" data-pal="forest"  role="menuitem" data-i18n="style.forest">Forest</button>
-      <button type="button" class="vh-foot-style" data-pal="zebra"   role="menuitem" data-i18n="style.zebra">Zebra</button>
-      <button type="button" class="vh-foot-style" data-pal="giraffe" role="menuitem" data-i18n="style.giraffe">Giraffe</button>
-      <button type="button" class="vh-foot-style" data-pal="leopard" role="menuitem" data-i18n="style.leopard">Leopard</button>
-      <button type="button" class="vh-foot-style" data-pal="tiger"   role="menuitem" data-i18n="style.tiger">Tiger</button>
-      <button type="button" class="vh-foot-style" data-pal="glacier" role="menuitem" data-i18n="style.glacier">Gletscher</button>
-      <!-- Punkt H: HD-Umschalter des Kringels (lag im seit 2026-05-28 unerreichbaren #fx-ctl) -->
-      <button type="button" class="vh-foot-style" id="vh-foot-hd" role="menuitemcheckbox" aria-checked="true" title="Kringel in voller Auflösung (HD) oder sparsam (SD)" data-i18n-title="hd.title">HD</button>
-    </div>
     <div class="vh-foot-sep"></div>
     <a href="https://github.com/voicehook-ai" role="menuitem" target="_blank" rel="noopener" data-i18n="menu.github">GitHub ↗</a>
   </div>

@@ -78,6 +78,12 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
 .login input{ flex:1 1 auto; min-width:0; font-family:var(--vh-mono); font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid var(--vh-btn-border-hov); background:transparent; color:var(--vh-fg-0); }
 .login form .cta{ width:auto; padding:0 14px; font-size:13px; min-height:44px; white-space:nowrap; }
 .em{ text-transform:none; letter-spacing:.02em; color:var(--vh-fg-0); }
+/* Konto-Zeile (Oliver 02.10.): "Angemeldet als … · Abmelden" */
+.acct-line{ font-size:12px; line-height:1.5; color:var(--vh-fg-2); text-align:center; max-width:100%; overflow-wrap:anywhere; margin-bottom:12px; }
+.acct-line .linkbtn{ padding:2px 2px; font-size:12px; }
+.linkbtn{ appearance:none; background:none; border:0; padding:6px 4px; font:inherit; font-size:12px; color:var(--vh-teal); text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
+.already{ width:100%; max-width:340px; display:flex; flex-direction:column; align-items:center; gap:14px; }
+a.cta{ display:flex; align-items:center; justify-content:center; text-decoration:none; }
 .tagline{ margin-top:28px; font-size:11px; color:var(--vh-fg-3); letter-spacing:.04em; white-space:nowrap; }
 /* Anbieter-Knöpfe: .cta.ghost aus aufladen.html, Marken-Icon links vom Text. */
 .providers{ width:100%; max-width:340px; display:flex; flex-direction:column; gap:10px; }
@@ -102,9 +108,14 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
 </script>
 <div class="brand"><a href="/"><span class="dlt"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span>by</span><span class="tld"> voicehook</span></a><span class="by">·</span><span id="t-brand">Anmelden</span></div>
 <button id="btn-theme" type="button" aria-label="Theme"></button>
+<div class="acct-line" id="acct-line" aria-live="polite" hidden></div>
 
 <main class="wrap" id="view-login">
   <h1 id="t-h1">Anmelden</h1>
+  <div class="already" id="already" hidden>
+    <div class="msg" id="already-txt"></div>
+    <a class="cta" id="already-back" href="/aufladen"></a>
+  </div>
   <div class="providers">
     <button class="cta ghost prov" id="btn-google" type="button" data-provider="google">
       <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
@@ -137,6 +148,7 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
 
 <div class="tagline">Talk with your agents</div>
 
+<script src="/auth.js"></script>
 <script>
 (function(){
 'use strict';
@@ -156,7 +168,8 @@ const T = {
         e_denied:'Anmeldung abgebrochen.', e_state:'Die Anmeldung ist abgelaufen. Bitte versuch es noch einmal.',
         e_provider:'Der Anbieter hat nicht geantwortet. Bitte versuch es noch einmal.',
         e_email_unverified:'Bei diesem Konto ist keine bestätigte E-Mail hinterlegt. Bestätige sie beim Anbieter oder nimm den E-Mail-Link.',
-        theme:'Hell oder dunkel' },
+        theme:'Hell oder dunkel', acctAs:'Angemeldet als', logout:'Abmelden', already:'Du bist auf diesem Gerät schon angemeldet.', back:'Zurück',
+        loggedOut:'Abgemeldet. Du kannst dich neu anmelden.' },
   en: { brand:'Log in', h1:'Log in', google:'Continue with Google', github:'Continue with GitHub',
         soon:'coming soon', or:'or with an email link', loginPh:'you@example.com', loginSend:'Send link',
         loginHint:'We will send you a login link.', loginSent:'Link sent. Open it from your inbox.',
@@ -170,7 +183,8 @@ const T = {
         e_denied:'Login cancelled.', e_state:'The login expired. Please try again.',
         e_provider:'The provider did not respond. Please try again.',
         e_email_unverified:'This account has no verified email. Verify it with the provider or use the email link.',
-        theme:'Light or dark' },
+        theme:'Light or dark', acctAs:'Logged in as', logout:'Log out', already:'You are already logged in on this device.', back:'Back',
+        loggedOut:'Logged out. You can log in again.' },
 }[LANG];
 const $ = id => document.getElementById(id);
 const TOKEN_KEY = 'vh-wallet-v1';
@@ -213,6 +227,46 @@ btnTheme.addEventListener('click', () => {
 });
 paintTheme();
 
+
+// ---- Konto-Zeile + Abmelden (Oliver 02.10.) ----
+// Angemeldet = GET /api/me meldet email_verified true bzw. email_masked (keine andere Quelle).
+// Abmelden: POST /api/logout widerruft genau dieses Token, dann Token + Login-Nonce
+// aus localStorage; Zustand ohne Reload (Gerät = Gast).
+function isIn(me){ return !!(me && (me.email_verified === true || me.email_masked)); }
+function renderAcct(me){
+  const el = $('acct-line'); el.textContent = '';
+  if (!isIn(me)) { el.hidden = true; return false; }
+  const sp = document.createElement('span'); sp.className = 'em'; sp.textContent = me.email_masked || '';
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'linkbtn'; b.id = 'acct-out'; b.textContent = T.logout;
+  b.addEventListener('click', () => { b.disabled = true; logout(); });
+  el.append(T.acctAs + ' ', sp, ' \u00b7 ', b); el.hidden = false;
+  return true;
+}
+let acctSeq = 0;
+async function refreshAcct(){
+  const seq = ++acctSeq;
+  let me = null;
+  if (getToken()) { try { const r = await fetch('/api/me', { cache:'no-store', headers:headers() }); if (r.ok) me = await r.json(); } catch {} }
+  if (seq !== acctSeq) return isIn(me);
+  const inn = renderAcct(me); onAcct(inn); return inn;
+}
+async function logout(){
+  const t = getToken();
+  if (t) { try { await fetch('/api/logout', { method:'POST', headers:{ 'X-Wallet-Token':t } }); } catch {} }
+  try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(NONCE_KEY); } catch {}
+  acctSeq++; renderAcct(null); onAcct(false, true);
+}
+window.addEventListener('storage', e => { if (e.key === TOKEN_KEY) refreshAcct(); });
+// Schon angemeldet: Hinweis + Zurück statt der Anmelde-Optionen.
+function onAcct(inn, justOut){
+  $('already').hidden = !inn;
+  $('already-txt').textContent = T.already;
+  for (const id of ['t-or', 'login-box']) $(id).hidden = inn;
+  document.querySelector('.providers').hidden = inn;
+  if (justOut) showMsg(T.loggedOut);
+}
+$('already-back').textContent = T.back; $('already-back').href = NEXT;
+
 function setMsg(el, text, warn){ el.textContent = text; el.className = 'msg' + (warn ? ' warn' : ''); el.hidden = !text; }
 const showMsg = (t, w) => setMsg($('msg'), t, w);
 const loginMsg = (t, w) => setMsg($('login-msg'), t, w);
@@ -235,16 +289,10 @@ function setEmail(on){
 async function startProvider(p){
   const b = $('btn-' + p); if (!b || b.disabled) return;
   b.disabled = true; showMsg(T.redirecting.replace('{p}', PNAME[p]));
-  try {
-    const r = await fetch('/api/auth/' + p + '/start', { method:'POST', headers:headers(), body:JSON.stringify({ next:NEXT }) });
-    const d = await r.json().catch(() => ({}));
-    if (r.ok && d && typeof d.authorize_url === 'string' && /^https:\/\//.test(d.authorize_url)) {
-      if (typeof d.login_nonce === 'string' && d.login_nonce) setNonce(d.login_nonce);
-      location.href = d.authorize_url; return;
-    }
-    if (r.status === 503) { setProvider(p, false); showMsg(''); return; }
-    showMsg(r.status === 429 ? T.loginRate : T.err, true);
-  } catch { showMsg(T.err, true); }
+  const res = await window.vhAuth.start(p, NEXT);   // web/auth.js, auch im Speichern-Dialog
+  if (res.ok) return;
+  if (res.status === 503) { setProvider(p, false); showMsg(''); return; }
+  showMsg(res.status === 429 ? T.loginRate : T.err, true);
   b.disabled = false;
 }
 $('btn-google').addEventListener('click', () => startProvider('google'));
@@ -256,16 +304,10 @@ $('login-form').addEventListener('submit', async e => {
   const input = $('login-email'), go = $('login-go'), email = input.value.trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) { loginMsg(T.loginBad, true); return; }
   go.disabled = true;
-  try {
-    const r = await fetch('/api/login', { method:'POST', headers:headers(), body:JSON.stringify({ email }) });
-    if (r.ok) {
-      const d = await r.json().catch(() => ({}));
-      if (d && typeof d.login_nonce === 'string' && d.login_nonce) setNonce(d.login_nonce);
-      loginMsg(T.loginSent); input.disabled = true; return;
-    }
-    if (r.status === 503) { setEmail(false); return; }
-    loginMsg(r.status === 400 ? T.loginBad : r.status === 429 ? T.loginRate : r.status === 502 ? T.loginMailFail : T.err, true);
-  } catch { loginMsg(T.err, true); }
+  const r = await window.vhAuth.sendLink(email);
+  if (r.ok) { loginMsg(T.loginSent); input.disabled = true; return; }
+  if (r.status === 503) { setEmail(false); return; }
+  loginMsg(r.status === 400 ? T.loginBad : r.status === 429 ? T.loginRate : r.status === 502 ? T.loginMailFail : T.err, true);
   go.disabled = false;
 });
 
@@ -324,9 +366,8 @@ async function init(){
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
   if (login) verifyLogin(login);
   else if (error) showMsg(T['e_' + error] || T.err, true);
-  let cfg = null;
-  try { const r = await fetch('/api/auth/providers'); if (r.ok) cfg = await r.json(); } catch {}
-  cfg = cfg || {};
+  if (!login) refreshAcct();
+  const cfg = await window.vhAuth.providers();
   setProvider('google', cfg.google === true); setProvider('github', cfg.github === true);
   setEmail(cfg.email === true);
 }
