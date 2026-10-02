@@ -37,10 +37,12 @@ SEND_TOPICS = frozenset({
     "operator.interrupt",
     "operator.inject",
     "operator.backchannel",
+    "operator.status",      # Status-Board {doing, open[], done[]} (apps/agent/board.py)
 })
 PERSONA_TOPICS = frozenset({"operator.persona", "operator.mode"})
 SAY_MODES = ("revise", "overwrite", "append")
 MAX_PAYLOAD_BYTES = 15_000  # LiveKit reliable data packets top out around 15 KiB
+STATUS_STALE_S = 300.0      # `next` meldet status_stale, wenn das Board älter ist und seither gesprochen wurde
 
 # Tunables (module-level so tests can shrink them).
 SSE_PING_S = 15.0          # SSE comment heartbeat
@@ -222,6 +224,8 @@ class Session:
         self._last_state: tuple | None = None
         self.guard_task: asyncio.Task | None = None
         self.loop = asyncio.get_running_loop()  # LiveKit callbacks + guard run here
+        self.status_at = self.created          # letztes operator.status (Join zählt als Start)
+        self.user_at: float | None = None      # letzter Nutzer-Turn
 
     # ---- liveness ------------------------------------------------------- #
     def touch(self) -> None:
@@ -289,6 +293,14 @@ class Session:
     async def publish(self, topic: str, payload: dict) -> None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         await self.room.local_participant.publish_data(data, reliable=True, topic=topic)
+        if topic == "operator.status":
+            self.status_at = time.monotonic()
+
+    def status_stale(self, now: float | None = None) -> bool:
+        """Board älter als STATUS_STALE_S und seither hat der Nutzer gesprochen."""
+        now = time.monotonic() if now is None else now
+        return (self.user_at is not None and self.user_at > self.status_at
+                and now - self.status_at > STATUS_STALE_S)
 
     async def say(self, text: str, mode: str | None = None) -> int:
         extra = {"mode": mode} if mode else {}
@@ -331,9 +343,13 @@ def wire(session: Session) -> None:
         if topic == "transcript":
             ev = user_turn_event(payload)
             if ev is not None:
+                session.user_at = time.monotonic()
                 session.events.put_nowait(ev)
         elif topic == "operator.revise":
             session.events.put_nowait(revise_event(payload))
+        elif topic == "operator.status_request":
+            session.events.put_nowait({"type": "status_request", "role": "system",
+                                       "text": str(payload.get("text", ""))[:200], "ts": time.time()})
 
     def _peer(kind: str) -> Callable[[Any], None]:
         def _h(p: Any) -> None:

@@ -204,9 +204,10 @@ async def bridge_next(s: SessionDep, timeout: float = 60.0) -> dict:
     finally:
         s.busy -= 1
         s.touch()
+    stale = {"status_stale": True} if s.status_stale() else {}
     if ev is None:
-        return {"ok": True, "type": "timeout", "pending": 0}
-    return {"ok": True, **ev, "pending": len(s.events)}
+        return {"ok": True, "type": "timeout", "pending": 0, **stale}
+    return {"ok": True, **ev, "pending": len(s.events), **stale}
 
 
 @router.post("/api/bridge/say")

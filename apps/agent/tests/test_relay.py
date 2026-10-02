@@ -140,16 +140,18 @@ async def test_interrupt_drops_current_say():
     session.interrupt.assert_called_once()
 
 
-def test_topic_dispatch_maps_all_five_topics():
+def test_topic_dispatch_maps_all_six_topics():
     session, agent = _fake_session(), _fake_agent()
     h = build_relay_handlers(session, agent)
     routes = topic_dispatch(h)
-    assert set(routes.keys()) == {TOPIC_SAY, TOPIC_PERSONA, TOPIC_MODE, TOPIC_INTERRUPT, TOPIC_INJECT}
+    assert set(routes.keys()) == {TOPIC_SAY, TOPIC_PERSONA, TOPIC_MODE, TOPIC_INTERRUPT, TOPIC_INJECT,
+                                  "operator.status"}
 
 
 def test_default_persona_includes_relay_discipline():
-    assert "operator.say" in DEFAULT_PERSONA
-    assert "Operator" in DEFAULT_PERSONA
+    # Oliver 02.10.: zum Nutzer nie "Operator", Wartesatz mit Agent statt Operator
+    assert "Operator" not in DEFAULT_PERSONA and "operator.say" not in DEFAULT_PERSONA
+    assert "Kurzen Moment, ich geb das an deinen Agenten." in DEFAULT_PERSONA
     assert "erfindest NICHTS" in DEFAULT_PERSONA  # no invention
 
 

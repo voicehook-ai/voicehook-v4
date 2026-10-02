@@ -79,14 +79,19 @@ tool calls, so every later call uses the absolute wrapper, e.g. `/tmp/vh-ab12cd/
 |---|---|---|
 | `user` | `text` = what the user just said | answer with one `say` |
 | `revise` | your `say` overlapped unspoken text | merge, `say --mode overwrite "…"` within 8 s |
+| `status_request` | the user asked what you are doing | send `vh status` at once (below) |
 | `timeout` | 60 s silence (`--timeout SEC`) | call `next` again |
 | `ended` | the call is over | stop, the join already left |
 
 - Call `next` right after the quickstart: the first `next` (or `say`) starts the queue,
   from then on turns spoken while you were busy wait for you. Never `sleep 20; tail`.
 - Answer every user turn with exactly ONE `say` that states what is true now.
-- Work longer than ~8 s: first `say "Moment, ich schaue nach."`, then work, then the result.
-  Over ~15 s: hand the work to a background agent and keep looping.
+- Keep the main loop free: between `next` and `say` do nothing slow. Anything over ~3 s (shell,
+  web, file edits, builds, lookups) goes to a background agent/subtask; meanwhile `say` a short
+  holding line and `status` the board. Answer each turn within ~3 s (`next` warns: `latency_warning`).
+- Status board (CLI 0.7.0): on every task change send the whole board, `vh status --doing
+  "baut gerade den Fix" --open "Tests" --done "Analyse"`; `vh status ""` when finished. It
+  replaces the last one, is never spoken; `next` with `"status_stale": true`: resend it.
 - Idle guard (0.5.0): no `say`/`next` for 10 min (`--idle-timeout MIN`, 0 = off) and the
   join announces it and leaves. A running `next` counts as alive.
 
@@ -123,7 +128,7 @@ tool calls, so every later call uses the absolute wrapper, e.g. `/tmp/vh-ab12cd/
   at join. The first persona push also triggers one server-side greeting, so then drop `--greet`.
 - Every persona you push MUST contain this rule (the voicebot has no tools, you do): "Questions about
   capabilities, access, whether something works, or anything you would have to assume: never answer,
-  never deny, never claim. Say only 'Moment, ich schau nach.' and wait for the operator."
+  never deny, never claim. Say only 'Kurzen Moment, ich frag Claude.' and wait." (your `--name`)
 
 ## Check the connection
 

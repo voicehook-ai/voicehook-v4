@@ -25,6 +25,8 @@ Keine konkreten Preise, keine Funktionen, die es nicht gibt.
 
 from __future__ import annotations
 
+import re
+
 # Skill, den der eingeladene Agent liest (im Einladungstext schon enthalten).
 SKILL_URL = "https://voicehook.ai/agent/SKILL.md"
 
@@ -33,7 +35,7 @@ VOICEHOOK_GUIDE = (
     "voicehook.ai, und erklärst voicehook als Experte und freundlicher Verkäufer. "
     "Deine eigenen Antworten sind kurz, 1 bis 3 Sätze, und du fragst aktiv nach, wofür "
     "dein Gegenüber voicehook einsetzen will. Die Kürze- und Nachfrage-Regel gilt nur "
-    "für deine eigenen Antworten, nie für Operator-Aussagen; die sprichst du vollständig "
+    "für deine eigenen Antworten, nie für Aussagen des Agenten; die sprichst du vollständig "
     "und ohne Nachsatz. "
     "Was voicehook ist: Mit voicehook kann man jederzeit mit seinen eigenen KI-Agents "
     "telefonieren, statt zu tippen. Das funktioniert mit jedem Agent, der auf einer "
@@ -64,10 +66,74 @@ VOICEHOOK_GUIDE = (
     "Beträge oder Preise pro Minute. "
     "Erfinde nichts dazu: keine Funktionen, Preise oder Zusagen, die hier nicht stehen; "
     "weißt du etwas nicht, sag das ehrlich. "
-    "Solange kein Operator im Raum ist, also noch keine Nachricht oder Aussage eines "
-    "Operators kam, beantwortest du Fragen zu voicehook selbst aus diesem Wissen. Fragen "
+    "Solange kein Agent im Raum ist, also noch keine Nachricht oder Aussage eines "
+    "Agenten kam, beantwortest du Fragen zu voicehook selbst aus diesem Wissen. Fragen "
     "nach Fähigkeiten oder Zugriff, die nicht voicehook selbst betreffen, beantwortest "
     "du auch dann nicht, sondern sagst, dass der eigene Agent das beantworten "
-    "kann, sobald er eingeladen ist. Gibt dir dein Operator eine eigene Rolle oder "
+    "kann, sobald er eingeladen ist. Gibt dir der Agent eine eigene Rolle oder "
     "Persona, ersetzt sie diese Werksrolle vollständig. "
 )
+
+
+# ----- Name des Agenten im Raum (Oliver 02.10.2026) ---------------------------------
+# Delta sagt zum Nutzer nie "Operator", sondern den Namen des beigetretenen Agenten
+# ("Kurzen Moment, ich frag Claude."). Quelle: Teilnehmer-Attribut vh.name (CLI --name,
+# server.py _clean_label). Ohne aussprechbaren Namen: "dein Agent".
+AGENT_NAME_MAX = 24
+_LETTER_WORD = re.compile(r"^[^\W\d_]{2,}$")  # nur Buchstaben, mindestens 2
+_BRACKETS = re.compile(r"[(\[{][^)\]}]*[)\]}]")
+_SPLIT = re.compile(r"[\s_\-./:@#()\[\]{}|,;+]+")
+
+
+def agent_display_name(raw: str | None) -> str | None:
+    """vh.name -> aussprechbarer Anzeigename oder None.
+
+    Behält nur reine Buchstabenwörter (Modell-IDs, Versionen, Hashes, Host-Suffixe mit
+    Ziffern fallen raus), höchstens AGENT_NAME_MAX Zeichen, an Wortgrenzen gekürzt.
+    "Claude" -> "Claude", "Claude (opus-4.6)" -> "Claude", "7f3a-91" -> None.
+    """
+    raw = _BRACKETS.sub(" ", raw or "")  # "(opus-4.6)", "[x1]": Modell-Angaben in Klammern
+    words = [w for w in _SPLIT.split(raw) if _LETTER_WORD.match(w)]
+    out = ""
+    for w in words:
+        cand = f"{out} {w}" if out else w
+        if len(cand) > AGENT_NAME_MAX:
+            break
+        out = cand
+    return out or None
+
+
+def agent_refs(name: str | None) -> dict[str, str]:
+    """Sprechbare Bezeichnung des Agenten je Fall: nom/akk/dat.
+
+    Mit Namen überall der Name, sonst "dein Agent" / "deinen Agenten" / "deinem Agenten".
+    """
+    if name:
+        return {"nom": name, "akk": name, "dat": name}
+    return {"nom": "dein Agent", "akk": "deinen Agenten", "dat": "deinem Agenten"}
+
+
+def wait_lines(name: str | None) -> tuple[str, str]:
+    """Die beiden Wartesätze an den Nutzer (Oliver 02.10.): fragen / weitergeben."""
+    akk = agent_refs(name)["akk"]
+    return (f"Kurzen Moment, ich frag {akk}.", f"Kurzen Moment, ich geb das an {akk}.")
+
+
+def handoff_variants(name: str | None) -> tuple[str, ...]:
+    """Kurze, wechselnde Weitergabe-Sätze (Oliver 02.10.: nicht immer derselbe Satz)."""
+    r = agent_refs(name)
+    return (wait_lines(name)[0], f"Gute Frage, {r['nom']} schaut kurz.",
+            f"Moment, {r['nom']} ist dran.", wait_lines(name)[1])
+
+
+NO_EXCUSE_RULE = (
+    "Gib nie eine Begründung oder Erklärung, warum du etwas nicht weißt oder nicht kannst, "
+    "etwa dass du keinen Einblick hast oder das nicht kannst; gib einfach kurz weiter. "
+)
+
+
+def handoff_rule(name: str | None) -> str:
+    """Prompt-Regel: kurz weitergeben, variieren, nie rechtfertigen."""
+    v = handoff_variants(name)
+    return ("Zum Weitergeben nimmst du abwechselnd einen dieser kurzen Sätze, nicht immer "
+            "denselben: " + " / ".join(v) + " " + NO_EXCUSE_RULE)

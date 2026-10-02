@@ -39,7 +39,8 @@ from typing import TYPE_CHECKING
 
 from livekit.agents import Agent, StopResponse
 
-from .guide import VOICEHOOK_GUIDE
+from .board import board_block, normalize_board, status_sentence
+from .guide import VOICEHOOK_GUIDE, agent_refs, handoff_rule, wait_lines
 from .speaker import PrimarySpeakerFilter, diarize_enabled
 
 if TYPE_CHECKING:
@@ -55,6 +56,12 @@ TOPIC_INTERRUPT = "operator.interrupt"
 TOPIC_INJECT = "operator.inject"
 TOPIC_REVISE = "operator.revise"   # agent -> operator: ungesprochene Aussagen zurück
 TOPIC_NOTICE = "operator.notice"   # agent -> alle: Hinweis (low_balance), Browser + Operator
+TOPIC_STATUS = "operator.status"   # operator -> agent: Board {doing, open[], done[]} (board.py)
+TOPIC_STATUS_REQUEST = "operator.status_request"  # agent -> operator: Nutzer fragt nach dem Stand
+
+STATUS_MIN_INTERVAL_S = 5.0  # höchstens 1 Board-Update je 5 s und Raum, das letzte gewinnt
+STATUS_ANSWER_WINDOW_S = 8.0  # kommt das Board so schnell nach einer Nachfrage, sagt Delta es an
+_STATUS_ID = "vh-status-"     # Live: fester Platz im Chat-Kontext (alte Status-Turns raus)
 
 LOW_BALANCE_ANNOUNCEMENT = "Hey, Achtung, das Guthaben ist in wenigen Minuten leer."
 
@@ -62,27 +69,38 @@ HOLD_S = 8.0  # Olli-Regel "Stille ist der Killer, ab 8s ansagen": so lange wart
              # zurückgehaltenes say auf das zusammengefasste overwrite des Brains
 
 # Neutrale Sprachrohr-Rolle ohne Werksrolle: gilt, sobald ein externer Agent
-# (vh.role=agent) im Raum ist und noch keine eigene Persona geschickt hat.
-OPERATOR_PERSONA = (
-    "Du bist die Stimme von voicehook.ai. Du antwortest aus deinem Kontext "
-    "(was dir der Operator als Persona/Graph gegeben hat). Simple Fragen "
-    "beantwortest du selbst, kurz und praezise. Fuer alles Substantielle, "
-    "Technische oder Unbekannte sagst du 'Moment, ich geb das an den Operator' "
-    "und wartest auf operator.say. Du erfindest NICHTS. Fragen nach Faehigkeiten, "
-    "Zugriff, ob etwas funktioniert, oder alles, was du annehmen muesstest, "
-    "beantwortest du NIE selbst, verneinst und behauptest nichts, sondern sagst nur "
-    "'Moment, ich schau nach.' und wartest auf den Operator."
-)
+# (vh.role=agent) im Raum ist und noch keine eigene Persona geschickt hat. Der Name des
+# Agenten (vh.name, guide.agent_display_name) steht in den Wartesätzen; zum Nutzer nie
+# "Operator" (Oliver 02.10.2026).
+def operator_persona(name: str | None = None) -> str:
+    ask, hand = wait_lines(name)
+    dat = agent_refs(name)["dat"]
+    return (
+        "Du bist die Stimme von voicehook.ai. Du antwortest aus deinem Kontext "
+        f"(was dir {dat} als Persona/Graph gegeben hat). Simple Fragen "
+        "beantwortest du selbst, kurz und praezise. Fuer alles Substantielle, "
+        f"Technische oder Unbekannte sagst du '{hand}' "
+        "und wartest auf die Antwort. Du erfindest NICHTS. Fragen nach Faehigkeiten, "
+        "Zugriff, ob etwas funktioniert, oder alles, was du annehmen muesstest, "
+        "beantwortest du NIE selbst, verneinst und behauptest nichts, sondern sagst nur "
+        f"'{ask}' und wartest auf die Antwort. Fragt dein Gegenueber, was "
+        f"{agent_refs(name)['nom']} gerade macht, und es gibt keinen aktuellen Stand, "
+        f"sagst du ebenfalls '{ask}' " + handoff_rule(name)
+    )
 
+
+OPERATOR_PERSONA = operator_persona()  # ohne Namen: "dein Agent"
+
+_ASK, _HAND = wait_lines(None)
 DEFAULT_PERSONA = VOICEHOOK_GUIDE + (
     "Du antwortest aus deinem Kontext (dieses voicehook-Wissen oder was dir der "
-    "Operator als Persona/Graph gegeben hat). Simple Fragen beantwortest du selbst, "
-    "kurz und praezise. Ist ein Operator im Raum, sagst du fuer alles Substantielle, "
-    "Technische oder Unbekannte 'Moment, ich geb das an den Operator' und wartest auf "
-    "operator.say. Du erfindest NICHTS. Ist ein Operator im Raum, gilt: Fragen nach "
+    "Agent als Persona/Graph gegeben hat). Simple Fragen beantwortest du selbst, "
+    "kurz und praezise. Ist ein Agent im Raum, sagst du fuer alles Substantielle, "
+    f"Technische oder Unbekannte '{_HAND}' und wartest auf "
+    "die Antwort. Du erfindest NICHTS. Ist ein Agent im Raum, gilt: Fragen nach "
     "Faehigkeiten, Zugriff, ob etwas funktioniert, oder alles, was du annehmen "
     "muesstest, beantwortest du NIE selbst, verneinst und behauptest nichts, sondern "
-    "sagst nur 'Moment, ich schau nach.' und wartest auf den Operator."
+    f"sagst nur '{_ASK}' und wartest auf die Antwort. " + handoff_rule(None)
 )
 
 
@@ -132,7 +150,9 @@ class RelayHandlers:
     on_inject: callable
     is_operator_speech: callable = None  # (handle, text) -> bool, für Transkript-Farben
     operator_text_for: callable = None   # (handle) -> str | None: voller Operator-Text (Sprechbeginn)
-    on_agent_presence: callable = None   # async (present: bool): Werksrolle aus/an
+    on_agent_presence: callable = None   # async (present, name=None): Werksrolle aus/an
+    on_status: callable = None           # operator.status: Board ersetzen (rate-limited)
+    on_user_text: callable = None        # async (text): Nachfrage nach dem Stand -> status_request
 
 
 def _decode(payload: bytes) -> dict:
@@ -226,6 +246,8 @@ def build_relay_handlers(
     room: Room | None = None,
     hold_s: float = HOLD_S,
     live: bool = False,
+    status_interval_s: float = STATUS_MIN_INTERVAL_S,
+    clock=None,  # noqa: ANN001  Tests: monotone Uhr injizieren
 ) -> RelayHandlers:
     """Build per-topic handler closures bound to a session + agent.
 
@@ -369,8 +391,19 @@ def build_relay_handlers(
 
     # Werksrolle (voicehook-Guide) vs. Agent im Raum. Lock: Join/Leave/Persona dürfen
     # sich beim Umschalten nicht überholen (jedes Umschalten awaitet das Modell).
-    role = {"agent": False, "persona": False}
+    role = {"agent": False, "persona": None, "name": None, "board": None}
     role_lock = asyncio.Lock()
+    _now = clock or (lambda: asyncio.get_running_loop().time())
+
+    def _normal_instructions() -> str:
+        """Grundrolle + fester Board-Platz (ersetzt, nie angehängt)."""
+        if role["persona"]:
+            base = role["persona"]
+        elif role["agent"]:
+            base = operator_persona(role["name"])
+        else:
+            return DEFAULT_PERSONA
+        return base + board_block(role["board"], agent_refs(role["name"])["nom"])
 
     async def _set_role(normal_instructions: str, live_turn: str) -> None:
         if live:
@@ -381,26 +414,34 @@ def build_relay_handlers(
         else:
             await agent.update_instructions(normal_instructions)
 
-    async def on_agent_presence(present: bool) -> None:
+    async def on_agent_presence(present: bool, name: str | None = None) -> None:
         """Externer Agent kommt (Werksrolle aus) oder geht (Werksrolle wieder an).
 
+        `name`: Anzeigename des zuletzt beigetretenen Agenten (guide.agent_display_name,
+        None = "dein Agent"). Wechselt er bei anwesendem Agent (zweiter Agent kommt,
+        vh.name ändert sich), werden die Wartesätze live mit dem neuen Namen gesetzt.
         Eine Operator-Persona ersetzt weiterhin alles: kommt sie vor dem Umschalten,
         bleibt sie stehen. Geht der letzte Agent, gilt wieder die Werksrolle.
         """
-        from .live import LIVE_AGENT_JOINED_USER, LIVE_AGENT_LEFT_USER
+        from .live import LIVE_AGENT_LEFT_USER, live_agent_joined_user
 
+        name = name if present else None
         async with role_lock:
-            if present == role["agent"]:
+            if present == role["agent"] and name == role["name"]:
                 return
+            joined = present and not role["agent"]
             role["agent"] = present
+            role["name"] = name
             if present:
                 if role["persona"]:
-                    logger.info("[role] agent joined, operator persona bleibt")
+                    logger.info("[role] agent present (%s), operator persona bleibt", name or "-")
                     return
-                await _set_role(OPERATOR_PERSONA, LIVE_AGENT_JOINED_USER)
-                logger.info("[role] agent joined, Werksrolle aus%s", " (live)" if live else "")
+                await _set_role(_normal_instructions(), live_agent_joined_user(name))
+                logger.info("[role] agent %s (%s), Werksrolle aus%s",
+                            "joined" if joined else "renamed", name or "-", " (live)" if live else "")
             else:
-                role["persona"] = False
+                role["persona"] = None
+                role["board"] = None
                 await _set_role(DEFAULT_PERSONA, LIVE_AGENT_LEFT_USER)
                 logger.info("[role] agent left, Werksrolle an%s", " (live)" if live else "")
 
@@ -412,9 +453,78 @@ def build_relay_handlers(
         from .live import LIVE_PERSONA_USER
 
         async with role_lock:
-            role["persona"] = True
-            await _set_role(text, LIVE_PERSONA_USER.format(text=text))
+            role["persona"] = text
+            await _set_role(_normal_instructions(), LIVE_PERSONA_USER.format(text=text))
         logger.info("[operator.persona]%s %d chars injected", " (live)" if live else "", len(text))
+
+    # ----- Status-Board (operator.status) + Nachfrage (operator.status_request) -----
+    st: dict = {"last": None, "pending": None, "task": None, "request_at": None, "n": 0}
+
+    async def _apply_status_live() -> None:
+        from .live import live_status_user
+
+        st["n"] += 1
+        ctx = agent.chat_ctx.copy()
+        items = getattr(ctx, "items", None)
+        if isinstance(items, list):  # alter Stand raus: lokaler Kontext bleibt konstant
+            items[:] = [i for i in items if not str(getattr(i, "id", "")).startswith(_STATUS_ID)]
+        ctx.add_message(role="user", content=live_status_user(role["board"], role["name"]),
+                        id=f"{_STATUS_ID}{st['n']}")
+        await agent.update_chat_ctx(ctx)
+
+    async def _apply_status() -> None:
+        board, st["pending"] = st["pending"], None
+        st["last"] = _now()
+        async with role_lock:
+            role["board"] = board
+            if live:
+                await _apply_status_live()
+            else:
+                await agent.update_instructions(_normal_instructions())
+        logger.info("[operator.status]%s %s", " (live)" if live else "",
+                    "cleared" if board is None else f"{len(board['open'])} open, {len(board['done'])} done")
+        req = st["request_at"]
+        if req is not None and _now() - req <= STATUS_ANSWER_WINDOW_S:
+            st["request_at"] = None
+            line = status_sentence(board, agent_refs(role["name"])["nom"])
+            if line:
+                speak_notice(session, line, live=live)
+
+    async def _apply_later(delay: float) -> None:
+        try:
+            await asyncio.sleep(delay)
+            await _apply_status()
+        finally:
+            st["task"] = None
+
+    async def on_status(packet: DataPacket) -> None:
+        """Board ersetzen. Rate-Limit: höchstens 1 Update je status_interval_s, das
+        letzte im Fenster gewinnt (wird nach Ablauf angewandt)."""
+        st["pending"] = normalize_board(_decode(packet.data))
+        wait = 0.0 if st["last"] is None else st["last"] + status_interval_s - _now()
+        if wait <= 0 and st["task"] is None:
+            await _apply_status()
+        elif st["task"] is None:
+            st["task"] = asyncio.create_task(_apply_later(wait))
+
+    async def on_user_text(text: str) -> None:
+        """Fragt der Nutzer nach dem Stand des Agenten: operator.status_request an ihn
+        (Code entscheidet per Muster). Höchstens eine offene Nachfrage je Fenster."""
+        from .board import is_status_question
+
+        if not role["agent"] or room is None or not is_status_question(text):
+            return
+        req = st["request_at"]
+        if req is not None and _now() - req <= STATUS_ANSWER_WINDOW_S:
+            return
+        st["request_at"] = _now()
+        try:
+            await room.local_participant.publish_data(
+                payload=json.dumps({"text": text[:200]}).encode(),
+                topic=TOPIC_STATUS_REQUEST, reliable=True)
+            logger.info("[operator.status_request] sent")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("[operator.status_request publish] %s", e)
 
     async def on_mode(packet: DataPacket) -> None:
         data = _decode(packet.data)
@@ -467,6 +577,7 @@ def build_relay_handlers(
         on_say=on_say, on_persona=on_persona, on_mode=on_mode,
         on_interrupt=on_interrupt, on_inject=on_inject,
         on_agent_presence=on_agent_presence,
+        on_status=on_status, on_user_text=on_user_text,
     )
 
 
@@ -478,4 +589,5 @@ def topic_dispatch(handlers: RelayHandlers) -> dict[str, callable]:
         TOPIC_MODE: handlers.on_mode,
         TOPIC_INTERRUPT: handlers.on_interrupt,
         TOPIC_INJECT: handlers.on_inject,
+        TOPIC_STATUS: handlers.on_status,
     }
