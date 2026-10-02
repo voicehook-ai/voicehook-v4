@@ -154,6 +154,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'free.left': 'Gratis heute: {v}',
       'free.unl': 'Gratis: unbegrenzt (Test)',
       'bal.label': 'Guthaben {v}',
+      'free.wallet': 'Gratis aufgebraucht · zahlt aus Guthaben {v}',
       'login.link': 'Anmelden', 'login.have': 'Schon Guthaben? Anmelden',
       'login.as': 'angemeldet: {e}',
       'topup.title': 'Guthaben aufladen', 'topup.amount': 'Betrag', 'topup.close': 'Schließen',
@@ -291,6 +292,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'free.left': 'Free today: {v}',
       'free.unl': 'Free: unlimited (test)',
       'bal.label': 'credit {v}',
+      'free.wallet': 'Free used up · paying from credit {v}',
       'login.link': 'Log in', 'login.have': 'Already have credit? Log in',
       'login.as': 'logged in: {e}',
       'topup.title': 'Top up credit', 'topup.amount': 'Amount', 'topup.close': 'Close',
@@ -5009,13 +5011,17 @@ function vhModeInfoRender() {
     freeEl.textContent = '';
     const parts = [];
     // eur_per_day 0 = Gratis aus: dann keine Gratis-Angabe.
+    const bal = (vhMe && typeof vhMe.balance_eur === 'number' && isFinite(vhMe.balance_eur) && vhEur) ? vhMe.balance_eur : null;
+    let paidFromWallet = false;
     if (vhFree && Number(vhFree.eur_per_day) > 0) {
       const eur = Math.max(0, Number(vhFree.eur_left) || 0);
       if (vhFree.exempt === true) parts.push(vhT('free.unl'));
+      // Gratis leer, Guthaben da: sagen, wovon der Call bezahlt wird (Oliver 02.10.).
+      else if (eur <= 0 && bal !== null && bal > 0) { parts.push(vhT('free.wallet', { v: vhEur.format(bal) })); paidFromWallet = true; }
       else parts.push(eur <= 0 ? vhT('pay.free') : vhT('free.left', { v: vhEur ? vhEur.format(eur) : eur.toFixed(2) + ' €' }));
     }
-    if (vhMe && typeof vhMe.balance_eur === 'number' && isFinite(vhMe.balance_eur) && vhEur) {
-      parts.push(vhT('bal.label', { v: vhEur.format(vhMe.balance_eur) }));
+    if (bal !== null && !paidFromWallet) {
+      parts.push(vhT('bal.label', { v: vhEur.format(bal) }));
     }
     if (parts.length || vhFree || vhMe) {
       const txt = document.createElement('span');
@@ -5461,6 +5467,9 @@ async function vhStartCall() {
     // arrives — at this point the user cannot actually talk yet.
     lkConnected = true; try { vhHideJoinGate(); } catch (_) {}
     try { vhMarkSeen(); } catch (_) {}
+    // Haupt-Knopf auf "Auflegen" auf JEDEM Startpfad (Join-Gate, ?invite=, Modell-Modal),
+    // sonst steht er im Call weiter auf "Agent einladen" und der Tipp legt auf (02.10.).
+    try { if (window.vhSetCallUi) window.vhSetCallUi('in-call'); } catch (_) {}
     btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = vhT('call.end');
     try { vhMuteBtnVisibility(true); } catch (_) {}  // show mic-mute toggle next to btn-call
     err.textContent = '';  // no "connected" text — speaker-color in kringel does the talking
