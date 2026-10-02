@@ -14,12 +14,13 @@ __SITE_MAIN__ {
         request>headers>Authorization replace REDACTED
         request>headers>Cookie replace REDACTED
         resp_headers>Set-Cookie replace REDACTED
-        request>headers>Referer regexp "([?&](token|nonce|invite|session_id|r|code|state)=)[^&#]*" "${1}REDACTED"
-        resp_headers>Location regexp "([?&](token|nonce|invite|session_id|r|code|state)=)[^&#]*" "${1}REDACTED"
+        request>headers>Referer regexp "([?&](token|nonce|invite|op_invite|session_id|r|code|state)=)[^&#]*" "${1}REDACTED"
+        resp_headers>Location regexp "([?&](token|nonce|invite|op_invite|session_id|r|code|state)=)[^&#]*" "${1}REDACTED"
         request>uri query {
           replace token REDACTED
           replace nonce REDACTED
           replace invite REDACTED
+          replace op_invite REDACTED
           replace session_id REDACTED
           replace r REDACTED
           replace code REDACTED

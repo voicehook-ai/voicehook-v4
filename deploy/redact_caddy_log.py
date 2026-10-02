@@ -3,7 +3,7 @@
 
 Gleiche Felder wie `format filter` in infra/caddy/Caddyfile.tmpl:
 - Request-Header X-Wallet-Token, Authorization, Cookie und Response-Header Set-Cookie -> "REDACTED"
-- Query-Parameter token, nonce, invite, session_id, r, code, state in request.uri, Referer und Location
+- Query-Parameter token, nonce, invite, op_invite, session_id, r, code, state in request.uri, Referer und Location
 
 Zeilenformat `format console`: Präfix (Zeit, Level, Logger, Nachricht, Tabs, ANSI-Farben) + JSON.
 Das Präfix bleibt Byte für Byte erhalten, unveränderte Zeilen ebenso. Reines JSON (format json) geht auch.
@@ -25,7 +25,7 @@ from urllib.parse import unquote_plus
 REDACTED = "REDACTED"
 SECRET_HEADERS = {"x-wallet-token", "authorization", "cookie", "proxy-authorization"}
 SECRET_RESP_HEADERS = {"set-cookie"}
-SECRET_PARAMS = {"token", "nonce", "invite", "session_id", "r", "code", "state"}
+SECRET_PARAMS = {"token", "nonce", "invite", "op_invite", "session_id", "r", "code", "state"}
 _WALLET = re.compile(r"vhw_[A-Za-z0-9_\-]+")
 _PARAM_RE = re.compile(r"([?&](?:" + "|".join(sorted(SECRET_PARAMS)) + r")=)[^&#\s\"]*")
 

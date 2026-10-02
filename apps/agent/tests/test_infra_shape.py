@@ -32,7 +32,8 @@ def test_caddyfile_template_is_lean():
     # 33 -> 34 (01.10.2026): SSE der HTTPS-Brücke nicht komprimieren (PR #99).
     # 34 -> 36 (02.10.2026): lb_try_duration überbrückt den HTTP-Neustart beim Deploy.
     # 36 -> 55 (02.10.2026): format filter schwärzt Geheimnisse im Access-Log (Sicherheitsbefund).
-    assert _loc(ROOT / "infra" / "caddy" / "Caddyfile.tmpl") <= 55
+    # 55 -> 56 (02.10.2026): op_invite (CLI-Join) ebenfalls schwärzen.
+    assert _loc(ROOT / "infra" / "caddy" / "Caddyfile.tmpl") <= 56
 
 
 def test_systemd_units_are_http_plus_bluegreen_workers():
@@ -123,7 +124,7 @@ def test_caddy_access_log_redacts_secrets():
     assert "resp_headers>Set-Cookie replace REDACTED" in cf
     assert "request>headers>Referer regexp" in cf and "resp_headers>Location regexp" in cf
     assert "request>uri query {" in cf
-    for p in ("token", "nonce", "invite", "session_id", "r", "code", "state"):
+    for p in ("token", "nonce", "invite", "op_invite", "session_id", "r", "code", "state"):
         assert f"replace {p} REDACTED" in cf, p
     assert "format console" not in cf  # ungefiltertes Format wäre wieder Klartext
 
