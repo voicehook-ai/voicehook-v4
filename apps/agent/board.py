@@ -1,6 +1,6 @@
 """Status-Board des Agenten im Raum (operator.status, Oliver 02.10.2026).
 
-Der Agent schickt bei jedem Taskwechsel das GANZE Board {doing, open[], done[]};
+Der Agent schickt bei jedem Taskwechsel das GANZE Board {doing, open[], done[], faq[]};
 es ersetzt das vorherige an einem festen Platz in Deltas Instructions (nie anhängen,
 damit der Kontext nicht wächst). Hartes Gesamtbudget board_budget() Zeichen (Default
 BOARD_BUDGET = 2000, Env VOICEHOOK_BOARD_BUDGET, Normal und Live): zuerst fallen erledigte
