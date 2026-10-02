@@ -7,7 +7,26 @@ __SITE_MAIN__ {
   encode @enc zstd gzip
   log {
     output file /var/log/caddy/access.log
-    format console
+    format filter {  # Geheimnisse nie im Klartext ins Log; Altlog: deploy/redact_caddy_log.py
+      wrap console
+      fields {
+        request>headers>X-Wallet-Token replace REDACTED
+        request>headers>Authorization replace REDACTED
+        request>headers>Cookie replace REDACTED
+        resp_headers>Set-Cookie replace REDACTED
+        request>headers>Referer regexp "([?&](token|nonce|invite|session_id|r|code|state)=)[^&#]*" "${1}REDACTED"
+        resp_headers>Location regexp "([?&](token|nonce|invite|session_id|r|code|state)=)[^&#]*" "${1}REDACTED"
+        request>uri query {
+          replace token REDACTED
+          replace nonce REDACTED
+          replace invite REDACTED
+          replace session_id REDACTED
+          replace r REDACTED
+          replace code REDACTED
+          replace state REDACTED
+        }
+      }
+    }
   }
   @api path /api/* /healthz /status
   handle @api {
