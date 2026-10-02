@@ -492,12 +492,17 @@ def test_sse_disconnect_starts_grace_then_leaves(live_server, monkeypatch):
         j = _join(c, idle_timeout=0)
         s = bridge.REGISTRY.get(j["session"])
         # own connection for the stream, like curl -N / the CLI's SSE client
-        # (a reused keep-alive connection right after a POST sporadically saw an
-        # early http.disconnect from uvicorn in this test)
         with httpx.Client(base_url=live_server, timeout=10) as c2, \
                 c2.stream("GET", "/api/bridge/events", headers=_h(j["session"])) as r:
-            _read_events(r.iter_lines(), 2)
+            # Keep a reference to the line iterator while asserting: a dropped
+            # iter_lines() generator is finalized at once, httpcore's GeneratorExit
+            # handler then closes the TCP connection, and uvicorn's http.disconnect
+            # races this assert (the old flake: 0 == 1, ~4% of runs).
+            lines = r.iter_lines()
+            assert [e for e, _ in _read_events(lines, 2)] == ["hello", "room-state"]
             assert len(s.subs) == 1
+            assert s.sse_gone_at is None and not s.ended
+        # only now (stream closed by leaving the with-block) the grace period starts
         _wait(lambda: s.ended, 5)
     assert s.end_reason == "sse_gone" and s.room.disconnected
 
