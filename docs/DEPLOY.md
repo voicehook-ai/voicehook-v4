@@ -223,6 +223,7 @@ dasselbe Konto zuerst verrechnet. Der Wiederherstellungs-Link gilt genau einmal 
 |---|---|---|
 | `STRIPE_SECRET_KEY` | leer | Stripe-Secret-Key (Checkout-Session anlegen) |
 | `STRIPE_WEBHOOK_SECRET` | leer | Signing-Secret des Webhook-Endpunkts |
+| `STRIPE_ACCOUNT_TAX_ID` | leer | Eigene USt-ID als Stripe-Tax-ID (`txi_...`, Live: `txi_1UM4IoDRrOhbsRSIbgJoTHim` = DE310620765, Sandbox hat eine eigene). Nur bei Aufladung mit Rechnung (`invoice=true`) geht sie als `invoice_creation[invoice_data][account_tax_ids][]` mit und steht so garantiert auf der Rechnung, unabhängig von der Dashboard-Einstellung ([Stripe-Doku](https://docs.stripe.com/invoicing/taxes/account-tax-ids)); leer = Parameter entfällt (Dashboard-Voreinstellung gilt). Kein Secret |
 | `VOICEHOOK_REQUIRE_CREDITS_NORMAL` | `0` | `1` = `/api/host-call` / `/api/invite-room` ohne Wallet mit Saldo > 0 -> 402; greift nur, wenn das Gratis-Kontingent Normal aus ist (`0`) |
 | `VOICEHOOK_REQUIRE_CREDITS_LIVE` | `0` | `1` = `/api/live-room` ohne Wallet mit Saldo > 0 -> 402; greift nur, wenn das Gratis-Kontingent Live aus ist |
 | `RESEND_API_KEY` | leer | Resend-API-Key für die Login-Mails; leer = Login aus (`/api/login` -> 503 `login_unavailable`) |
