@@ -248,6 +248,7 @@ def test_board_block_no_spoken_formula_no_double_name():
     blk = board_block(b, "Claude")
     assert "Kurz Moment" not in blk and "Claude Claude" not in blk and "Statt eines" not in blk
     assert blk.strip().startswith("Status von Claude")
+    assert blk.rstrip().endswith("Sprich von Claude immer in der dritten Person, nie als ich.")
     assert "macht gerade: Claude baut gerade den Fix für Regel drei; offen: Tests; " \
            "erledigt: Analyse." in blk
     # Code-Satz auf Nachfrage: kein doppelter Name

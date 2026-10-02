@@ -88,7 +88,8 @@ def board_block(board: dict | None, nom: str) -> str:
     if board["done"]:
         fields.append("erledigt: " + ", ".join(x.rstrip(".") for x in board["done"]))
     return (f" Status von {who} (ersetzt jeden früheren Stand; Wissen, daraus formulierst du "
-            f"eigene, natürliche Sätze): " + "; ".join(fields) + ".")
+            f"eigene, natürliche Sätze): " + "; ".join(fields) + "."
+            f" Sprich von {who} immer in der dritten Person, nie als ich.")
 
 
 def status_sentence(board: dict | None, nom: str) -> str | None:
