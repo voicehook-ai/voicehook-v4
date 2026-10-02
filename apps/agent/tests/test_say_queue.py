@@ -407,7 +407,8 @@ async def test_live_interrupted_say_is_not_repeated():
     await h.on_say(_pkt({"text": LONG, "seq": 1}))
     session.handles[0].finish("Der Fix", interrupted=True)  # Transkript hinkt dem Audio nach
     await asyncio.sleep(QUIET * 3)
-    assert session.said == [LONG]                         # nichts doppelt
+    # nichts doppelt (Live verpackt die Aussage in LIVE_SAY_USER, daher "in")
+    assert len(session.said) == 1 and LONG in session.said[0]
     assert _status(room) == [(1, "queued"), (1, "interrupted")]
 
 
@@ -416,8 +417,11 @@ async def test_live_next_say_plays_after_interrupt():
     # Positivkontrolle: die Queue läuft in Live weiter, nur der abgebrochene Satz nicht
     session, _agent, room, h = _build(live=True)
     await h.on_say(_pkt({"text": LONG, "seq": 1}))
-    await h.on_say(_pkt({"text": "Zweite Aussage.", "seq": 2}))
     session.handles[0].finish("Der Fix", interrupted=True)
+    await asyncio.sleep(QUIET * 3)
+    # zweite Aussage erst nach dem Abbruch: kommt sie während seq 1 läuft, hält die
+    # Revise-Logik sie zurück (hold_s=30), das ist ein anderer Pfad
+    await h.on_say(_pkt({"text": "Zweite Aussage.", "seq": 2}))
     await asyncio.sleep(QUIET * 3)
     assert len(session.said) == 2 and "Zweite Aussage." in session.said[-1]
     assert LONG not in session.said[-1]
