@@ -226,7 +226,8 @@ dasselbe Konto zuerst verrechnet. Der Wiederherstellungs-Link gilt genau einmal 
 | `STRIPE_ACCOUNT_TAX_ID` | leer | Eigene USt-ID als Stripe-Tax-ID (`txi_...`, Live: `txi_1UM4IoDRrOhbsRSIbgJoTHim` = DE310620765, Sandbox hat eine eigene). Nur bei Aufladung mit Rechnung (`invoice=true`) geht sie als `invoice_creation[invoice_data][account_tax_ids][]` mit und steht so garantiert auf der Rechnung, unabhängig von der Dashboard-Einstellung ([Stripe-Doku](https://docs.stripe.com/invoicing/taxes/account-tax-ids)); leer = Parameter entfällt (Dashboard-Voreinstellung gilt). Kein Secret |
 | `VOICEHOOK_REQUIRE_CREDITS_NORMAL` | `0` | `1` = `/api/host-call` / `/api/invite-room` ohne Wallet mit Saldo > 0 -> 402; greift nur, wenn das Gratis-Kontingent Normal aus ist (`0`) |
 | `VOICEHOOK_REQUIRE_CREDITS_LIVE` | `0` | `1` = `/api/live-room` ohne Wallet mit Saldo > 0 -> 402; greift nur, wenn das Gratis-Kontingent Live aus ist |
-| `RESEND_API_KEY` | leer | Resend-API-Key für die Login-Mails; leer = Login aus (`/api/login` -> 503 `login_unavailable`) |
+| `RESEND_SENDING_API_KEY` | leer | Resend-Key mit Recht "Sending access" (nur Senden) für die Login-Mails; leer = Login aus (`/api/login` -> 503 `login_unavailable`). Nie den Full-Access-Key auf den Server |
+| `RESEND_API_KEY` | leer | Fallback, wenn `RESEND_SENDING_API_KEY` leer ist (ältere `.env`); ebenfalls nur ein Sending-Key |
 | `MAIL_FROM` | `voicehook <login@voicehook.ai>` | Absender der Login-Mail (Domain muss in Resend verifiziert sein) |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | leer | OAuth-Client "Mit Google fortfahren" auf `/login`; fehlt einer der beiden Werte: Knopf ausgegraut, `/api/auth/google/*` -> 503 |
 | `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` | leer | dasselbe für "Mit GitHub fortfahren" (`/api/auth/github/*`) |
@@ -361,8 +362,10 @@ Login-CSRF); sonst bleibt es unberührt und die Antwort sagt `wallet_linked: fal
 Wird eine Adresse zum ersten Mal bestätigt, verlieren alle anderen Tokens der so übernommenen Konten
 ihre Gültigkeit (wer bei Stripe eine fremde Adresse eintippt, behält keinen Zugriff); weitere
 unbestätigte Konten mit derselben Kontakt-Mail werden samt Saldo zusammengeführt. Einrichtung:
-Resend-Konto, Domain `voicehook.ai` dort verifizieren (SPF/DKIM), `RESEND_API_KEY` und optional
-`MAIL_FROM` in `/opt/voicehook/.env`, Agent neu starten.
+Resend-Konto, Domain `voicehook.ai` dort verifizieren (Region eu-west-1; DNS bei Hostinger:
+TXT `resend._domainkey` (DKIM), MX `send` -> `10 feedback-smtp.eu-west-1.amazonses.com`, TXT `send`
+`v=spf1 include:amazonses.com ~all`, CNAME `rsend` -> `send.forge.rmta.net`), Sending-Key als
+`RESEND_SENDING_API_KEY` und optional `MAIL_FROM` in `/opt/voicehook/.env`, Agent neu starten.
 
 **Übergang beim Deploy (24 h):** Backend und Web (`aufladen.html`) gemeinsam ausrollen. Bis alle
 Browser die neue Seite haben (Cache, offene Tabs; spätestens nach 24 h), schickt eine alte Seite keine
