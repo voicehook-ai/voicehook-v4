@@ -28,6 +28,10 @@ def main() -> None:
     # Web/API + Raum->Worker-Zuordnung bleiben beim Hauptdienst auf :7400.
     if os.environ.get("VOICEHOOK_HTTP_DISABLED", "") != "1":
         threading.Thread(target=_serve_http, daemon=True, name="vh-http").start()
+        # Delta nach Neustart zurück in laufende Räume (redispatch.py), nur im Hauptdienst
+        from .redispatch import start_background
+
+        start_background()
     run_worker()  # blocks until worker exits / SIGTERM
 
 

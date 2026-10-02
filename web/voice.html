@@ -74,6 +74,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'modal.waitPeer': 'Warte auf zweiten Teilnehmer im Raum …',
       'modal.join': 'Raum jetzt betreten',
       'pres.user': 'Du', 'pres.voice': 'Delta Agent (Stimme)', 'pres.agent': 'Agent',
+      'pres.agentDeaf': 'hört gerade nicht zu',
       'pres.userDesc': 'Du, der Mensch im Raum',
       'pres.voiceDesc': 'Delta Agent (Stimme): voicehook-interne Sprachpipeline. Moderiert das Gespräch zwischen dir und deinem Agent.',
       'pres.agentDesc': 'Agent: das externe Sprachmodell (z. B. Claude Code), eingeklinkt über die voicehook-agent CLI',
@@ -211,6 +212,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'modal.waitPeer': 'Waiting for a second participant in the room …',
       'modal.join': 'Join the room now',
       'pres.user': 'User', 'pres.voice': 'Delta Agent (voice)', 'pres.agent': 'Agent',
+      'pres.agentDeaf': 'not listening right now',
       'pres.userDesc': 'You, the human in the room',
       'pres.voiceDesc': 'Delta Agent (voice): voicehook\'s built-in speech pipeline. Moderates the conversation between you and your agent.',
       'pres.agentDesc': 'Agent: the external language model (e.g. Claude Code) connected through the voicehook-agent CLI',
@@ -731,6 +733,11 @@ body.theme-light .vh-pres-chip.in { color: var(--vh-btn-fg); }  /* alle Chips (U
 @media (prefers-reduced-motion: reduce) { .vh-pres-chip .vh-pres-spin { animation: none; } }
 .vh-pres-chip[data-slot="agent"] .vh-pres-label { max-width: 24ch; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
+/* Lebenszeichen (operator.alive, Oliver 02.10.): Agent im Raum, hört aber nicht zu
+   (kein Lebenszeichen seit 20 s oder alive:false) -> gedimmt + kurzer Hinweis. */
+.vh-pres-chip .vh-pres-sub { display: none; opacity: .85; white-space: nowrap; }
+.vh-pres-chip[data-slot="agent"].deaf { opacity: .45; }
+.vh-pres-chip[data-slot="agent"].deaf .vh-pres-sub { display: inline; }
 /* Per-chip color selection (Olli 2026-05-19): clicking a chip scopes palette+hue
    changes to that chip's role only. Default target is 'user'. */
 .vh-pres-chip { cursor: pointer; }
@@ -1770,7 +1777,7 @@ body.theme-light #vh-auth-modal .vh-auth-msg.warn { color: #b8641a; }
   <div id="vh-presence">
     <span class="vh-pres-chip" data-slot="user" title="You, the human in the room" data-i18n-title="pres.userDesc"><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label" data-i18n="pres.user">User</span></span>
     <span class="vh-pres-chip" data-slot="voice-ai" title="Delta Agent (voice)" data-i18n-title="pres.voiceDesc"><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label" data-i18n="pres.voice">Delta Agent (voice)</span></span>
-    <span class="vh-pres-chip" data-slot="agent" title="Agent" data-i18n-title="pres.agentDesc"><span class="vh-pres-spin" aria-hidden="true"></span><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label" data-i18n="pres.agent">Agent</span></span>
+    <span class="vh-pres-chip" data-slot="agent" title="Agent" data-i18n-title="pres.agentDesc"><span class="vh-pres-spin" aria-hidden="true"></span><span class="vh-pres-dot"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="vh-pres-label" data-i18n="pres.agent">Agent</span><span class="vh-pres-sub" data-i18n="pres.agentDeaf">hört gerade nicht zu</span></span>
     <button type="button" id="vh-tr-mode" aria-label="Transkript-Ansicht wechseln" title="Transkript" data-i18n-aria="tr.aria"></button>
   </div>
   <div id="vh-mode-row" role="radiogroup" aria-label="Modus" data-i18n-aria="mode.aria">
@@ -5935,6 +5942,27 @@ const VH_SLOT_DESCS  = {
 // stale ParticipantDisconnected events for old identities (e.g. when a fresh
 // peer has already taken over the slot, an OLD disconnect must not flip it back to "out").
 const vhSlotCurrentId = { user: null, 'voice-ai': null, agent: null };
+// Lebenszeichen des Agenten (Topic operator.alive, CLI ab 0.8.0, alle 10 s solange
+// sein Brain next/say bedient; {alive:false} beim Verlassen). Nie gesehen = alte CLI
+// -> Chip wie bisher. Gesehen und > 20 s still oder alive:false -> gedimmt.
+const VH_ALIVE_STALE_MS = 20000;
+const vhOpAlive = { id: null, seen: false, last: 0, off: false };
+function vhOpAliveReset(id) { vhOpAlive.id = id || null; vhOpAlive.seen = false; vhOpAlive.last = 0; vhOpAlive.off = false; }
+function vhOpAliveOn(id, obj) {
+  if (vhOpAlive.id !== id) vhOpAliveReset(id);
+  vhOpAlive.seen = true;
+  if (obj && obj.alive === false) vhOpAlive.off = true;
+  else { vhOpAlive.off = false; vhOpAlive.last = Date.now(); }
+  vhAgentAliveSync();
+}
+function vhAgentAliveSync() {
+  const el = document.querySelector('#vh-presence .vh-pres-chip[data-slot="agent"]');
+  if (!el) return;
+  const deaf = el.classList.contains('in') && vhOpAlive.seen && vhOpAlive.id === vhSlotCurrentId.agent
+    && (vhOpAlive.off || Date.now() - vhOpAlive.last > VH_ALIVE_STALE_MS);
+  el.classList.toggle('deaf', deaf);
+}
+setInterval(vhAgentAliveSync, 2000);
 function vhPresenceSet(slot, state, id) {
   if (!slot) return;
   // stale-event guard: late 'out' for an identity that no longer owns the slot → ignore
@@ -5947,7 +5975,7 @@ function vhPresenceSet(slot, state, id) {
   if (state === 'in')    el.classList.add('in');
   if (state === 'speak') el.classList.add('in','speak');
   if (state === 'out') {
-    if (slot === 'agent') vhAgentJoiningSet(false);
+    if (slot === 'agent') { vhAgentJoiningSet(false); vhOpAliveReset(null); el.classList.remove('deaf'); }
     // Reset to grey baseline: clear inline-colored dot, restore default label + tooltip
     const dot = el.querySelector('.vh-pres-dot');
     if (dot) { dot.style.color = ''; dot.style.background = ''; }
@@ -5969,6 +5997,7 @@ function vhPresenceSet(slot, state, id) {
     }
   }
   vhSyncInviteBtnVisibility();
+  if (slot === 'agent') vhAgentAliveSync();
   vhGlowSync();
 }
 // Issue #5: invite-btn auto-hide when room is full (all 3 chips 'in'), auto-show otherwise (only if prepared)
@@ -5995,7 +6024,7 @@ function vhPresenceReset() {
   vhSlotCurrentId['voice-ai'] = null;
   vhSlotCurrentId.agent = null;
   document.querySelectorAll('#vh-presence .vh-pres-chip').forEach(el => {
-    el.classList.remove('in','speak');
+    el.classList.remove('in','speak','deaf');
     const slot = el.getAttribute('data-slot');
     const lbl = el.querySelector('.vh-pres-label');
     if (lbl) lbl.textContent = VH_SLOT_LABELS[slot] || slot;
@@ -6278,6 +6307,14 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
   // + catch-all for senior.* control topics (senior.say / persona / interrupt / inject)
   // so operator sees every command the senior brain pushes to voice-ai.
   room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+    // Lebenszeichen des Agenten: nur Chip-Zustand, kein Puls, nie ins Transkript.
+    if (topic === 'operator.alive') {
+      try {
+        const o = JSON.parse(new TextDecoder().decode(payload));
+        if (participant && vhPresenceSlotForP(participant) === 'agent') vhOpAliveOn(participant.identity, o);
+      } catch (_) {}
+      return;
+    }
     vhBumpActivity();
     const from = participant?.identity || '?';
     // Kostenanzeige (wieder an, Olli 30.09.): nur Untertitel, nie ins Transkript.
