@@ -4917,8 +4917,11 @@ if (vhTuLogin) vhTuLogin.addEventListener('click', vhLoginGo);
 // leer, bleibt ein Hinweis mit Aufladen stehen.
 const vhLowEl = document.getElementById('vh-low-bal');
 let vhCallEndedCheck = false;
+// Owner-Ausnahme (VH_FREE_EXEMPT_KEYS, /api/me free.exempt): keine Guthaben-Hinweise
+// (Oliver 02.10.: "Guthaben-Gedöns raus bei mir"). Kostenzeile im Call bleibt.
+function vhIsExempt() { return !!(vhFree && vhFree.exempt === true); }
 function vhLowBalShow(min) {
-  if (!vhLowEl) return;
+  if (!vhLowEl || vhIsExempt()) return;
   const n = Math.max(1, Math.ceil(Number(min) || 5));
   vhLowEl.textContent = vhT('low.notice', { n }) + ' · ';
   vhLowEl.appendChild(vhTopupBtn());
@@ -4941,6 +4944,7 @@ function vhPayAfterRefresh() {
   if (vhCallEndedCheck) {
     vhCallEndedCheck = false;
     if (!vhFree && !vhMe) return;  // nichts bekannt: nichts behaupten
+    if (vhIsExempt()) return;      // Owner: kein "aufgebraucht"-Hinweis
     const f = vhFree ? Math.max(0, Number(vhFree.eur_left) || 0) : 0;
     const b = vhMe && typeof vhMe.balance_eur === 'number' ? vhMe.balance_eur : 0;
     if (f <= 0 && b <= 0) vhPayShow(vhT('pay.ended'));
@@ -4979,8 +4983,9 @@ function vhModeInfoRender() {
       const txt = document.createElement('span');
       txt.className = 'vh-me-txt'; txt.textContent = parts.join(' · ');
       if (vhMe && vhMe.email_masked) txt.title = vhT('login.as', { e: vhMe.email_masked });
-      if (parts.length) { freeEl.appendChild(txt); freeEl.appendChild(vhSep()); }
-      freeEl.appendChild(vhTopupBtn());
+      const exempt = vhIsExempt();  // Owner: kein Aufladen-Hinweis in der Gratis-Zeile
+      if (parts.length) { freeEl.appendChild(txt); if (!exempt) freeEl.appendChild(vhSep()); }
+      if (!exempt) freeEl.appendChild(vhTopupBtn());
       if (!vhLoggedIn()) {
         const wrap = document.createElement('span');
         wrap.className = 'vh-login-wrap';
