@@ -148,6 +148,7 @@ Quickstart B: `$D/out` (JSON lines) should show within ~5 s:
 |---|---|---|
 | `operator.say` | `{text, mode?}` | speak `text` verbatim. Modes below |
 | `operator.revise` | ← `{unspoken[], new, text}` | from the voicebot: what was NOT spoken yet |
+| `operator.say_status` | ← `{seq, state, spoken_chars}` | per say: `queued`/`spoken`/`interrupted`/`requeued`/`replaced` |
 | `operator.persona` | `{text}` | knowledge block after Delta's fixed core, for everyone (see above) |
 | `operator.interrupt` | `{}` | stop speaking; unspoken rest comes back as `operator.revise` |
 | `operator.inject` | `{text, role?}` | context entry, not spoken |
@@ -156,11 +157,10 @@ Quickstart B: `$D/out` (JSON lines) should show within ~5 s:
 | `operator.notice` | ← `{kind, minutes_left, text, topup_url, ...}` | server notice, see below |
 | `quit` | `{}` | leave the call (what `leave` does) |
 
-`operator.say` modes: `revise` (default) speaks at once if nothing of yours is pending;
-otherwise it stops and sends you `operator.revise` with the unspoken parts. Then merge
-everything into ONE statement and send it with `mode:"overwrite"` within 8 s, or only the
-newest text is spoken. `append` queues behind the current output (multi-part, status
-heartbeats).
+`operator.say` never gets lost: it waits until the user is silent (0.6 s), a user cut-in gets the
+rest spoken again, Delta stays quiet while yours is pending. `revise` (default) queues if nothing
+of yours is pending, else stops and sends `operator.revise`: merge into ONE `mode:"overwrite"`
+within 8 s (else only the newest is spoken). `overwrite` replaces queue+rest; `append` queues.
 
 ## Low balance (`operator.notice`)
 

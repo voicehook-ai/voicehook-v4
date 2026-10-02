@@ -168,6 +168,18 @@ def live_say_user_input(text: str) -> str:
     return LIVE_SAY_USER.format(text=text)
 
 
+def live_say_rest_user_input(text: str, spoken: str) -> str:
+    """operator.say, das der Nutzer unterbrochen hat (relay.py Nachsprechen): Gemini
+    formuliert um, der ungesprochene Rest ist am Text nicht abzulesen. Deshalb die ganze
+    Aussage plus das schon Gesagte: weiter ab dort, nichts wiederholen, nichts weglassen."""
+    base = live_say_user_input(text)
+    if not (spoken or "").strip():
+        return base
+    return (f"{base} Du wurdest dabei unterbrochen, gesagt hast du schon: «{spoken.strip()}». "
+            "Sprich jetzt nur den noch fehlenden Rest, ohne Entschuldigung und ohne "
+            "Wiederholung.")
+
+
 def live_persona_user(text: str, name: str | None = None) -> str:
     """Bereinigte Persona als Wissens-Turn: ersetzt die Werksrolle, nie den Kern."""
     return (f"{MARK_SYSTEM} Ab sofort gilt statt deiner Werksrolle als voicehook-Experte "
