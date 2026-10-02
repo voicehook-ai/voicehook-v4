@@ -144,7 +144,7 @@ minutes or less.
 | `free_eur` | float or null | free allowance left today in EUR; `0` = used up, `null` = room has no free part |
 | `balance_eur` | float or null | wallet balance; `null` = room has no wallet |
 | `topup_url` | string | `https://voicehook.ai/aufladen` |
-| `text` | string | what the voicebot says at the same moment: "Noch etwa fünf Minuten, lade Guthaben auf voicehook.ai auf." |
+| `text` | string | what the voicebot says at the same moment: "Hey, Achtung, das Guthaben ist in wenigen Minuten leer." |
 
 Operator: do not repeat the sentence; mention top-up once in your next `say`. Browser:
 show a visible hint with a link to `topup_url`. The call ends when the free allowance and

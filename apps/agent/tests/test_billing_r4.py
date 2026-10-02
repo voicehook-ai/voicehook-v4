@@ -416,7 +416,7 @@ def test_worker_no_notice_with_plenty_left(monkeypatch):
 
 def test_announcement_short_no_dashes():
     t = relay.LOW_BALANCE_ANNOUNCEMENT
-    assert len(t) <= 60 and "voicehook.ai" in t and "—" not in t and "–" not in t
+    assert len(t) <= 60 and "Guthaben" in t and "—" not in t and "–" not in t  # Olli 02.10.: natuerlicher Satz, ohne Domain
 
 
 def test_speak_notice_live_uses_generate_reply():

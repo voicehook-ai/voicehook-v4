@@ -166,8 +166,7 @@ dem Gratis-Topf und danach vom Wallet, ohne den Call zu beenden. Das Kostenereig
 überschreitet, leert den Topf bis 0, der Überhang geht ans Wallet. Der Call endet erst, wenn beides
 leer ist. Reichen Gratis-Rest + Guthaben ((Gratis-Rest + Guthaben) / Verbrauch der letzten 3 Minuten)
 noch höchstens 5 Minuten, schickt der Worker einmal pro Call `operator.notice`
-`{kind:"low_balance", minutes_left, ...}` an alle im Raum und sagt "Noch etwa fünf Minuten, lade
-Guthaben auf voicehook.ai auf." `GET /api/me` liefert der Oberfläche Gratis-Rest und Guthaben.
+`{kind:"low_balance", minutes_left, ...}` an alle im Raum und sagt "Hey, Achtung, das Guthaben ist in wenigen Minuten leer." `GET /api/me` liefert der Oberfläche Gratis-Rest und Guthaben.
 
 Gratis gibt es `VH_FREE_EUR_PER_DAY` (1 €) Verbrauch pro UTC-Tag, Normal und Live gemeinsam.
 Gebucht wird nur aus echten Kostenereignissen des Workers (Spracherkennung, Sprachmodell,

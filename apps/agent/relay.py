@@ -56,7 +56,7 @@ TOPIC_INJECT = "operator.inject"
 TOPIC_REVISE = "operator.revise"   # agent -> operator: ungesprochene Aussagen zurück
 TOPIC_NOTICE = "operator.notice"   # agent -> alle: Hinweis (low_balance), Browser + Operator
 
-LOW_BALANCE_ANNOUNCEMENT = "Noch etwa fünf Minuten, lade Guthaben auf voicehook.ai auf."
+LOW_BALANCE_ANNOUNCEMENT = "Hey, Achtung, das Guthaben ist in wenigen Minuten leer."
 
 HOLD_S = 8.0  # Olli-Regel "Stille ist der Killer, ab 8s ansagen": so lange wartet ein
              # zurückgehaltenes say auf das zusammengefasste overwrite des Brains

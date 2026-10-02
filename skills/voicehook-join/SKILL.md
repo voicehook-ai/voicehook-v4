@@ -161,8 +161,7 @@ heartbeats).
 
 `kind:"low_balance"`: free allowance plus credit last about `minutes_left` more minutes; the
 call ends when both are empty. It arrives once per call as a `$D/out` line with
-`"topic": "operator.notice"`, and the voicebot already said "Noch etwa fünf Minuten, lade
-Guthaben auf voicehook.ai auf." Do not repeat that. Add one short sentence to your next
+`"topic": "operator.notice"`, and the voicebot already said "Hey, Achtung, das Guthaben ist in wenigen Minuten leer." Do not repeat that. Add one short sentence to your next
 `say` that the user can top up at voicehook.ai/aufladen, then go on. Once, never nag.
 
 ## Live mode (Gemini Live)
