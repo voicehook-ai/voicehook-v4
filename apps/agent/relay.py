@@ -184,8 +184,9 @@ class RelayAgent(Agent):
         return self._clean_stream(Agent.default.llm_node(self, ctx, tools, model_settings), items)
 
     async def _clean_stream(self, stream, items):  # noqa: ANN001, ANN202
-        """Bereinigen und nach der ersten Zeile kappen (core.FirstLine): gegen gestapelte
-        Wartesätze entscheidet der Code, nicht der Prompt."""
+        """Bereinigen; ist die erste Zeile ein Wartesatz, nach ihr kappen (core.FirstLine):
+        gegen gestapelte Wartesätze entscheidet der Code, nicht der Prompt. Echte Antworten
+        aus Status/Wissen laufen vollständig durch (Zeilen verbunden)."""
         self.history.begin()
         first = FirstLine(agent_mark(self.agent_name), wait_line(self.agent_name))
         try:

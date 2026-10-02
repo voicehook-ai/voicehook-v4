@@ -6,8 +6,11 @@ mode — see voicehook-v3 demo-agent post-mortem, PLAN-v4.md inventory).
 Denk-Budget (Oliver 02.10.2026): gemini-2.5-flash denkt ohne thinking_config bei
 jeder Antwort mit. Gemessen 02.10. mit echtem Call (Delta-Prompt, 3 typische Fragen):
 ohne Konfiguration 247 bis 326 Denk-Tokens und 1,95 s Median, mit thinking_budget=0
-0 Denk-Tokens und 0,57 s. Default deshalb 0, per VOICEHOOK_LLM_THINKING_BUDGET
-überschreibbar (-1 = dynamisch, leer/"off" = Modell-Default).
+0 Denk-Tokens und 0,57 s. Default war deshalb 0.
+Seit fix/delta-core-rule3 (Oliver 02.10., Live-Test mit VOICEHOOK_LLM_THINKING_BUDGET=-1
+auf der Box: Delta deutlich besser): Default -1 = dynamisch. Per
+VOICEHOOK_LLM_THINKING_BUDGET überschreibbar (0 = aus, Zahl = Budget, leer/"off" =
+Modell-Default). Der Verlaufs-Zusammenfasser (history.py) denkt weiter nicht.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ if TYPE_CHECKING:
     from livekit.plugins.google import LLM as GoogleLLM
 
 DEFAULT_MODEL = "gemini-2.5-flash"
-DEFAULT_THINKING_BUDGET = 0
+DEFAULT_THINKING_BUDGET = -1  # dynamisch
 
 
 def thinking_budget() -> int | None:

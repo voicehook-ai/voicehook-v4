@@ -2,8 +2,9 @@
 
 Der Agent schickt bei jedem Taskwechsel das GANZE Board {doing, open[], done[]};
 es ersetzt das vorherige an einem festen Platz in Deltas Instructions (nie anhängen,
-damit der Kontext nicht wächst). Hartes Gesamtbudget BOARD_BUDGET Zeichen: zuerst
-fallen erledigte Tasks weg, dann offene, zuletzt wird `doing` gekürzt.
+damit der Kontext nicht wächst). Hartes Gesamtbudget board_budget() Zeichen (Default
+BOARD_BUDGET = 2000, Env VOICEHOOK_BOARD_BUDGET, Normal und Live): zuerst fallen erledigte
+Tasks weg, dann offene, zuletzt wird `doing` gekürzt.
 
 Pull: fragt der Nutzer Delta nach dem Stand, schickt der Worker operator.status_request
 an den Agenten (Code entscheidet per Muster, nicht das Modell).
@@ -11,9 +12,10 @@ an den Agenten (Code entscheidet per Muster, nicht das Modell).
 
 from __future__ import annotations
 
+import os
 import re
 
-BOARD_BUDGET = 600     # Zeichen über doing + open + done
+BOARD_BUDGET = 2000    # Zeichen über doing + open + done (Oliver 02.10.: 600 war zu knapp)
 ITEM_MAX = 120         # ein Eintrag = ein Satz
 LIST_MAX = 10          # Einträge je Liste vor der Budget-Kappung
 _DONE_WORDS = {"fertig", "done", "erledigt", "nichts", "-"}
@@ -31,6 +33,15 @@ def _items(v: object) -> list[str]:
     if not isinstance(v, list):
         return []
     return [c for c in (_clean(x) for x in v[:LIST_MAX]) if c]
+
+
+def board_budget() -> int:
+    """VOICEHOOK_BOARD_BUDGET (Default BOARD_BUDGET); ungültig oder <= 0 -> Default."""
+    try:
+        n = int(os.environ.get("VOICEHOOK_BOARD_BUDGET", BOARD_BUDGET))
+    except (TypeError, ValueError):
+        return BOARD_BUDGET
+    return n if n > 0 else BOARD_BUDGET
 
 
 def _size(b: dict) -> int:
@@ -51,12 +62,13 @@ def normalize_board(payload: object) -> dict | None:
         b["doing"] = ""
     if not (b["doing"] or b["open"] or b["done"]):
         return None
-    while _size(b) > BOARD_BUDGET and b["done"]:
+    budget = board_budget()
+    while _size(b) > budget and b["done"]:
         b["done"].pop(0)           # älteste erledigte zuerst
-    while _size(b) > BOARD_BUDGET and b["open"]:
+    while _size(b) > budget and b["open"]:
         b["open"].pop()            # hinterste offene zuerst
-    if _size(b) > BOARD_BUDGET:
-        b["doing"] = b["doing"][:BOARD_BUDGET].rstrip()
+    if _size(b) > budget:
+        b["doing"] = b["doing"][:budget].rstrip()
     return b
 
 

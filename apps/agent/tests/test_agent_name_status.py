@@ -158,7 +158,26 @@ async def test_live_join_names_agent_in_user_turn():
 
 
 # ----- Board: Budget, Ersetzen, Rate-Limit, Nachfrage ---------------------------------
-def test_board_budget_cuts_done_first_then_open():
+def test_board_budget_default_2000_and_env(monkeypatch):
+    from agent.board import board_budget
+    monkeypatch.delenv("VOICEHOOK_BOARD_BUDGET", raising=False)
+    assert BOARD_BUDGET == 2000 and board_budget() == 2000
+    long = "x" * 110
+    full = {"doing": "baut den Login, ETA 15 Uhr", "open": [f"o{i} {long}" for i in range(8)],
+            "done": [f"d{i} {long}" for i in range(8)]}
+    b = normalize_board(full)
+    size = len(b["doing"]) + sum(map(len, b["open"])) + sum(map(len, b["done"]))
+    assert 1800 < size <= 2000 and len(b["open"]) == 8      # 600 hätte offene gekappt
+    for bad in ("0", "-5", "abc"):
+        monkeypatch.setenv("VOICEHOOK_BOARD_BUDGET", bad)
+        assert board_budget() == 2000
+    monkeypatch.setenv("VOICEHOOK_BOARD_BUDGET", "600")
+    assert board_budget() == 600
+
+
+def test_board_budget_cuts_done_first_then_open(monkeypatch):
+    monkeypatch.setenv("VOICEHOOK_BOARD_BUDGET", "600")       # Kappung bei kleinem Budget
+    BOARD_BUDGET = 600  # noqa: N806
     long = "x" * 100
     b = normalize_board({"doing": "baut", "open": [f"o{i} {long}" for i in range(4)],
                          "done": [f"d{i} {long}" for i in range(4)]})
@@ -225,6 +244,37 @@ async def test_live_status_replaces_turn_in_local_context():
     status = [i for i in agent.chat_ctx.items if i.id.startswith("vh-status-")]
     assert len(status) == 1 and "Claude baut Schritt 49" in status[0].text_content
     agent.update_instructions.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_big_board_replaces_never_stacks_normal_and_live(monkeypatch):
+    monkeypatch.delenv("VOICEHOOK_BOARD_BUDGET", raising=False)
+    big = lambda i: {"doing": f"baut Schritt {i}, ETA 15 Uhr",  # noqa: E731
+                     "open": [f"offen {i}.{k} " + "y" * 100 for k in range(8)],
+                     "done": [f"fertig {i}.{k} " + "z" * 100 for k in range(8)]}
+    live_agent, clock = _live_agent(), _Clock()
+    h = build_relay_handlers(MagicMock(), live_agent, live=True, clock=clock)
+    await h.on_agent_presence(True, "Claude")
+    lens = []
+    for i in range(10):
+        clock.t += 6
+        await h.on_status(_pkt(big(i)))
+        lens.append(len(live_agent.chat_ctx.items))
+    status = [i for i in live_agent.chat_ctx.items if i.id.startswith("vh-status-")]
+    assert len(set(lens)) == 1 and len(status) == 1
+    assert "Schritt 9" in status[0].text_content and "offen 9.7" in status[0].text_content
+    assert "Schritt 8" not in status[0].text_content
+    agent, clock = _normal(), _Clock()
+    h = build_relay_handlers(MagicMock(), agent, clock=clock)
+    await h.on_agent_presence(True, "Claude")
+    sizes = []
+    for i in range(10):
+        clock.t += 6
+        await h.on_status(_pkt(big(i)))
+        sizes.append(len(agent.update_instructions.await_args.args[0]))
+    t = agent.update_instructions.await_args.args[0]
+    assert max(sizes) - min(sizes) <= 2 and t.count("Aktueller Stand von Claude") == 1
+    assert "offen 9.7" in t and "Schritt 8," not in t
 
 
 @pytest.mark.asyncio
@@ -307,7 +357,7 @@ def test_prompts_forbid_excuses_and_vary_handoff(label, text):
     assert "rechtfertige dich nie" in text, label
     name = "Claude" if "claude" in label else "dein Agent"
     assert f'"Moment, {name} schaut."' in text
-    assert "genau einen kurzen Wartesatz" in text and "behauptest du keinen Fortschritt" in text
+    assert "kurze" in text and "Wartesatz" in text and "kein erfundener Fortschritt" in text
 
 
 def test_handoff_variants_named():

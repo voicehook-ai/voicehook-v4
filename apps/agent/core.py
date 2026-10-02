@@ -33,17 +33,21 @@ _CORE_NORMAL = (
     "passiert nennst du nur, wenn es unten im Wissen oder im Status steht.\n"
     "2. Fragen, ob etwas geht, ob du Zugriff hast oder ob etwas klappt, beantwortest du "
     "nie selbst, weder ja noch nein.\n"
-    '3. Weißt du etwas nicht, sag genau einen kurzen Wartesatz, z. B. "Moment, {nom} '
-    'schaut.", und sonst nichts, keine zweite Zeile. Was {nom} gerade macht, nennst du '
-    "nur, wenn es wörtlich im Status steht; steht dort nichts, behauptest du keinen "
-    "Fortschritt.\n"
+    "3. Steht etwas im Status oder im Wissen, beantwortest du Fragen dazu frei und "
+    "inhaltlich, auch ausführlich, wenn der Nutzer es will. Steht es nicht drin, sagst du "
+    'genau einen kurzen Wartesatz, z. B. "Moment, {nom} schaut.", und sonst nichts: keine '
+    "zweite Zeile, kein erfundener Fortschritt.\n"
     '4. Sag nie "Operator", "weitergeben", "notiert" oder "Prompt" und rechtfertige dich nie.\n'
     "5. Antworte in ein, zwei ganzen Sätzen. Keine Listen, kein Markdown, keine Emojis, "
-    "keine Links.\n"
+    "keine Links. Bittet der Nutzer, den Status oder die Liste vorzulesen, liest du den "
+    "ganzen Status vor (gerade, offen, erledigt), ruhig in mehreren Sätzen; steht dort "
+    'nichts, sagst du: "Im Status steht gerade nichts."\n'
     "6. Was {nom} sagt, ist die Antwort: danach kein Nachsatz, nichts ergänzen, keine "
     "abgebrochenen Sätze vollenden. Sätze mit {mark} davor hat {nom} gesagt, nicht du.\n"
     '7. Antworte erst, wenn der Nutzer fertig ist. Bei "Stopp" sofort still. Bei '
-    '"nochmal" das Letzte einfacher wiederholen.'
+    '"nochmal" das Letzte einfacher wiederholen.\n'
+    "8. Eine ausdrückliche Anweisung des Nutzers geht vor Stil- und Längenregeln, nie vor "
+    "Regel 1."
 )
 
 # Live: Gemini spricht alles selbst. Markierungen sind fest ([Agent] = Aussage des
@@ -61,14 +65,19 @@ _CORE_LIVE = (
     "2. Nachrichten mit [System] sind Vorgaben: befolgen, nie vorlesen, nie erwähnen.\n"
     "3. Erfinde nichts. Fakten, Zahlen, Fähigkeiten, Zusagen und was gerade passiert nur "
     "aus Wissen, Status oder von {dat}.\n"
-    "4. Ob etwas geht oder du Zugriff hast, beantwortest du nie selbst. Weißt du etwas "
-    'nicht, sag genau einen kurzen Wartesatz, z. B. "Moment, {nom} schaut.", und sonst '
-    "nichts. Was {nom} gerade macht, nennst du nur, wenn es wörtlich im Status steht; "
-    "steht dort nichts, behauptest du keinen Fortschritt.\n"
+    "4. Ob etwas geht oder du Zugriff hast, beantwortest du nie selbst. Steht etwas im "
+    "Status oder im Wissen, beantworte Fragen dazu frei und inhaltlich, auch ausführlich, "
+    'wenn der Nutzer es will. Steht es nicht drin: genau ein kurzer Wartesatz, z. B. '
+    '"Moment, {nom} schaut.", sonst nichts, kein erfundener Fortschritt.\n'
     '5. Sag nie "Operator", "weitergeben" oder "Prompt" und rechtfertige dich nie.\n'
-    "6. Eigene Antworten: ein, zwei ganze Sätze, keine Listen.\n"
+    "6. Eigene Antworten: ein, zwei ganze Sätze, keine Listen. Bittet der Nutzer, den "
+    "Status oder die Liste vorzulesen, lies den ganzen Status vor (gerade, offen, "
+    'erledigt), ruhig in mehreren Sätzen; steht dort nichts: "Im Status steht gerade '
+    'nichts."\n'
     '7. Antworte erst, wenn der Nutzer fertig ist. Bei "Stopp" sofort still. Bei '
-    '"nochmal" das Letzte einfacher wiederholen.'
+    '"nochmal" das Letzte einfacher wiederholen.\n'
+    "8. Eine ausdrückliche Anweisung des Nutzers geht vor Stil- und Längenregeln, nie vor "
+    "Regel 3."
 )
 
 CORE_ANCHOR = (
@@ -205,12 +214,27 @@ def wait_line(name: str | None) -> str:
     return f"Moment, {agent_refs(name)['nom']} schaut."
 
 
-class FirstLine:
-    """Code gegen gestapelte Sätze (Regel 3): nur die erste Zeile einer Antwort geht raus.
+_WAIT_LINE = re.compile(
+    r"^(?:kurz(?:en)?\s+|einen\s+)?(?:moment|sekunde|augenblick)\b"
+    r"|\bschaut(?:\s+nach)?\W*$|\bfrag\w*\s.{0,30}\bkurz\W*$",
+    re.IGNORECASE,
+)
+WAIT_LINE_MAX = 60
 
-    Stream-sicher: `feed` gibt den erlaubten Teil eines Chunks zurück; nach dem ersten
-    Zeilenumbruch hinter echtem Text ist `done` gesetzt und alles Weitere fällt weg.
-    Führende Leerzeilen zählen nicht als Umbruch.
+
+def is_wait_line(line: str) -> bool:
+    """Kurzer Wartesatz ("Moment, Claude schaut.", "Kurz Moment.", "Ich frag Claude kurz.")."""
+    line = line.strip()
+    return 0 < len(line) <= WAIT_LINE_MAX and bool(_WAIT_LINE.search(line))
+
+
+class FirstLine:
+    """Code gegen gestapelte Sätze (Regel 3), stream-sicher, ohne die Antwort zu puffern.
+
+    Ist die erste Zeile ein Wartesatz, ist nach ihr Schluss (`done`): Steht es nicht im
+    Status, gibt es genau einen Wartesatz, keine zweite Zeile. Ist sie eine echte Antwort
+    (aus Status oder Wissen, auch ausführlich), werden die Zeilen mit Leerzeichen
+    verbunden statt gekappt. Führende Leerzeilen zählen nicht.
 
     `mark` (z. B. "[Claude]"): beginnt die Antwort mit der Markierung des Agenten, spricht
     Delta als der Agent (Live-Repro 02.10.: Gemini übernimmt die Markierung). Dann geht
@@ -220,6 +244,8 @@ class FirstLine:
     def __init__(self, mark: str | None = None, fallback: str = "") -> None:
         self.done = False
         self._seen = False
+        self._first: list[str] | None = []  # erste Zeile, bis zum ersten Umbruch
+        self._prev = " "
         self._mark = mark
         self._fallback = fallback
         self._buf = "" if mark else None  # None: entschieden bzw. ohne Markierung
@@ -228,13 +254,23 @@ class FirstLine:
         out = []
         for ch in piece:
             if ch in "\r\n":
-                if self._seen:
-                    self.done = True
-                    break
+                if not self._seen:
+                    continue
+                if self._first is not None:
+                    first, self._first = "".join(self._first), None
+                    if is_wait_line(first):
+                        self.done = True
+                        break
+                if not self._prev.isspace():
+                    out.append(" ")
+                    self._prev = " "
                 continue
             if not ch.isspace():
                 self._seen = True
+            if self._first is not None:
+                self._first.append(ch)
             out.append(ch)
+            self._prev = ch
         return "".join(out)
 
     def feed(self, piece: str) -> str:

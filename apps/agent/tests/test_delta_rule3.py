@@ -17,10 +17,10 @@ from agent.core import FirstLine, core_live, core_normal, mark_agent_items, wait
 from agent.relay import DEFAULT_PERSONA, RelayAgent, build_relay_handlers
 from agent.worker import operator_user_name
 
-RULE3 = ('3. Weißt du etwas nicht, sag genau einen kurzen Wartesatz, z. B. "Moment, Claude '
-         'schaut.", und sonst nichts, keine zweite Zeile. Was Claude gerade macht, nennst du '
-         "nur, wenn es wörtlich im Status steht; steht dort nichts, behauptest du keinen "
-         "Fortschritt.\n")
+RULE3 = ("3. Steht etwas im Status oder im Wissen, beantwortest du Fragen dazu frei und "
+         "inhaltlich, auch ausführlich, wenn der Nutzer es will. Steht es nicht drin, sagst du "
+         'genau einen kurzen Wartesatz, z. B. "Moment, Claude schaut.", und sonst nichts: keine '
+         "zweite Zeile, kein erfundener Fortschritt.\n")
 
 
 def _pkt(payload: dict):
@@ -35,7 +35,7 @@ def _normal():
     return agent, session, build_relay_handlers(session, agent)
 
 
-# ----- 1 Regel 3 im Normal- und Live-Kern -------------------------------------------
+# ----- 1 Regel 3 im Normal- und Live-Kern (kein Maulkorb, Oliver 02.10.) -------------
 def test_rule3_normal_exact_and_example_gone():
     t = core_normal("Claude")
     assert RULE3 in t
@@ -44,10 +44,32 @@ def test_rule3_normal_exact_and_example_gone():
 
 def test_rule3_live_same_meaning():
     t = core_live("Claude")
-    assert 'genau einen kurzen Wartesatz, z. B. "Moment, Claude schaut.", und sonst nichts' in t
-    assert "nur, wenn es wörtlich im Status steht; steht dort nichts, behauptest du keinen " \
-           "Fortschritt." in t
+    assert "Steht etwas im Status oder im Wissen, beantworte Fragen dazu frei und inhaltlich, " \
+           "auch ausführlich, wenn der Nutzer es will." in t
+    assert 'genau ein kurzer Wartesatz, z. B. "Moment, Claude schaut.", sonst nichts, kein ' \
+           "erfundener Fortschritt." in t
     assert "jedes Mal anders" not in t and "was laut Status gerade läuft" not in t
+
+
+@pytest.mark.parametrize("core", [core_normal, core_live])
+def test_rules_no_progress_example(core):
+    # einziges Beispiel in den Regeln ist der Wartesatz, kein Fortschritts-Inhalt
+    import re as _re
+    rule = core("Claude").split("Steht etwas im Status", 1)[1].split("\n", 1)[0]
+    assert _re.findall(r'"([^"]+)"', rule) == ["Moment, Claude schaut."]
+
+
+@pytest.mark.parametrize("core", [core_normal, core_live])
+def test_status_read_out_and_user_instruction_precedence(core):
+    t = core("Claude")
+    assert "Bittet der Nutzer, den Status oder die Liste vorzulesen" in t
+    assert "ganzen Status vor (gerade, offen, erledigt), ruhig in mehreren Sätzen" in t
+    assert '"Im Status steht gerade nichts."' in t
+    rule8 = t.split("8. ", 1)[1]
+    assert rule8.startswith("Eine ausdrückliche Anweisung des Nutzers geht vor Stil- und "
+                            "Längenregeln, nie vor Regel ")
+    n = rule8.split("nie vor Regel ", 1)[1][:1]
+    assert t.split(f"\n{n}. ", 1)[1].startswith("Erfinde nichts")   # Verweis trifft "erfinde nichts"
 
 
 # ----- 2 Persona vor Presence: Name kommt trotzdem in den Kern -----------------------
@@ -119,7 +141,11 @@ def test_worker_reads_vh_user_of_last_agent():
     (["Moment, Claude schaut.\nClaude baut gerade den Fix."], "Moment, Claude schaut."),
     (["Moment, Cla", "ude schaut.", "\n", "Ich frag Claude kurz."], "Moment, Claude schaut."),
     (["\nMoment, Claude schaut.\n\nNoch was."], "Moment, Claude schaut."),   # führende Leerzeile
+    (["Kurz Moment.\nDein Agent schaut nach."], "Kurz Moment."),
     (["Ein Satz. Zweiter Satz."], "Ein Satz. Zweiter Satz."),                 # keine Zeile: alles
+    # echte Antwort aus dem Status: vollständig, Zeilen verbunden
+    (["Claude baut gerade den Login, ETA 15 Uhr.\n", "Offen: Tests.\nErledigt: Analyse."],
+     "Claude baut gerade den Login, ETA 15 Uhr. Offen: Tests. Erledigt: Analyse."),
 ])
 def test_first_line(pieces, want):
     f = FirstLine()
