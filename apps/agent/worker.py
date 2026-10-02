@@ -45,7 +45,7 @@ from .relay import (
     speak_notice,
     topic_dispatch,
 )
-from .voice import build_stt, build_tts
+from .voice import build_stt, build_tts, preload_modules, warm_tts
 
 logger = logging.getLogger("voicehook.worker")
 
@@ -755,6 +755,9 @@ async def entrypoint(ctx: JobContext) -> None:
         ctx.shutdown(reason="free_room_unknown")
         return
     session = build_session()
+    # TTS-Kanal jetzt aufbauen, nicht im ersten Satz (Prod 02.10.: 107 ms Loop-Blockade, verzerrt)
+    if not live_mode:
+        warm_tts(getattr(session, "tts", None))
     if live_mode:
         from .live import live_base_instructions
 
@@ -1006,10 +1009,17 @@ async def entrypoint(ctx: JobContext) -> None:
                                      operator_user_name(ctx.room))
 
 
+def prewarm_process(_proc: Any) -> None:
+    """Job-Prozess vorwärmen: Google-Importe (genai 1,4 s) nicht erst im Call."""
+    t0 = time.perf_counter()
+    preload_modules()
+    logger.info("prewarm: google modules loaded in %.0f ms", (time.perf_counter() - t0) * 1000)
+
+
 def build_worker_options() -> WorkerOptions:
     """Factory exposed for unit tests. Prod-Optionen (Drain, Last, Idle) aus procctl."""
-    return WorkerOptions(entrypoint_fnc=entrypoint, agent_name=AGENT_NAME,
-                         **procctl.worker_option_kwargs())
+    return WorkerOptions(entrypoint_fnc=entrypoint, prewarm_fnc=prewarm_process,
+                         agent_name=AGENT_NAME, **procctl.worker_option_kwargs())
 
 
 def main() -> None:

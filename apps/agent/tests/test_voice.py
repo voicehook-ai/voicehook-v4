@@ -54,3 +54,83 @@ def test_build_stt_diarize_schalter_aus(monkeypatch):
     assert build_stt()._opts.enable_diarization is False
     # explizites Argument schlägt den Schalter
     assert build_stt(diarize=True)._opts.enable_diarization is True
+
+
+# --- Vorwärmen (Prod 02.10.: 107 ms gRPC-Kanalaufbau im ersten Satz) -------------
+
+
+def test_preload_modules_laedt_google_vor():
+    import sys
+
+    from agent.voice import preload_modules
+
+    preload_modules()
+    assert "google.genai.types" in sys.modules
+    assert "livekit.plugins.google" in sys.modules
+
+
+class _FakeClient:
+    def __init__(self, fail=False):
+        self.calls = []
+        self.fail = fail
+
+    async def list_voices(self, **kw):
+        self.calls.append(kw)
+        if self.fail:
+            raise RuntimeError("401")
+        return object()
+
+
+class _FakeTTS:
+    def __init__(self, client=None, ensure_error=None):
+        self.client = client or _FakeClient()
+        self.ensure_error = ensure_error
+        self.ensured = 0
+
+    def _ensure_client(self):
+        self.ensured += 1
+        if self.ensure_error:
+            raise self.ensure_error
+        return self.client
+
+    def synthesize(self, *a, **kw):  # darf beim Vorwärmen nie aufgerufen werden (Kosten, Ton)
+        raise AssertionError("warm_tts darf nicht synthetisieren")
+
+    stream = synthesize
+
+
+async def test_warm_tts_baut_client_sofort_und_verbindet_ohne_synthese():
+    from agent.voice import warm_tts
+
+    tts = _FakeTTS()
+    task = warm_tts(tts)
+    assert tts.ensured == 1  # synchron beim Job-Start, nicht erst im ersten Satz
+    assert await task is True
+    assert tts.client.calls == [{"language_code": "de", "timeout": 5.0}]
+
+
+async def test_warm_tts_nutzt_sprache_der_stimme():
+    from agent.voice import build_tts, warm_tts
+
+    real = build_tts(voice="en-US-Chirp3-HD-Kore")
+    fake = _FakeTTS()
+    fake._opts = real._opts
+    assert await warm_tts(fake) is True
+    assert fake.client.calls[0]["language_code"] == "en-US"
+
+
+async def test_warm_tts_fehler_sind_nie_fatal():
+    from agent.voice import warm_tts
+
+    assert await warm_tts(_FakeTTS(client=_FakeClient(fail=True))) is False
+    assert warm_tts(_FakeTTS(ensure_error=RuntimeError("no creds"))) is None
+    assert warm_tts(None) is None
+    assert warm_tts(object()) is None
+
+
+def test_warm_tts_ohne_laufende_loop_kein_absturz():
+    from agent.voice import warm_tts
+
+    tts = _FakeTTS()
+    assert warm_tts(tts) is None
+    assert tts.ensured == 1

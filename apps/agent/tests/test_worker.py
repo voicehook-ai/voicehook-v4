@@ -305,3 +305,33 @@ def test_transcript_live_start_and_end_for_operator_speech(monkeypatch):
 
 
 from dataclasses import dataclass as dataclass_pkt  # noqa: E402
+
+
+def test_worker_options_haben_prewarm_fuer_google_importe():
+    import sys
+
+    import agent.worker as w
+
+    opts = w.build_worker_options()
+    assert opts.prewarm_fnc is w.prewarm_process
+    w.prewarm_process(None)
+    assert "google.genai.types" in sys.modules
+
+
+def test_entrypoint_waermt_tts_der_session(monkeypatch):
+    import agent.worker as w
+
+    warmed = []
+    monkeypatch.setattr(w, "warm_tts", warmed.append)
+    monkeypatch.setattr(_Emitter, "tts", "TTS", raising=False)
+    _run_entrypoint_with_metrics(monkeypatch, live_mode=False, metrics=[])
+    assert warmed == ["TTS"]
+
+
+def test_entrypoint_live_waermt_kein_tts(monkeypatch):
+    import agent.worker as w
+
+    warmed = []
+    monkeypatch.setattr(w, "warm_tts", warmed.append)
+    _run_entrypoint_with_metrics(monkeypatch, live_mode=True, metrics=[])
+    assert warmed == []
