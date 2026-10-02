@@ -22,10 +22,14 @@ aus ist: VOICEHOOK_REQUIRE_CREDITS_NORMAL=0, VOICEHOOK_REQUIRE_CREDITS_LIVE=0
   (1 = ohne gültiges Wallet mit Saldo > 0 antwortet host-call/live-room mit 402).
 
 Login (Magic-Link, Oliver 01.10.): POST /api/login {email} schickt einen Link an
-die Adresse; GET /api/login/verify?token=... tauscht ihn einmalig (15 min) gegen
-ein Wallet-Token für das Konto mit dieser BESTÄTIGTEN Adresse. Ohne die
-login_nonce des anfordernden Browsers nur nach Bestätigung (confirm=1). Die
+die Adresse; POST /api/login/verify {token, nonce} tauscht ihn einmalig (15 min)
+gegen ein Wallet-Token für das Konto mit dieser BESTÄTIGTEN Adresse. Ohne die
+login_nonce des anfordernden Browsers nur nach Bestätigung (confirm). Die
 Stripe-Mail allein verknüpft nie (siehe billing/db.py login_verified_email).
+Eingelöst wird NUR per POST nach Klick auf "Jetzt anmelden" (Oliver 02.10.):
+Mail-Scanner (Safe Links, Prefetch) rufen Links per GET auf und dürfen den
+einmaligen Token nie verbrauchen. GET /api/login/verify verbraucht nichts und
+leitet auf die Bestätigungsseite um.
 
 Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, VOICEHOOK_PUBLIC_URL,
      VOICEHOOK_TOPUP_AMOUNTS_EUR ("5,10,20,50"), VOICEHOOK_TOPUP_MIN_EUR (5),
@@ -41,10 +45,11 @@ import os
 import re
 import threading
 import time
+import urllib.parse
 from collections import OrderedDict
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from . import freetier
@@ -436,7 +441,8 @@ def _login_rules(email: str, ip: str) -> list[tuple[str, int, float]]:
 
 def login_link(token: str) -> str:
     """Link in der Mail. Token im Fragment: Mail-Scanner, die Links vorab abrufen,
-    sehen es nie; die Seite liest es und ruft /api/login/verify auf."""
+    sehen es nie; die Seite liest es, zeigt "Jetzt anmelden" und löst es erst nach
+    dem Klick per POST /api/login/verify ein."""
     return f"{_public_base()}{TOPUP_PATH}#login={token}"
 
 
@@ -470,25 +476,45 @@ def api_login(req: LoginRequest, request: Request) -> dict:
     return {"sent": True, "expires_in": db.LOGIN_TTL_S, "login_nonce": nonce}
 
 
+class LoginVerifyRequest(BaseModel):
+    """Body von POST /api/login/verify. Token nie in der URL (History, Referer, Logs)."""
+    token: str = Field(..., min_length=1, max_length=1000)
+    nonce: str | None = Field(None, max_length=1000)
+    confirm: bool = False
+
+
+LOGIN_CONFIRM_PATH = "/login"
+
+
 @router.get("/api/login/verify")
-def api_login_verify(  # noqa: ANN201
-    request: Request, token: str, nonce: str | None = None, confirm: bool = False,
-):
+def api_login_verify_get(token: str | None = None) -> RedirectResponse:
+    """Alte bzw. direkt aufgerufene GET-Links: verbrauchen NIE etwas (Mail-Scanner,
+    Prefetch). 303 auf die Bestätigungsseite mit dem Token im Fragment; dort löst
+    erst der Klick auf "Jetzt anmelden" per POST ein. Ohne Token nur /login."""
+    loc = LOGIN_CONFIRM_PATH
+    if token and len(token) <= 200:
+        loc += "#login=" + urllib.parse.quote(token, safe="")
+    return RedirectResponse(loc, status_code=303, headers={
+        "Referrer-Policy": "no-referrer", "Cache-Control": "no-store"})
+
+
+@router.post("/api/login/verify")
+def api_login_verify(req: LoginVerifyRequest, request: Request):  # noqa: ANN201
     """Magic-Link einlösen (einmal, 15 min) -> Wallet-Token für das Konto mit dieser
-    jetzt bestätigten Adresse.
+    jetzt bestätigten Adresse. Nur per POST (Klick auf "Jetzt anmelden").
 
     nonce = login_nonce aus der Antwort von POST /api/login. Fehlt sie oder passt
     sie nicht (Link in einem anderen Browser geöffnet, z. B. ein vom Angreifer an
     SEINE Adresse angeforderter Link), wird der Link NICHT verbraucht: 409
     {"error": "confirm_required", "email_masked": ...}; die Seite fragt "Anmelden
-    als <maske>?" und ruft bei Ja erneut mit confirm=1 auf (Login auf anderem
+    als <maske>?" und schickt bei Ja erneut mit confirm=true (Login auf anderem
     Gerät). Dann wird eingeloggt, ein Wallet dieses Browsers aber nie verknüpft.
 
     Mit passender Nonce zählt X-Wallet-Token nur, wenn es exakt das Token ist, mit
     dem der Link angefordert wurde (Login-CSRF, PR #93): dann wird dieses Wallet
     bestätigt bzw. in das Konto überführt (wallet_linked true), sonst bleibt es
     unberührt (wallet_linked false). Regeln in billing/db.py login_verified_email."""
-    link = db.consume_login_link(token, nonce=nonce, confirm=confirm)
+    link = db.consume_login_link(req.token, nonce=req.nonce, confirm=req.confirm)
     if link is None:
         raise HTTPException(status_code=400, detail="invalid_or_expired")
     if link.status == "confirm_required":

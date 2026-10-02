@@ -67,10 +67,10 @@ def test_csrf_case_a_unconfirmed_attacker_mail_never_takes_victim_wallet(client,
     # Angreifer fordert einen Link an SEINE Adresse an und schickt ihn dem Opfer
     assert client.post("/api/login", json={"email": "evil@x.de"}).status_code == 200
     # Opfer-Browser hat keine Nonce: erst Rückfrage, dann (Opfer klickt trotzdem Ja)
-    r = client.get("/api/login/verify", params={"token": _link(outbox)},
+    r = client.post("/api/login/verify", json={"token": _link(outbox)},
                    headers={"x-wallet-token": v["wallet_token"]})
     assert r.status_code == 409 and r.json() == {"error": "confirm_required", "email_masked": "e***@x***.de"}
-    r = client.get("/api/login/verify", params={"token": _link(outbox), "confirm": 1},
+    r = client.post("/api/login/verify", json={"token": _link(outbox), "confirm": 1},
                    headers={"x-wallet-token": v["wallet_token"]})
     assert r.status_code == 200
     assert r.json()["wallet_linked"] is False and r.json()["balance_eur"] == 0.0
@@ -81,29 +81,29 @@ def test_csrf_case_a_unconfirmed_attacker_mail_never_takes_victim_wallet(client,
     assert db.account(acc_v)["email_verified_at"] is None
     # Angreifer meldet sich später per Mail an: hält nichts vom Opfer
     n = client.post("/api/login", json={"email": "evil@x.de"}).json()["login_nonce"]
-    r2 = client.get("/api/login/verify", params={"token": _link(outbox), "nonce": n})
+    r2 = client.post("/api/login/verify", json={"token": _link(outbox), "nonce": n})
     assert r2.json()["balance_eur"] == 0.0
 
 
 def test_csrf_case_b_confirmed_attacker_account_never_absorbs_victim(client, outbox):
     n = client.post("/api/login", json={"email": "evil2@x.de"}).json()["login_nonce"]
-    client.get("/api/login/verify", params={"token": _link(outbox), "nonce": n})  # Angreifer bestätigt
+    client.post("/api/login/verify", json={"token": _link(outbox), "nonce": n})  # Angreifer bestätigt
     v = _paid_wallet(client, "cs_victim2", amount_cents=2000, email="victim2@x.de")
     client.post("/api/login", json={"email": "evil2@x.de"})
-    r = client.get("/api/login/verify", params={"token": _link(outbox), "confirm": 1},
+    r = client.post("/api/login/verify", json={"token": _link(outbox), "confirm": 1},
                    headers={"x-wallet-token": v["wallet_token"]})
     assert r.status_code == 200 and r.json()["wallet_linked"] is False
     assert _balance(client, v["wallet_token"]) == 20.0                   # vorher: None (gelöscht)
     n = client.post("/api/login", json={"email": "evil2@x.de"}).json()["login_nonce"]
-    assert client.get("/api/login/verify",
-                      params={"token": _link(outbox), "nonce": n}).json()["balance_eur"] == 0.0
+    assert client.post("/api/login/verify",
+                      json={"token": _link(outbox), "nonce": n}).json()["balance_eur"] == 0.0
 
 
 def test_csrf_attacker_binding_own_wallet_does_not_match_victim(client, outbox):
     att = _paid_wallet(client, "cs_att3", amount_cents=1000, email="evil3@x.de")
     v = _paid_wallet(client, "cs_victim3", amount_cents=2000, email="victim3@x.de")
     client.post("/api/login", json={"email": "evil3@x.de"}, headers={"x-wallet-token": att["wallet_token"]})
-    r = client.get("/api/login/verify", params={"token": _link(outbox), "confirm": 1},
+    r = client.post("/api/login/verify", json={"token": _link(outbox), "confirm": 1},
                    headers={"x-wallet-token": v["wallet_token"]})
     assert r.json()["wallet_linked"] is False
     assert _balance(client, v["wallet_token"]) == 20.0
@@ -115,7 +115,7 @@ def test_positive_control_same_browser_requests_and_redeems_links_wallet(client,
     acc = db.account_for_token(me["wallet_token"])
     n = client.post("/api/login", json={"email": "me@x.de"},
                     headers={"x-wallet-token": me["wallet_token"]}).json()["login_nonce"]
-    r = client.get("/api/login/verify", params={"token": _link(outbox), "nonce": n},
+    r = client.post("/api/login/verify", json={"token": _link(outbox), "nonce": n},
                    headers={"x-wallet-token": me["wallet_token"]}).json()
     assert r["wallet_linked"] is True and r["balance_eur"] == 20.0
     assert db.account_for_token(r["wallet_token"]) == acc
@@ -125,12 +125,12 @@ def test_positive_control_same_browser_requests_and_redeems_links_wallet(client,
 
 def test_positive_control_bound_wallet_merges_into_existing_verified_account(client, outbox):
     n = client.post("/api/login", json={"email": "two@x.de"}).json()["login_nonce"]
-    first = client.get("/api/login/verify", params={"token": _link(outbox), "nonce": n}).json()
+    first = client.post("/api/login/verify", json={"token": _link(outbox), "nonce": n}).json()
     acc = db.account_for_token(first["wallet_token"])
     w2 = _paid_wallet(client, "cs_two", amount_cents=1000, email="other@x.de")  # zweites Gerät, bezahlt
     n = client.post("/api/login", json={"email": "two@x.de"},
                     headers={"x-wallet-token": w2["wallet_token"]}).json()["login_nonce"]
-    r = client.get("/api/login/verify", params={"token": _link(outbox), "nonce": n},
+    r = client.post("/api/login/verify", json={"token": _link(outbox), "nonce": n},
                    headers={"x-wallet-token": w2["wallet_token"]}).json()
     assert r["wallet_linked"] is True and db.account_for_token(r["wallet_token"]) == acc
     assert r["balance_eur"] == 10.0                                         # Guthaben überführt
@@ -140,7 +140,7 @@ def test_link_requested_without_wallet_ignores_wallet_at_redeem(client, outbox):
     """Anderes Gerät: Link ohne Wallet angefordert -> Wallet beim Einlösen bleibt getrennt."""
     w1 = _paid_wallet(client, "cs_dev", amount_cents=1000, email="dev@x.de")
     client.post("/api/login", json={"email": "dev@x.de"})
-    r = client.get("/api/login/verify", params={"token": _link(outbox), "confirm": 1},
+    r = client.post("/api/login/verify", json={"token": _link(outbox), "confirm": 1},
                    headers={"x-wallet-token": w1["wallet_token"]}).json()
     assert r["wallet_linked"] is False
     # Stripe-Kontakt-Mail dev@x.de: das unbestätigte Konto ist Kandidat (Regel 3) und
