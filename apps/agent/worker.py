@@ -404,6 +404,7 @@ class FreeBudget:
         self.room = room
         self.mode = mode
         self.keys: list[str] = []
+        self.account: str | None = None  # Konto des angemeldeten Erstellers (free_rooms.account)
         self._task: asyncio.Task | None = None
         self._wallet = wallet
         self.known = False  # Raum steht in free_rooms (gezählt oder Admin-Ausnahme)
@@ -429,7 +430,7 @@ class FreeBudget:
             return False
         self.keys = found[1]
         self.counting = True
-        self.unlimited = freetier.is_exempt(self.keys)  # VH_FREE_EXEMPT_KEYS
+        self.unlimited = freetier.is_exempt(self.keys, self.account)  # VH_FREE_EXEMPT_*
         return True
 
     def lookup(self) -> tuple[str, list[str]] | None:
@@ -439,14 +440,16 @@ class FreeBudget:
         self._looked_up = True
         try:
             self._found = freetier.room_keys(self.room)
+            self.account = freetier.room_account(self.room) if self._found else None
         except Exception as e:  # noqa: BLE001
             logger.error("[free] lookup room=%s failed: %s", self.room, e)
             self._found = None
+            self.account = None
         self.known = self._found is not None
         self.exempt = self._found is not None and not self._found[1]
         # Owner (Oliver 02.10.: "Guthaben-Gedöns raus bei mir"): gilt auch, wenn der
         # Gratis-Teil nicht zählt (Live-Monatsbudget weg, Wallet zahlt).
-        self.owner = self._found is not None and freetier.is_exempt(self._found[1])
+        self.owner = self._found is not None and freetier.is_exempt(self._found[1], self.account)
         return self._found
 
     def start(self, guard: CallGuard) -> None:
@@ -455,7 +458,7 @@ class FreeBudget:
     def _read_state(self) -> dict:
         """freetier.free_state der Raum-Merkmale (DIE eine Rechnung); Fehler -> leer."""
         try:
-            st = freetier.free_state(self.keys)
+            st = freetier.free_state(self.keys, account=self.account)
         except Exception as e:  # noqa: BLE001
             logger.error("[free] read room=%s failed: %s", self.room, e)
             st = dict(_FAIL_CLOSED_STATE)
@@ -500,7 +503,7 @@ class FreeBudget:
         if not self.counting or ueur <= 0:
             return max(0, ueur)
         try:
-            taken, _ = freetier.consume_ueur(self.keys, ueur, real_ueur=real_ueur)
+            taken, _ = freetier.consume_ueur(self.keys, ueur, real_ueur=real_ueur, account=self.account)
             # Entscheidung UND Anzeige aus derselben Rechnung wie /api/me (free_state).
             st = self._read_state()
         except Exception as e:  # noqa: BLE001
