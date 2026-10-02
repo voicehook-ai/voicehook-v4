@@ -180,7 +180,7 @@ One packet per state change of a say, keyed by its `seq` (the CLI's `_seq`, the 
 | `queued` | accepted, waiting for silence (or held for your `overwrite`) |
 | `spoken` | played to the end; `spoken_chars` = length of the spoken text (also right after `interrupted` when the cut came after the last word) |
 | `interrupted` | the user cut it off after `spoken_chars` characters (or `operator.interrupt`) |
-| `requeued` | the unspoken rest is queued again and will be spoken (follows `interrupted`) |
+| `requeued` | the unspoken rest is queued again and will be spoken (follows `interrupted`). Pipeline mode only: in live mode a say the user cut off is not repeated, `interrupted` is final and you decide what to say next |
 | `replaced` | dropped on purpose: an `overwrite`, or a `revise` that sent you `operator.revise` |
 
 Every state is also logged by the voicebot (`[operator.say_status] seq=… state=…`).

@@ -546,10 +546,13 @@ def build_relay_handlers(
         if getattr(handle, "interrupted", False) is True:
             _say_status(item["seq"], "interrupted", len(spoken))
             if live:
-                # Gemini formuliert um: ganze Aussage + bisher Gesagtes (live_say_rest_user_input)
-                said = " ".join(x for x in (item["spoken"], spoken) if x).strip()
-                rest = item["full"]
-                nxt = {**item, "text": rest, "spoken": said}
+                # Live: kein Nachsprechen (Oliver 02.10.2026, Raum vivid-orbit-fresh-V32N).
+                # Gemini formuliert um und das Ausgabe-Transkript hinkt dem Audio nach:
+                # spoken_chars=8, gehört hatte der Nutzer deutlich mehr, der "Rest" kam
+                # als ganze Aussage nochmal. Wer unterbricht, will selbst reden.
+                # `interrupted` ist der Endzustand, der Agent entscheidet über Neues.
+                _pump()
+                return
             else:
                 rest = unspoken_rest(item["text"], spoken)
                 if rest and len(rest) < SHORT_REST_CHARS:

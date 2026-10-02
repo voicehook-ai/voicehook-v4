@@ -945,9 +945,9 @@ async def entrypoint(ctx: JobContext) -> None:
         if getattr(item, "role", None) != "assistant":
             return
         text = (getattr(item, "text_content", "") or "").strip()
-        from .live import NO_SPEECH_MARKERS
+        from .live import is_no_speech
 
-        if not text or text in NO_SPEECH_MARKERS:
+        if not text or is_no_speech(text):
             return
         role = "operator" if handlers.is_operator_speech(session.current_speech, text) else "agent"
         payload = json.dumps({"role": role, "text": text}).encode()

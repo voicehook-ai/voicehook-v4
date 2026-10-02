@@ -333,3 +333,20 @@ def test_base_prompts_defer_capability_questions_to_operator():
     for t in (live.LIVE_BASE_INSTRUCTIONS, DEFAULT_PERSONA):
         assert "Moment, dein Agent schaut." in t
         assert "Zugriff hast" in t and "beantwortest du nie selbst" in t
+
+
+# Raum vivid-orbit-fresh-V32N (02.10.2026): Gemini-Platzhalter landete als Agent-Text im Transkript
+def test_no_speech_placeholders_are_filtered():
+    from agent.live import is_no_speech
+
+    for t in ("<no speech>{pause}", "<no speech detected>", "&lt;no speech detected&gt;",
+              " <No Speech> ", "{pause}", "<no speech> {pause}"):
+        assert is_no_speech(t), t
+
+
+def test_real_speech_is_not_filtered():
+    # Positivkontrolle: echte Sätze bleiben, auch mit Platzhalter darin
+    from agent.live import is_no_speech
+
+    for t in ("Alles klar.", "Moment, Claude schaut.", "<no speech> Hallo", "Pause {pause} jetzt", ""):
+        assert not is_no_speech(t), t
