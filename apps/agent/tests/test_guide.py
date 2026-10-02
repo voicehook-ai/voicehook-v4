@@ -30,20 +30,22 @@ CORE_FACTS = (
     "auf einer eigenen Maschine läuft und Software installieren kann",
     "Claude Code", "Hermes", "Codex",
     "Einladungslink",
-    # Onboarding-Dialog
-    "unten einmal klickt und einfach losredet",
+    # Onboarding-Dialog: ein klarer nächster Schritt (Einladen)
+    "genau einem nächsten Schritt",
     "Lad jetzt mal deinen Agent ein. Hast du einen Hermes oder irgendwo Claude Code laufen?",
     "nur einen Agent mit einer Umgebung, in der er Software installieren kann",
     "Agent einladen",            # Knopf-Beschriftung wie in web/voice.html
     "kopiert den Einladungstext",
     "folgt dem Einladungslink und nutzt den Skill",
     "voicehook.ai/agent/SKILL.md",
-    # Modi
-    "Live:", "natürlichere Stimme", "schneller", "Tonfall",
-    "Normal:", "günstiger", "fremde Stimmen und Nebengeräusche", "kommen wörtlich",
-    "Sprachfilter", "Stille nichts an Spracherkennung kostet",
-    # Musik + Designs (web/voice.html)
-    "Musikmodus", "Visualizer", "Style", "Eis", "Tiger", "Hell oder Dunkel",
+    # Modi (gegengeprüft 02.10.: kein Tonfall, kein Stimmenfilter, kein "wörtlich")
+    "Live: natürlicher, schneller und wechselt automatisch die Sprache",
+    "Normal: günstiger für lange Sessions",
+    # Musik + Designs (web/voice.html: mode.music, dp.btn, style.*)
+    "Knopf Musik", "Visualizer", "Knopf Design", "Wasser", "Tiger", "Hell oder",
+    # Gratis, Login, Datenschutz, Grenzen
+    "Gratis-Verbrauch ohne Anmeldung", "Google, GitHub oder per E-Mail-Link",
+    "Deepgram und Google", "nicht dauerhaft", "keinen Zugriff auf Rechner",
     # Kosten (Oliver 01.10.)
     "tokenbasiert nach echtem Verbrauch",
     "Prepaid, kein Abo",
@@ -93,7 +95,8 @@ def test_no_concrete_prices(mode):
 @pytest.mark.parametrize("mode", PROMPTS)
 def test_no_invented_claims(mode):
     t = PROMPTS[mode]
-    for bad in ("kostenlos", "gratis", "unbegrenzt", "Abo-Modell", "Flatrate", "garantiert",
+    # "gratis" ist seit dem täglichen Gratis-Verbrauch (freetier.py) eine echte Angabe
+    for bad in ("kostenlos", "unbegrenzt", "Abo-Modell", "Flatrate", "garantiert",
                 "Minuten gratis", "Free-Tier", "Video", "Bildschirm teilen",
                 "vollem Zugriff", "Cursor"):
         assert bad.lower() not in t.lower(), (mode, bad)
@@ -124,6 +127,14 @@ def test_operator_rules_kept_and_scoped(mode):
 
 def test_no_dashes_in_guide():
     assert "–" not in VOICEHOOK_GUIDE and "—" not in VOICEHOOK_GUIDE
+
+
+def test_guide_drops_disproved_mode_claims():
+    """Recherche 02.10.: Tonfall (gemini-3.8-live: affective dialogue entfernt),
+    Stimmenfilter und "wörtlich" nicht mehr versprechen; keine internen Töpfe."""
+    for bad in ("Tonfall", "fremde Stimmen", "kommen wörtlich", "Stille nichts",
+                "Topf", "Deckel", "Marketing", "Eis,", "unter Style", "oben rechts macht"):
+        assert bad not in VOICEHOOK_GUIDE, bad
 
 
 @pytest.mark.asyncio

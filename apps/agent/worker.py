@@ -744,9 +744,9 @@ async def entrypoint(ctx: JobContext) -> None:
         return
     session = build_session()
     if live_mode:
-        from .live import LIVE_BASE_INSTRUCTIONS
+        from .live import live_base_instructions
 
-        agent = RelayAgent(instructions=LIVE_BASE_INSTRUCTIONS)
+        agent = RelayAgent(instructions=live_base_instructions())  # mit Zeit beim Start
     else:
         from .gate import SpeechGate, gate_enabled, load_vad
 

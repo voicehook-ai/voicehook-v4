@@ -8,7 +8,8 @@ selbst (Live-Qualität), muss den Inhalt aber vollständig und unverfälscht
 
 Kosten: Die Live API rechnet pro Turn den GESAMTEN Kontext neu ab (Google, Live API
 best practices). Deshalb Kontext-Kompression: bei TRIGGER Tokens auf TARGET kürzen
-(~25 Audio-Tokens/s -> 12k/6k ≈ 8/4 Min Audio-Gedächtnis). Langzeitwissen gehört
+(~25 Audio-Tokens/s -> 15k/7k ≈ 10/4,7 Min Audio-Gedächtnis, ~5 Min zwischen zwei
+Kompressionen; L4, Oliver 02.10.2026). Langzeitwissen gehört
 in die Persona (Text, billig), nicht in den Audio-Verlauf.
 """
 
@@ -18,13 +19,46 @@ import os
 import re
 
 from .board import board_block
+from .clock import now_block
 from .core import CORE_ANCHOR, MARK_AGENT, MARK_SYSTEM, compose, core_live, persona_block
 from .guide import VOICEHOOK_GUIDE, agent_refs
 
 DEFAULT_LIVE_MODEL = "gemini-3.8-live"
 DEFAULT_LIVE_VOICE = "Charon"
-DEFAULT_TRIGGER_TOKENS = 12000  # Kosten: jeder Turn rechnet den ganzen Kontext ab (32k wäre ~3x teurer)
-DEFAULT_TARGET_TOKENS = 6000
+# L4 (Oliver 02.10.2026): nicht ständig feuern, aber genug kürzen, dass es eine Weile
+# reicht. (15000 - 7000) / ~25 Audio-Tokens/s ≈ 320 s ≈ 5 Min zwischen zwei
+# Kompressionen. Kosten: jeder Turn rechnet den ganzen Kontext ab (32k wäre ~3x teurer).
+DEFAULT_TRIGGER_TOKENS = 15000
+DEFAULT_TARGET_TOKENS = 7000
+
+
+def _env_tokens(*names: str) -> int | None:
+    """Erster gesetzte Env-Wert als positive Ganzzahl; ungültig -> None."""
+    for n in names:
+        raw = os.environ.get(n)
+        if raw is None or not raw.strip():
+            continue
+        try:
+            v = int(raw)
+        except ValueError:
+            return None
+        return v if v > 0 else None
+    return None
+
+
+def compress_tokens() -> tuple[int, int]:
+    """(trigger, target) der Kontext-Kompression.
+
+    Env VOICEHOOK_LIVE_COMPRESS_TRIGGER / _TARGET (alte Namen
+    VOICEHOOK_LIVE_TRIGGER_TOKENS / _TARGET_TOKENS gelten weiter). Kaputt, <= 0 oder
+    target >= trigger -> beide Defaults (nie eine Kompression, die nichts kürzt)."""
+    trigger = _env_tokens("VOICEHOOK_LIVE_COMPRESS_TRIGGER", "VOICEHOOK_LIVE_TRIGGER_TOKENS")
+    target = _env_tokens("VOICEHOOK_LIVE_COMPRESS_TARGET", "VOICEHOOK_LIVE_TARGET_TOKENS")
+    trigger = DEFAULT_TRIGGER_TOKENS if trigger is None else trigger
+    target = DEFAULT_TARGET_TOKENS if target is None else target
+    if target >= trigger:
+        return DEFAULT_TRIGGER_TOKENS, DEFAULT_TARGET_TOKENS
+    return trigger, target
 
 # Echte System-Instruktion des Live-Workers (geht nur beim Verbindungsaufbau an
 # Gemini): fester Delta-Kern (core.py) zuerst, dort nicht austauschbar. Persona,
@@ -42,6 +76,23 @@ def live_core_instructions(name: str | None = None) -> str:
 LIVE_CORE_INSTRUCTIONS = live_core_instructions()
 # Kern + Werksrolle + Anker: System-Instruktion beim Verbindungsaufbau.
 LIVE_BASE_INSTRUCTIONS = compose(LIVE_CORE_INSTRUCTIONS, VOICEHOOK_GUIDE)
+
+
+# Datum/Uhrzeit (clock.py, Oliver 02.10.2026). Die System-Instruktion geht nur beim
+# Verbindungsaufbau an Gemini, ein Zeit-Turn je Nutzer-Satz würde den ganzen Kontext
+# pro Turn neu abrechnen (Kosten, siehe oben) und Gemini könnte ihn kommentieren.
+# Deshalb: Zeit in der Start-Instruktion (eigene Schicht hinter Kern und Guide) und
+# huckepack im Status-Turn (operator.status), den es ohnehin gibt und der den alten
+# ersetzt. Laufende Calls mit Agent bekommen so mit jedem Board-Update (Rate-Limit
+# 5 s) die aktuelle Zeit, ohne einen einzigen zusätzlichen Turn.
+def live_base_instructions(now=None) -> str:  # noqa: ANN001
+    """System-Instruktion beim Sessionstart: Kern + Werksrolle + Zeitblock + Anker."""
+    return compose(LIVE_CORE_INSTRUCTIONS, VOICEHOOK_GUIDE, now_block(now))
+
+
+def live_stamp(turn: str, now=None) -> str:  # noqa: ANN001
+    """Zeitblock ans Ende eines [System]-Turns (Status-Turn; Turn bleibt sonst gleich)."""
+    return f"{turn.rstrip()}\n{now_block(now)}"
 _SILENT = " Nicht vorlesen, nicht darauf antworten."
 
 
@@ -150,8 +201,7 @@ def _realtime_model_cls():
 def build_live_llm():
     from google.genai import types
 
-    trigger = int(os.environ.get("VOICEHOOK_LIVE_TRIGGER_TOKENS", DEFAULT_TRIGGER_TOKENS))
-    target = int(os.environ.get("VOICEHOOK_LIVE_TARGET_TOKENS", DEFAULT_TARGET_TOKENS))
+    trigger, target = compress_tokens()
     return _realtime_model_cls()(
         model=os.environ.get("VOICEHOOK_LIVE_MODEL", DEFAULT_LIVE_MODEL),
         voice=os.environ.get("VOICEHOOK_LIVE_VOICE", DEFAULT_LIVE_VOICE),

@@ -40,16 +40,54 @@ def test_cost_tolerates_missing_details():
     assert live.live_cost_usd(m) == pytest.approx(3.00)   # unbekannt -> teuerster Input
 
 
+_COMPRESS_ENVS = ("VOICEHOOK_LIVE_COMPRESS_TRIGGER", "VOICEHOOK_LIVE_COMPRESS_TARGET",
+                  "VOICEHOOK_LIVE_TRIGGER_TOKENS", "VOICEHOOK_LIVE_TARGET_TOKENS")
+
+
+def _cwc(monkeypatch, **env):
+    captured = {}
+    monkeypatch.setattr(live, "_realtime_model_cls", lambda: (lambda **kw: captured.update(kw) or "M"))
+    for k in _COMPRESS_ENVS:
+        monkeypatch.delenv(k, raising=False)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    live.build_live_llm()
+    c = captured["context_window_compression"]
+    return c.trigger_tokens, c.sliding_window.target_tokens
+
+
+def test_l4_compress_env_overrides(monkeypatch):
+    assert _cwc(monkeypatch) == (15000, 7000)
+    assert _cwc(monkeypatch, VOICEHOOK_LIVE_COMPRESS_TRIGGER="20000",
+                VOICEHOOK_LIVE_COMPRESS_TARGET="9000") == (20000, 9000)
+    # alte Namen gelten weiter, neue gewinnen
+    assert _cwc(monkeypatch, VOICEHOOK_LIVE_TRIGGER_TOKENS="18000") == (18000, 7000)
+    assert _cwc(monkeypatch, VOICEHOOK_LIVE_TRIGGER_TOKENS="18000",
+                VOICEHOOK_LIVE_COMPRESS_TRIGGER="16000") == (16000, 7000)
+
+
+@pytest.mark.parametrize("env", [
+    {"VOICEHOOK_LIVE_COMPRESS_TRIGGER": "abc"},                         # kaputt
+    {"VOICEHOOK_LIVE_COMPRESS_TARGET": "-5"},                           # <= 0
+    {"VOICEHOOK_LIVE_COMPRESS_TARGET": "0"},
+    {"VOICEHOOK_LIVE_COMPRESS_TRIGGER": "6000"},                        # target >= trigger
+    {"VOICEHOOK_LIVE_COMPRESS_TRIGGER": "8000", "VOICEHOOK_LIVE_COMPRESS_TARGET": "8000"},
+])
+def test_l4_compress_bad_env_falls_back(monkeypatch, env):
+    trigger, target = _cwc(monkeypatch, **env)
+    assert (trigger, target) == (15000, 7000) and target < trigger
+
+
 def test_build_live_llm_defaults(monkeypatch):
     captured = {}
     monkeypatch.setattr(live, "_realtime_model_cls", lambda: (lambda **kw: captured.update(kw) or "MODEL"))
-    for k in ("VOICEHOOK_LIVE_MODEL", "VOICEHOOK_LIVE_VOICE", "VOICEHOOK_LIVE_TRIGGER_TOKENS", "VOICEHOOK_LIVE_TARGET_TOKENS"):
+    for k in ("VOICEHOOK_LIVE_MODEL", "VOICEHOOK_LIVE_VOICE", *_COMPRESS_ENVS):
         monkeypatch.delenv(k, raising=False)
     assert live.build_live_llm() == "MODEL"
     assert captured["model"] == "gemini-3.8-live"
     assert "language" not in captured              # native audio ignoriert language_code
     cwc = captured["context_window_compression"]
-    assert cwc.trigger_tokens == 12000 and cwc.sliding_window.target_tokens == 6000
+    assert cwc.trigger_tokens == 15000 and cwc.sliding_window.target_tokens == 7000  # L4
     assert captured["session_resumption"] is not None
     assert not captured["session_resumption"].transparent   # Developer API lehnt transparent ab
 

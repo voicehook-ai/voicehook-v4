@@ -6,10 +6,14 @@
 <script>
 /* Handy-Layout (Variante A, Oliver 02.10.): gleiche Handy-Erkennung wie VH_PHONE
    (grober Zeiger UND kurze Bildschirmseite <= 500 CSS-px). Nur dann Klasse
-   vh-phone und viewport-fit=cover (Safe Areas); Tablet und Desktop unverändert. */
+   vh-phone und viewport-fit=cover (Safe Areas); Tablet und Desktop unverändert.
+   Zusätzlich schmale Fenster ohne Touch (<= 480 CSS-px beim Laden, Oliver 02.10.):
+   dasselbe Layout A statt gequetschter Desktop-Knöpfe. Nur Layout, die Ring-
+   Kalibrierung (VH_PHONE) bleibt an der Handy-Erkennung. */
 (function () {
   try {
-    if (matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 500) {
+    if ((matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 500)
+        || matchMedia('(max-width: 480px)').matches) {
       document.documentElement.classList.add('vh-phone');
       var m = document.querySelector('meta[name="viewport"]');
       if (m) m.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover');
@@ -164,11 +168,10 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'pay.ended': 'Call beendet: Gratis-Verbrauch und Guthaben aufgebraucht',
       'call.endedSrv': 'Call beendet',
       'call.agentReconnect': 'Delta verbindet neu …',
-      'price.approx': 'ca. {p} pro Stunde inkl. MwSt',
-      'adv.live1': 'natürlichere Stimme', 'adv.live2': 'schneller', 'adv.live3': 'hört den Tonfall',
-      'adv.normal1': 'günstiger', 'adv.normal2': 'kostet nichts bei Stille',
-      'adv.normal3': 'filtert fremde Stimmen und Nebengeräusche',
-      'adv.normal4': 'Sätze deines Agents kommen wörtlich',
+      'price.approx': 'ca. {p} pro Stunde', 'price.vat': 'inkl. MwSt',
+      'mode.nameNormal': 'Normal Mode', 'mode.nameLive': 'Live Mode',
+      'adv.live1': 'natürlicher', 'adv.live2': 'schneller', 'adv.live3': 'wechselt automatisch die Sprache',
+      'adv.normal1': 'günstiger für lange Sessions',
       'delta.label': 'Mit Delta sprechen',
       'delta.title': 'Startet einen Call mit Delta. Delta erklärt dir, was voicehook kann.'
     },
@@ -301,11 +304,10 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'pay.ended': 'Call ended: free allowance and credit used up',
       'call.endedSrv': 'Call ended',
       'call.agentReconnect': 'Delta is reconnecting …',
-      'price.approx': 'approx. {p} per hour incl. VAT',
-      'adv.live1': 'more natural voice', 'adv.live2': 'faster', 'adv.live3': 'hears your tone of voice',
-      'adv.normal1': 'cheaper', 'adv.normal2': 'costs nothing during silence',
-      'adv.normal3': 'filters out other voices and background noise',
-      'adv.normal4': 'your agent\'s sentences come through word for word',
+      'price.approx': 'approx. {p} per hour', 'price.vat': 'incl. VAT',
+      'mode.nameNormal': 'Normal Mode', 'mode.nameLive': 'Live Mode',
+      'adv.live1': 'more natural', 'adv.live2': 'faster', 'adv.live3': 'switches language automatically',
+      'adv.normal1': 'cheaper for long sessions',
       'delta.label': 'Talk to Delta',
       'delta.title': 'Starts a call with Delta. Delta explains what voicehook can do.'
     }
@@ -5033,7 +5035,10 @@ let vhFree = null;          // {eur_left, eur_per_day}: Tageswert vom Server (De
 let vhPriceCfg = null;      // {normal, live} EUR pro Stunde
 let vhModeDetail = null;    // 'normal' | 'live' | null (erst nach Klick)
 const vhEur = (() => { try { return new Intl.NumberFormat(VH_LANG === 'de' ? 'de-DE' : 'en-IE', { style: 'currency', currency: 'EUR' }); } catch (_) { return null; } })();
-const VH_ADV = { live: ['adv.live1', 'adv.live2', 'adv.live3'], normal: ['adv.normal1', 'adv.normal2', 'adv.normal3', 'adv.normal4'] };
+const VH_ADV = { live: ['adv.live1', 'adv.live2', 'adv.live3'], normal: ['adv.normal1'] };
+// MwSt-Hinweis in der Preiszeile (Oliver 02.10. raus). PAngV § 6 Abs. 1 Nr. 1 verlangt
+// im Fernabsatz die Angabe, dass Preise die USt enthalten: true = Hinweis wieder da.
+const VH_PRICE_VAT = false;
 function vhModeInfoRender() {
   if (!vhModeInfo) return;
   const freeEl = vhModeInfo.querySelector('.vh-free-left');
@@ -5084,11 +5089,12 @@ function vhModeInfoRender() {
     detEl.textContent = '';
     const dm = vhLiveAvailable ? vhModeDetail : null;
     if (dm && VH_ADV[dm]) {
-      const name = dm === 'live' ? 'Live' : 'Normal';
+      const name = vhT(dm === 'live' ? 'mode.nameLive' : 'mode.nameNormal');
       const p = vhPriceCfg && Number(vhPriceCfg[dm]);
       const price = document.createElement('div');
       price.className = 'vh-md-price';
-      price.textContent = name + (p > 0 && vhEur ? ' · ' + vhT('price.approx', { p: vhEur.format(p) }) : '');
+      price.textContent = name + (p > 0 && vhEur ? ' · ' + vhT('price.approx', { p: vhEur.format(p) })
+        + (VH_PRICE_VAT ? ' ' + vhT('price.vat') : '') : '');
       const adv = document.createElement('div');
       adv.className = 'vh-md-adv';
       adv.textContent = VH_ADV[dm].map((k) => vhT(k)).join(' · ');
