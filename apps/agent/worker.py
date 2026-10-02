@@ -41,6 +41,8 @@ from .voice import build_stt, build_tts
 
 logger = logging.getLogger("voicehook.worker")
 
+REACH_TICK_S = 2.0  # Takt für operator.alive (Agent hört nicht mehr zu -> fester Satz)
+
 AGENT_NAME = os.environ.get("VOICEHOOK_AGENT_NAME", "voice-ai")
 
 # ---------------------------------------------------------------------------
@@ -757,6 +759,25 @@ async def entrypoint(ctx: JobContext) -> None:
 
     for _ev in ("participant_connected", "participant_disconnected", "participant_attributes_changed"):
         ctx.room.on(_ev, _sync_role)
+
+    # Lebenszeichen (operator.alive, alive.py): bleibt es > 20 s aus, sagt Delta statt
+    # Wartesätzen "<Name> ist gerade nicht erreichbar." Takt prüft auch ohne Paket.
+    async def _reach_tick() -> None:
+        while True:
+            await asyncio.sleep(REACH_TICK_S)
+            try:
+                await handlers.check_reach()
+            except Exception as e:  # noqa: BLE001
+                logger.warning("[operator.alive] check: %s", e)
+
+    reach_task = asyncio.create_task(_reach_tick())
+
+    async def _stop_reach() -> None:
+        reach_task.cancel()
+
+    add_cb = getattr(ctx, "add_shutdown_callback", None)  # Testattrappen haben es nicht
+    if add_cb is not None:
+        add_cb(_stop_reach)
 
     # Publish user STT transcripts back on the `transcript` topic so the
     # browser UI sees what the agent heard. (v3 parity, PR-12.)

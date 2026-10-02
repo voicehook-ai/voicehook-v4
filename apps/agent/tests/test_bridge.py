@@ -609,3 +609,18 @@ def test_next_carries_agent_said_not_operator_echo(client):
     r3 = client.get("/api/bridge/next", headers=h, params={"timeout": 0.05}).json()
     assert r3["type"] == "timeout" and [t[:2] for t in r3["agent_said"]] == ["s3", "s4"]
     assert sum(map(len, r3["agent_said"])) <= 400
+
+
+# ----- Lebenszeichen (operator.alive) über die Brücke (Oliver 02.10.) -------------
+
+def test_send_allows_operator_alive(client):
+    j = _join(client)
+    for payload in ({"alive": True, "ts": 1790933115.4, "idle_s": 3.0}, {"alive": False, "ts": 1790933200.0}):
+        r = client.post("/api/bridge/send", headers=_h(j["session"]),
+                        json={"topic": "operator.alive", "payload": payload})
+        assert r.status_code == 200, r.text
+        assert FakeRoom.instances[-1].local_participant.published[-1] == ("operator.alive", payload)
+    # Positivkontrolle Allowlist: unbekanntes Topic bleibt 400
+    bad = client.post("/api/bridge/send", headers=_h(j["session"]),
+                      json={"topic": "operator.alive2", "payload": {}})
+    assert bad.status_code == 400
