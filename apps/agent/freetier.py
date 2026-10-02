@@ -323,21 +323,48 @@ def used_ueur(keys: Iterable[str], now: float | None = None) -> int:
     return int(row[0] or 0)
 
 
-def remaining_ueur(keys: Iterable[str], now: float | None = None) -> int:
-    """Gratis-Rest heute. Ausnahme-Merkmal (VH_FREE_EXEMPT_KEYS): immer das volle Tageslimit.
-    Ist der globale Topf heute leer (oder unlesbar), ist der Rest 0 für alle."""
-    keys = list(keys)
+def free_state(keys: Iterable[str] | None, now: float | None = None) -> dict:
+    """DIE eine Gratis-Rechnung (Oliver 02.10.: "Frontend und Agenten brauchen die GLEICHEN
+    Werte"). /api/me, /api/free/remaining, die 402-Entscheidung beim Raumanlegen und der
+    Worker (Start-Prüfung, nach jeder Buchung, Topic free.state) lesen NUR hier.
+
+    Liefert {left_ueur, eur_left, eur_per_day, exempt, pot_empty, reason}:
+      reason None              Rest > 0, Gratis läuft
+             "disabled"        Gratis aus (VH_FREE_EUR_PER_DAY=0): eur_left 0
+             "exempt"          Merkmal in VH_FREE_EXEMPT_KEYS: voller Tageswert, nie leer
+             "personal_limit"  eigener Tageswert verbraucht
+             "pot_empty"       globaler Topf heute leer (oder unlesbar, fail-closed)
+    Lesefehler der persönlichen Zählung werfen (Aufrufer entscheiden fail-closed)."""
+    keys = list(keys or ())
+    if not enabled():
+        return {"left_ueur": 0, "eur_left": 0.0, "eur_per_day": 0.0, "exempt": False,
+                "pot_empty": False, "reason": "disabled"}
+    limit = limit_ueur()
+    per_day = round(limit_eur(), 2)
     if is_exempt(keys):
-        return limit_ueur()
-    left = max(0, limit_ueur() - used_ueur(keys, now))
-    if left > 0 and pot_left_ueur(now) <= 0:
-        return 0
-    return left
+        return {"left_ueur": limit, "eur_left": _floor_eur(limit), "eur_per_day": per_day,
+                "exempt": True, "pot_empty": False, "reason": "exempt"}
+    personal = max(0, limit - used_ueur(keys, now))
+    pot_empty = pot_left_ueur(now) <= 0
+    left = 0 if pot_empty else personal
+    reason = None if left > 0 else ("pot_empty" if pot_empty and personal > 0 else "personal_limit")
+    return {"left_ueur": left, "eur_left": _floor_eur(left), "eur_per_day": per_day,
+            "exempt": False, "pot_empty": pot_empty, "reason": reason}
+
+
+def _floor_eur(ueur: int) -> float:
+    """µEUR -> Euro, 2 Nachkommastellen, abgerundet (nie mehr anzeigen als da ist)."""
+    return math.floor(int(ueur) / 10_000) / 100
+
+
+def remaining_ueur(keys: Iterable[str], now: float | None = None) -> int:
+    """Gratis-Rest heute (dünne Hülle um free_state, keine eigene Rechnung)."""
+    return free_state(keys, now)["left_ueur"]
 
 
 def remaining_eur(keys: Iterable[str], now: float | None = None) -> float:
-    """Rest in Euro, 2 Nachkommastellen, abgerundet (nie mehr anzeigen als da ist)."""
-    return math.floor(remaining_ueur(keys, now) / 10_000) / 100
+    """Rest in Euro (dünne Hülle um free_state)."""
+    return free_state(keys, now)["eur_left"]
 
 
 def _add(conn: sqlite3.Connection, keys: list[str], ueur: int, day: str) -> None:

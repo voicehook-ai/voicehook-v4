@@ -39,6 +39,14 @@ from typing import TYPE_CHECKING
 
 from livekit.agents import Agent, StopResponse
 
+from .alive import (
+    TOPIC_ALIVE,
+    OperatorAlive,
+    live_reachable_user,
+    live_unreachable_user,
+    unreachable_block,
+    unreachable_sentence,
+)
 from .board import board_block, normalize_board, status_sentence
 from .guide import VOICEHOOK_GUIDE, agent_refs, handoff_rule, wait_lines
 from .speaker import PrimarySpeakerFilter, diarize_enabled
@@ -153,6 +161,8 @@ class RelayHandlers:
     on_agent_presence: callable = None   # async (present, name=None): Werksrolle aus/an
     on_status: callable = None           # operator.status: Board ersetzen (rate-limited)
     on_user_text: callable = None        # async (text): Nachfrage nach dem Stand -> status_request
+    on_alive: callable = None            # operator.alive: Lebenszeichen des Agenten
+    check_reach: callable = None         # async (): erreichbar/unerreichbar neu bewerten (Takt)
 
 
 def _decode(payload: bytes) -> dict:
@@ -391,9 +401,10 @@ def build_relay_handlers(
 
     # Werksrolle (voicehook-Guide) vs. Agent im Raum. Lock: Join/Leave/Persona dürfen
     # sich beim Umschalten nicht überholen (jedes Umschalten awaitet das Modell).
-    role = {"agent": False, "persona": None, "name": None, "board": None}
+    role = {"agent": False, "persona": None, "name": None, "board": None, "unreachable": False}
     role_lock = asyncio.Lock()
     _now = clock or (lambda: asyncio.get_running_loop().time())
+    alive = OperatorAlive()  # operator.alive (alive.py): hört der Agent noch zu?
 
     def _normal_instructions() -> str:
         """Grundrolle + fester Board-Platz (ersetzt, nie angehängt)."""
@@ -403,7 +414,10 @@ def build_relay_handlers(
             base = operator_persona(role["name"])
         else:
             return DEFAULT_PERSONA
-        return base + board_block(role["board"], agent_refs(role["name"])["nom"])
+        out = base + board_block(role["board"], agent_refs(role["name"])["nom"])
+        if role["unreachable"]:
+            out += unreachable_block(role["name"])
+        return out
 
     async def _set_role(normal_instructions: str, live_turn: str) -> None:
         if live:
@@ -432,6 +446,9 @@ def build_relay_handlers(
             joined = present and not role["agent"]
             role["agent"] = present
             role["name"] = name
+            if joined or not present:
+                alive.reset()  # neuer Agent: eigenes Lebenszeichen abwarten (legacy bis dahin)
+                role["unreachable"] = False
             if present:
                 if role["persona"]:
                     logger.info("[role] agent present (%s), operator persona bleibt", name or "-")
@@ -514,6 +531,10 @@ def build_relay_handlers(
 
         if not role["agent"] or room is None or not is_status_question(text):
             return
+        if role["unreachable"]:
+            # Code entscheidet: kein status_request ins Leere, fester Satz statt Warten
+            speak_notice(session, unreachable_sentence(role["name"]), live=live)
+            return
         req = st["request_at"]
         if req is not None and _now() - req <= STATUS_ANSWER_WINDOW_S:
             return
@@ -525,6 +546,26 @@ def build_relay_handlers(
             logger.info("[operator.status_request] sent")
         except Exception as e:  # noqa: BLE001
             logger.warning("[operator.status_request publish] %s", e)
+
+    # ----- Lebenszeichen (operator.alive) -------------------------------------------
+    async def check_reach() -> None:
+        """Agent im Raum, aber ohne Lebenszeichen (> ALIVE_STALE_S) oder alive:false:
+        Wartesätze werden zum festen Satz. Wird vom Worker im Takt und bei jedem
+        Lebenszeichen aufgerufen; schaltet nur bei Zustandswechsel um."""
+        async with role_lock:
+            unreach = role["agent"] and not alive.reachable(role["agent"], _now())
+            if unreach == role["unreachable"]:
+                return
+            role["unreachable"] = unreach
+            live_turn = (live_unreachable_user(role["name"]) if unreach
+                         else live_reachable_user(role["name"]))
+            await _set_role(_normal_instructions(), live_turn)
+        logger.info("[operator.alive] agent %s%s", "unerreichbar" if unreach else "wieder erreichbar",
+                    " (live)" if live else "")
+
+    async def on_alive(packet: DataPacket) -> None:
+        alive.on_packet(_decode(packet.data), _now())
+        await check_reach()
 
     async def on_mode(packet: DataPacket) -> None:
         data = _decode(packet.data)
@@ -578,6 +619,7 @@ def build_relay_handlers(
         on_interrupt=on_interrupt, on_inject=on_inject,
         on_agent_presence=on_agent_presence,
         on_status=on_status, on_user_text=on_user_text,
+        on_alive=on_alive, check_reach=check_reach,
     )
 
 
@@ -590,4 +632,5 @@ def topic_dispatch(handlers: RelayHandlers) -> dict[str, callable]:
         TOPIC_INTERRUPT: handlers.on_interrupt,
         TOPIC_INJECT: handlers.on_inject,
         TOPIC_STATUS: handlers.on_status,
+        TOPIC_ALIVE: handlers.on_alive,
     }

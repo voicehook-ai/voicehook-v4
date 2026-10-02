@@ -38,6 +38,7 @@ SEND_TOPICS = frozenset({
     "operator.inject",
     "operator.backchannel",
     "operator.status",      # Status-Board {doing, open[], done[]} (apps/agent/board.py)
+    "operator.alive",       # Lebenszeichen {alive, ts, idle_s} alle 10 s (apps/agent/alive.py)
 })
 PERSONA_TOPICS = frozenset({"operator.persona", "operator.mode"})
 SAY_MODES = ("revise", "overwrite", "append")

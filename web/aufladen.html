@@ -119,14 +119,24 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
 .acct-line{ font-size:12px; line-height:1.5; color:var(--vh-fg-2); text-align:center; max-width:100%; overflow-wrap:anywhere; margin-bottom:12px; }
 .acct-line .linkbtn{ padding:2px 2px; font-size:12px; }
 .tagline{ margin-top:28px; font-size:11px; color:var(--vh-fg-3); letter-spacing:.04em; white-space:nowrap; }
+/* Eingebettet im Aufladen-Overlay von voice.html (?embed=1 bzw. im iframe): kein
+   eigener Seitenkopf, Theme-Schalter und Fuß; Schließen-x kommt vom Overlay. */
+body.embed .brand, body.embed #btn-theme, body.embed .tagline{ display:none !important; }
+body.embed{ padding-bottom:calc(24px + env(safe-area-inset-bottom,0px)); }
 @media (max-width:480px){ .dial-box{ width:260px; height:260px; } .center .amt{ font-size:40px; } .wrap{ gap:20px; } }
 </style>
 </head>
 <body>
 <script>
   // Theme wie voice.html: localStorage 'vh-theme-v1' hat Vorrang, sonst mobil hell, Desktop dunkel.
+  // Eingebettet (Overlay in voice.html, gleicher Origin): Theme der Elternseite.
   (function(){
-    let pref; try { pref = localStorage.getItem('vh-theme-v1'); } catch {}
+    let framed = false; try { framed = window.top !== window; } catch { framed = true; }
+    const embed = framed || new URLSearchParams(location.search).get('embed') === '1';
+    if (embed) document.body.classList.add('embed');
+    let pref;
+    if (framed) { try { pref = window.parent.document.body.classList.contains('theme-light') ? 'light' : 'dark'; } catch {} }
+    if (!pref) { try { pref = localStorage.getItem('vh-theme-v1'); } catch {} }
     if (!pref) pref = matchMedia('(max-width: 640px)').matches ? 'light' : 'dark';
     if (pref === 'light') document.body.classList.add('theme-light');
   })();
@@ -233,7 +243,8 @@ const T = {
         doneH:'Guthaben aufgeladen', doneBal:'Aktuelles Guthaben', recH:'Wiederherstellungs-Link',
         recTxt:'Speichere diesen Link. Damit holst du dein Guthaben auf ein anderes Gerät oder nach dem Löschen der Browserdaten zurück. Wer den Link hat, kann dein Guthaben nutzen.',
         copy:'Link kopieren', copied:'Kopiert', call:'Zum Call', more:'Weiter aufladen', amount:'Betrag', theme:'Hell oder dunkel',
-        acctAs:'Angemeldet als', logout:'Abmelden', loggedOut:'Abgemeldet. Dieses Gerät nutzt wieder das Gratis-Kontingent.' },
+        acctAs:'Angemeldet als', logout:'Abmelden', loggedOut:'Abgemeldet. Dieses Gerät nutzt wieder das Gratis-Kontingent.',
+        opened:'Stripe ist in einem neuen Tab offen. Nach der Zahlung wird dein Guthaben hier automatisch aktualisiert.' },
   en: { brand:'Top up', h1:'Top up credit', sub:'credit incl. VAT', rate:'You pay for actual usage',
         cta:a=>'Top up · '+a, busy:'Connecting to Stripe …', soon:'Top-up coming soon',
         soonMsg:'Payments are not enabled yet.', err:'That did not work. Please try again.',
@@ -254,10 +265,23 @@ const T = {
         doneH:'Credit topped up', doneBal:'Current credit', recH:'Recovery link',
         recTxt:'Keep this link safe. It restores your credit on another device or after clearing browser data. Anyone with the link can use your credit.',
         copy:'Copy link', copied:'Copied', call:'Start a call', more:'Top up more', amount:'Amount', theme:'Light or dark',
-        acctAs:'Logged in as', logout:'Log out', loggedOut:'Logged out. This device uses the free allowance again.' },
+        acctAs:'Logged in as', logout:'Log out', loggedOut:'Logged out. This device uses the free allowance again.',
+        opened:'Stripe is open in a new tab. After paying, your credit updates here automatically.' },
 }[LANG];
 const $ = id => document.getElementById(id);
 const TOKEN_KEY = 'vh-wallet-v1';
+// Eingebettet im Overlay von voice.html? Stripe Checkout und OAuth lassen sich nicht
+// rahmen und die Elternseite darf nicht wegnavigieren (laufender Call): beide gehen
+// dann in einen NEUEN Tab. Erfolg meldet der Rückkehr-Tab per BroadcastChannel.
+let FRAMED = false; try { FRAMED = window.top !== window; } catch { FRAMED = true; }
+const toParent = (type, extra) => { if (FRAMED) try { window.parent.postMessage(Object.assign({ vh:'topup', type }, extra || {}), location.origin); } catch {} };
+const TOPUP_CHANNEL = 'vh-wallet', TOPUP_PING = 'vh-topup-ping';
+function announceTopup(d, sid){
+  const msg = { type:'topup-done', balance_eur: d && typeof d.balance_eur === 'number' ? d.balance_eur : null, id: sid || '' };
+  try { const ch = new BroadcastChannel(TOPUP_CHANNEL); ch.postMessage(msg); ch.close(); } catch {}
+  try { localStorage.setItem(TOPUP_PING, JSON.stringify(Object.assign({ t: Date.now() }, msg))); } catch {}
+}
+if (FRAMED) window.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); toParent('close'); } });
 const NONCE_KEY = 'vh_login_nonce';  // localStorage: der Mail-Link öffnet einen neuen Tab
 const getNonce = () => { try { return localStorage.getItem(NONCE_KEY) || ''; } catch { return ''; } };
 const setNonce = n => { try { if (n) localStorage.setItem(NONCE_KEY, n); else localStorage.removeItem(NONCE_KEY); } catch {} };
@@ -370,13 +394,32 @@ function headers(){ const h = { 'Content-Type':'application/json' }; const t = g
 
 cta.addEventListener('click', async () => {
   if (!checkoutOn) return;
+  // Eingebettet: Tab synchron im Klick öffnen (sonst blockt der Popup-Blocker nach dem await).
+  let w = null;
+  if (FRAMED) { try { w = window.open('', '_blank'); } catch {} }
   cta.dataset.busy = '1'; cta.disabled = true; cta.textContent = T.busy; showMsg('');
   try {
     const r = await fetch('/api/checkout', { method:'POST', headers:headers(), body:JSON.stringify({ amount_eur:amount }) });
     const d = await r.json().catch(() => ({}));
-    if (!r.ok || !d.url) throw new Error('checkout ' + r.status);
-    location.href = d.url;
+    if (!r.ok || !d.url || !/^https:\/\//.test(d.url)) throw new Error('checkout ' + r.status);
+    if (!FRAMED) { location.href = d.url; return; }
+    toParent('checkout');
+    delete cta.dataset.busy; render();
+    if (w && !w.closed) {
+      try { w.opener = null; } catch {}
+      w.location.href = d.url;
+      showMsg(T.opened);
+    } else {
+      // Popup blockiert: Link zum Antippen, nie die Elternseite wegnavigieren (Call).
+      try { if (w) w.close(); } catch {}
+      showMsg(T.opened);
+      const a = document.createElement('a');
+      a.href = d.url; a.target = '_blank'; a.rel = 'noopener'; a.className = 'linkbtn'; a.id = 'checkout-link';
+      a.textContent = T.cta(eurWhole.format(amount));
+      $('msg').append(' ', a);
+    }
   } catch (e) {
+    try { if (w) w.close(); } catch {}
     delete cta.dataset.busy; render(); showMsg(T.err, true);
   }
 });
@@ -411,7 +454,7 @@ $('rec-copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText($('rec-link').textContent); $('rec-copy').textContent = T.copied; }
   catch { const s = getSelection(), rg = document.createRange(); rg.selectNodeContents($('rec-link')); s.removeAllRanges(); s.addRange(rg); }
 });
-$('go-call').addEventListener('click', () => { location.href = '/'; });
+$('go-call').addEventListener('click', () => { if (FRAMED) toParent('close'); else location.href = '/'; });
 $('more').addEventListener('click', () => { $('view-done').hidden = true; $('view-topup').hidden = false; loadBalance(); });
 
 
@@ -443,7 +486,11 @@ async function logout(){
   try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(NONCE_KEY); } catch {}
   acctSeq++; renderAcct(null); onAcct(false, true);
 }
-window.addEventListener('storage', e => { if (e.key === TOKEN_KEY) refreshAcct(); });
+window.addEventListener('storage', e => {
+  if (e.key === TOKEN_KEY) { refreshAcct(); if (FRAMED) { $('login-box').hidden = !!getToken(); loadBalance(); } }
+});
+// Eingebettet: Aufladen aus einem anderen Tab (Stripe-Rückkehr) -> Guthaben hier neu.
+if (FRAMED) { try { new BroadcastChannel(TOPUP_CHANNEL).onmessage = e => { if (e.data && e.data.type === 'topup-done') loadBalance(); }; } catch {} }
 function onAcct(inn, justOut){
   if (!justOut) return;
   $('balance').hidden = true; $('balance').textContent = '';
@@ -558,7 +605,7 @@ async function claim(sessionId){
     try { r = await fetch('/api/wallet/claim', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ session_id:sessionId }) }); }
     catch { await sleep(2000); continue; }
     if (r.status === 200) {
-      const d = await r.json(); setToken(d.wallet_token); showMsg(''); showDone(d, d.recovery_url); offerConfirm(); return;
+      const d = await r.json(); setToken(d.wallet_token); showMsg(''); showDone(d, d.recovery_url); offerConfirm(); announceTopup(d, sessionId); return;
     }
     if (r.status === 409) { showMsg(T.claimed, true); loadBalance(); return; }
     await sleep(2000);
@@ -579,7 +626,10 @@ async function init(){
   const hash = new URLSearchParams(location.hash.slice(1));
   const sid = q.get('session_id'), rec = hash.get('r'), login = hash.get('login');
   if (sid || q.get('topup') || rec || login || q.has('wallet')) history.replaceState(null, '', location.pathname);
-  $('login-open').href = loginHref();
+  // Eingebettet: OAuth-Seiten blocken Framing, die Elternseite bleibt (Call) -> neuer Tab,
+  // Rückweg auf /aufladen; das Wallet-Token kommt per storage-Event hier und in voice.html an.
+  $('login-open').href = FRAMED ? '/login?next=' + encodeURIComponent('/aufladen') : loginHref();
+  if (FRAMED) { $('login-open').target = '_blank'; $('login-open').rel = 'noopener'; }
   if (!login) refreshAcct();
   try {
     const r = await fetch('/api/billing/config');

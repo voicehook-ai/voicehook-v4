@@ -1,0 +1,30 @@
+[Unit]
+Description=voicehook.ai Gemini-Live-Testworker `voice-ai-live` (Farbe %i; kein HTTP; nur Räume mit ?live=<VOICEHOOK_LIVE_KEY>)
+After=network.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+TimeoutStartSec=120
+User=root
+WorkingDirectory=/opt/voicehook
+EnvironmentFile=/opt/voicehook/.env
+Environment=VOICEHOOK_PIPELINE=live
+Environment=VOICEHOOK_AGENT_NAME=voice-ai-live
+Environment=VOICEHOOK_HTTP_DISABLED=1
+# Live API rechnet pro Turn den ganzen Kontext ab (~0,10-0,20 $/min geschätzt):
+# harter Deckel 20 Min statt 60 Min Standard des CallGuard
+Environment=VH_MAX_CALL_SECONDS=1200
+# Drain = Call-Deckel: ein Live-Call dauert nie länger als 1200 s
+Environment=VH_DRAIN_TIMEOUT=1200
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=1260
+ExecStart=/opt/voicehook/current/infra/systemd/voicehook-run start
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/voicehook-agent-live-%i.log
+StandardError=append:/var/log/voicehook-agent-live-%i.log
+
+[Install]
+WantedBy=multi-user.target

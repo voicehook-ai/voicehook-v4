@@ -14,7 +14,9 @@ __SITE_MAIN__ {
     # Kein trusted_proxies: Caddy verwirft eingehende X-Forwarded-For-Werte und setzt
     # die echte Client-IP. Die API nimmt das LETZTE Element (server._client_ip). Kommt
     # je ein CDN davor, hier trusted_proxies <CDN-Netze> setzen, sonst zählt die CDN-IP.
-    reverse_proxy 127.0.0.1:7400
+    reverse_proxy 127.0.0.1:7400 {
+      lb_try_duration 10s  # Deploy: voicehook-http startet neu (~1-2 s), Caddy wiederholt statt 502
+    }
   }
   handle {
     root * /var/www/voicehook

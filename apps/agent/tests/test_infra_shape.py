@@ -22,25 +22,49 @@ def test_deploy_script_is_lean():
     # 80 -> 230 (30.09.2026): Web-only-Pfad, orb-ssh-agent und vor allem der
     # LiveKit-Preflight (kein Neustart, solange ein Mensch im Call ist) sind
     # Sicherheitsgewinne, keine Aufblähung. Weiter wachsen nur mit Begründung.
-    assert _loc(ROOT / "deploy" / "deploy.sh") <= 230
+    # 230 -> 245 (02.10.2026, Aufg. 13/14): Warten statt Abbruch (--wait), Drain-Farbe-Check
+    # vor dem Kopieren, Release-Staging; Box-Schritte liegen in infra/systemd/voicehook-release.
+    assert _loc(ROOT / "deploy" / "deploy.sh") <= 245
 
 
 def test_caddyfile_template_is_lean():
     # 30 -> 33 (01.10.2026): 3 Zeilen für die Footer-Seiten (PR #83), Platz für /login (PR #95).
     # 33 -> 34 (01.10.2026): SSE der HTTPS-Brücke nicht komprimieren (PR #99).
-    assert _loc(ROOT / "infra" / "caddy" / "Caddyfile.tmpl") <= 34
+    # 34 -> 36 (02.10.2026): lb_try_duration überbrückt den HTTP-Neustart beim Deploy.
+    assert _loc(ROOT / "infra" / "caddy" / "Caddyfile.tmpl") <= 36
 
 
-def test_systemd_units_are_exactly_main_plus_live_worker():
-    # Hauptdienst (HTTP + Worker voice-ai) plus dedizierter Gemini-Live-Testworker
-    # (Olli 30.09.2026: eigener Worker, damit der bestehende Ablauf nicht bricht).
-    # Weitere Units bleiben verboten.
+def test_systemd_units_are_http_plus_bluegreen_workers():
+    # HTTP getrennt vom Worker (02.10.2026, Aufg. 14): zwei Worker-Farben laufen beim
+    # Deploy gleichzeitig (alte drainet), HTTP gibt es genau einmal. Live-Worker analog.
     units = sorted(u.name for u in (ROOT / "infra" / "systemd").glob("*.service"))
-    assert units == ["voicehook-agent-live.service", "voicehook-agent.service"], units
+    assert units == ["voicehook-agent-live@.service", "voicehook-agent@.service",
+                     "voicehook-http.service"], units
+
+
+def _unit(name):
+    return (ROOT / "infra" / "systemd" / name).read_text()
+
+
+def test_worker_units_run_start_and_drain():
+    for name, drain in (("voicehook-agent@.service", 3600), ("voicehook-agent-live@.service", 1200)):
+        u = _unit(name)
+        assert "voicehook-run start" in u and " dev" not in u  # dev drainet nicht
+        assert "Type=notify" in u and "NotifyAccess=main" in u
+        assert "KillMode=mixed" in u and "KillSignal=SIGTERM" in u
+        assert f"VH_DRAIN_TIMEOUT={drain}" in u
+        stop = int(u.split("TimeoutStopSec=")[1].split()[0])
+        assert stop > drain  # systemd darf den Drain nie vorzeitig per SIGKILL abbrechen
+        assert "VOICEHOOK_HTTP_DISABLED=1" in u  # kein Port-Konflikt zwischen den Farben
+
+
+def test_http_unit_is_http_only():
+    u = _unit("voicehook-http.service")
+    assert "voicehook-run http" in u and "Type=notify" not in u
 
 
 def test_live_unit_has_no_http_and_own_agent_name():
-    u = (ROOT / "infra" / "systemd" / "voicehook-agent-live.service").read_text()
+    u = _unit("voicehook-agent-live@.service")
     assert "VOICEHOOK_HTTP_DISABLED=1" in u          # kein zweiter Server auf :7400
     assert "VOICEHOOK_AGENT_NAME=voice-ai-live" in u  # nie als voice-ai dispatchbar
     assert "VOICEHOOK_PIPELINE=live" in u
