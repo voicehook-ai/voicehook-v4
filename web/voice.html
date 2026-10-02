@@ -75,8 +75,6 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'msrc.systemTitle': 'Ton des ganzen Rechners (ohne Mikrofon)', 'msrc.tabTitle': 'Ton eines Browser-Tabs, z. B. Spotify Web Player oder YouTube', 'msrc.micTitle': 'Eingebautes Mikrofon',
       'msrc.hintSystem': 'Im nächsten Fenster "Gesamter Bildschirm" wählen und "Systemton teilen" einschalten. Es wird nur der Ton genutzt.',
       'msrc.hintTab': 'Im nächsten Fenster den Tab mit der Musik wählen und "Tab-Audio teilen" einschalten. Es wird nur der Ton genutzt.',
-      'msrc.hintMic': 'Mit In-Ears oder Kopfhörern hört das Mikrofon die Musik nicht.',
-      'msrc.hintMobile': 'Mit Kopfhörern hört das Handy die Musik nicht.',
       'msrc.onlyChrome': 'Systemton nur in Chrome/Edge.',
       'msrc.onlyBt': 'Nur ein Bluetooth-Mikro gefunden: Es klingt wie durchs Telefon. Besser Systemton oder Tab.',
       'msrc.noAudio': 'Kein Ton geteilt. Bitte "Systemton teilen" bzw. "Tab-Audio teilen" einschalten.',
@@ -213,8 +211,6 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'msrc.systemTitle': 'Sound of the whole computer (no microphone)', 'msrc.tabTitle': 'Sound of a browser tab, e.g. Spotify Web Player or YouTube', 'msrc.micTitle': 'Built-in microphone',
       'msrc.hintSystem': 'In the next window choose "Entire screen" and turn on "Share system audio". Only the sound is used.',
       'msrc.hintTab': 'In the next window choose the tab with the music and turn on "Share tab audio". Only the sound is used.',
-      'msrc.hintMic': 'With in-ears or headphones the microphone cannot hear the music.',
-      'msrc.hintMobile': 'With headphones the phone cannot hear the music.',
       'msrc.onlyChrome': 'System audio only in Chrome/Edge.',
       'msrc.onlyBt': 'Only a Bluetooth mic found: it sounds like a phone line. Better use System or Tab.',
       'msrc.noAudio': 'No sound shared. Please turn on "Share system audio" or "Share tab audio".',
@@ -6855,7 +6851,7 @@ function vhMusicSrcRender() {
   if (vhMsrcMsg && vhMsrcMsg.info) parts.push(vhMsrcMsg.text);
   if (cur === 'system') parts.push(vhT('msrc.hintSystem'));
   else if (cur === 'tab') parts.push(vhT('msrc.hintTab'));
-  else parts.push(vhT(c.mobile ? 'msrc.hintMobile' : 'msrc.hintMic'));
+  // Mikrofon: kein Kopfhoerer-Hinweis mehr (Olli 02.10.: "der Satz ist Quatsch").
   if (!c.system && !c.mobile) parts.push(vhT('msrc.onlyChrome'));
   if (info) info.textContent = parts.join(' ');
   if (vhMsrcMsg && !vhMsrcMsg.info) {
