@@ -405,6 +405,19 @@ def redeem_recovery(code: str | None) -> tuple[str, str, str] | None:
     return acc, wallet, new_code
 
 
+def revoke_wallet_token(token: str | None) -> bool:
+    """Abmelden: genau dieses Wallet-Token widerrufen (Zeile in tokens löschen, wie
+    der Widerruf beim Login). Andere Tokens desselben Kontos (andere Geräte) und
+    Recovery-Codes bleiben. Idempotent: unbekannt/leer -> False, kein Fehler."""
+    if not token or len(token) > 200:
+        return False
+    with _Tx() as conn:
+        cur = conn.execute(
+            "DELETE FROM tokens WHERE token_hash = ? AND kind = 'wallet'", (_hash(token),)
+        )
+        return cur.rowcount > 0
+
+
 # ----- Raum -> Konto ----------------------------------------------------------
 DEFAULT_BIND_TTL_S = 3600
 

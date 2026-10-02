@@ -24,13 +24,14 @@ import urllib.request
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from . import billing_routes, budget, freetier, oauth_routes
+from . import billing_routes, budget, freetier, logredact, oauth_routes
 from .bridge_routes import router as bridge_router
 from .health import probe_all
 from .slug import gen_slug
 from .tokens import mint_invite, mint_livekit_token, verify_invite
 
 logger = logging.getLogger("voicehook.server")
+logredact.install()  # uvicorn.access: code/state/token/nonce/invite nie im Log
 
 app = FastAPI(title="voicehook-agent", version="4.0.0-dev")
 app.include_router(billing_routes.router)  # Aufladen + Wallet (/api/checkout, /api/wallet, ...)
