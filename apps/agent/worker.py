@@ -22,9 +22,17 @@ from collections.abc import Callable
 from typing import Any
 
 from livekit import rtc
-from livekit.agents import AgentSession, AutoSubscribe, JobContext, WorkerOptions, cli, room_io
+from livekit.agents import (
+    AgentServer,
+    AgentSession,
+    AutoSubscribe,
+    JobContext,
+    WorkerOptions,
+    cli,
+    room_io,
+)
 
-from . import budget, freetier
+from . import budget, freetier, procctl
 from .billing import db as billing_db
 from .billing import pricing as billing_pricing
 from .llm import build_llm
@@ -40,6 +48,8 @@ from .relay import (
 from .voice import build_stt, build_tts
 
 logger = logging.getLogger("voicehook.worker")
+
+REACH_TICK_S = 2.0  # Takt für operator.alive (Agent hört nicht mehr zu -> fester Satz)
 
 AGENT_NAME = os.environ.get("VOICEHOOK_AGENT_NAME", "voice-ai")
 
@@ -254,6 +264,9 @@ class CallGuard:
             if announce:
                 await self._bounded("announce", self._announce(announce))
             if not reason.startswith("session_close:"):
+                # Browser beendet den Call sofort (Oliver 02.10.: "jetzt bin ich alleine
+                # da und warte"), statt auf das Raum-Löschen bzw. einen Timeout zu hoffen.
+                await self._bounded("call_end_topic", self._publish_call_end(reason))
                 await self._bounded("session_close", self._session.aclose())
             if delete_room:
                 await self._bounded("delete_room", self._ctx.delete_room(room_name))
@@ -264,6 +277,12 @@ class CallGuard:
                 except Exception as e:  # noqa: BLE001
                     logger.warning("[call_guard] on_end failed: %r", e)
             self._ctx.shutdown(reason=f"call_guard:{reason}")
+
+    async def _publish_call_end(self, reason: str) -> None:
+        payload = json.dumps({"reason": reason}).encode()
+        await self._ctx.room.local_participant.publish_data(
+            payload=payload, topic=TOPIC_CALL_END, reliable=True
+        )
 
     async def _announce(self, text: str) -> None:
         if self._live:  # Realtime-Modell hat kein TTS für say()
@@ -360,6 +379,14 @@ def free_tick_seconds() -> float:
     return _positive_env_seconds("VH_FREE_TICK_SECONDS", DEFAULT_FREE_TICK_SECONDS)
 
 
+# Data-Topics an den Browser (web/voice.html): Call-Ende mit Grund, Gratis-Stand im Call.
+TOPIC_CALL_END = "call_end"
+TOPIC_FREE_STATE = "free.state"
+
+_FAIL_CLOSED_STATE = {"left_ueur": 0, "eur_left": 0.0, "eur_per_day": 0.0, "exempt": False,
+                      "pot_empty": False, "reason": "read_error"}  # Gratis-DB unlesbar: leer
+
+
 class FreeBudget:
     """Gratis-Topf (freetier.py, VH_FREE_EUR_PER_DAY pro UTC-Tag) eines Raums, VOR dem Guthaben.
 
@@ -388,6 +415,10 @@ class FreeBudget:
         self.owner = False  # Raum-Merkmal in VH_FREE_EXEMPT_KEYS (Owner): keine Guthaben-Hinweise
         self._looked_up = False
         self._found: tuple[str, list[str]] | None = None
+        # Topic free.state (Oliver 02.10.): die UI zeigt im Call genau den Wert, nach dem
+        # dieser Worker entscheidet (freetier.free_state), nie einen eigenen /api/me-Stand.
+        self.on_state: Callable[[dict], None] | None = None
+        self.state: dict | None = None
 
     def load(self) -> bool:
         """True = Gratis-Raum mit aktiver Prüfung, wird gezählt. `known` sagt, ob der
@@ -421,12 +452,30 @@ class FreeBudget:
     def start(self, guard: CallGuard) -> None:
         self._task = asyncio.create_task(self._check_start(guard))
 
-    async def _check_start(self, guard: CallGuard) -> None:
+    def _read_state(self) -> dict:
+        """freetier.free_state der Raum-Merkmale (DIE eine Rechnung); Fehler -> leer."""
         try:
-            left = await asyncio.to_thread(freetier.remaining_ueur, self.keys)
+            st = freetier.free_state(self.keys)
         except Exception as e:  # noqa: BLE001
             logger.error("[free] read room=%s failed: %s", self.room, e)
-            left = 0  # fail-closed: Gratis-Raum ohne lesbaren Topf
+            st = dict(_FAIL_CLOSED_STATE)
+        self._publish(st)
+        return st
+
+    def _publish(self, st: dict) -> None:
+        self.state = st
+        if self.on_state is not None:
+            try:
+                self.on_state({"eur_left": st["eur_left"], "eur_per_day": st["eur_per_day"],
+                               "exempt": bool(st["exempt"]), "reason": st["reason"]})
+            except Exception as e:  # noqa: BLE001
+                logger.debug("[free] state publish failed: %s", e)
+
+    async def _check_start(self, guard: CallGuard) -> None:
+        st = await asyncio.to_thread(self._read_state)
+        left = int(st["left_ueur"])
+        if st["exempt"]:
+            self.unlimited = True
         if not self.counting or guard.ended:
             return  # inzwischen schon per Kostenereignis entschieden
         if self.left_ueur is None:
@@ -451,10 +500,17 @@ class FreeBudget:
         if not self.counting or ueur <= 0:
             return max(0, ueur)
         try:
-            taken, left = freetier.consume_ueur(self.keys, ueur, real_ueur=real_ueur)
+            taken, _ = freetier.consume_ueur(self.keys, ueur, real_ueur=real_ueur)
+            # Entscheidung UND Anzeige aus derselben Rechnung wie /api/me (free_state).
+            st = self._read_state()
         except Exception as e:  # noqa: BLE001
             logger.error("[free] book room=%s failed: %s", self.room, e)
-            taken, left = 0, 0  # fail-closed
+            taken = 0
+            st = dict(_FAIL_CLOSED_STATE)
+            self._publish(st)
+        left = int(st["left_ueur"])
+        if st["exempt"]:
+            self.unlimited = True
         self.left_ueur = left
         if left <= 0 and not self.unlimited:
             self.counting = False
@@ -712,6 +768,25 @@ async def entrypoint(ctx: JobContext) -> None:
     for _ev in ("participant_connected", "participant_disconnected", "participant_attributes_changed"):
         ctx.room.on(_ev, _sync_role)
 
+    # Lebenszeichen (operator.alive, alive.py): bleibt es > 20 s aus, sagt Delta statt
+    # Wartesätzen "<Name> ist gerade nicht erreichbar." Takt prüft auch ohne Paket.
+    async def _reach_tick() -> None:
+        while True:
+            await asyncio.sleep(REACH_TICK_S)
+            try:
+                await handlers.check_reach()
+            except Exception as e:  # noqa: BLE001
+                logger.warning("[operator.alive] check: %s", e)
+
+    reach_task = asyncio.create_task(_reach_tick())
+
+    async def _stop_reach() -> None:
+        reach_task.cancel()
+
+    add_cb = getattr(ctx, "add_shutdown_callback", None)  # Testattrappen haben es nicht
+    if add_cb is not None:
+        add_cb(_stop_reach)
+
     # Publish user STT transcripts back on the `transcript` topic so the
     # browser UI sees what the agent heard. (v3 parity, PR-12.)
     @session.on("user_input_transcribed")
@@ -871,6 +946,21 @@ async def entrypoint(ctx: JobContext) -> None:
     guard_ref.append(guard)
     guard.start()
     if counted:
+        loop = asyncio.get_running_loop()
+
+        def _free_state_pub(obj: dict) -> None:
+            payload = json.dumps(obj).encode()
+
+            async def _send() -> None:
+                try:
+                    await ctx.room.local_participant.publish_data(
+                        payload=payload, topic=TOPIC_FREE_STATE, reliable=True
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("[free.state publish] %s", e)
+            loop.call_soon_threadsafe(lambda: asyncio.ensure_future(_send()))
+
+        free.on_state = _free_state_pub
         free.start(guard)
 
     async def _warn(p: dict) -> None:
@@ -894,13 +984,16 @@ async def entrypoint(ctx: JobContext) -> None:
 
 
 def build_worker_options() -> WorkerOptions:
-    """Factory exposed for unit tests."""
-    return WorkerOptions(entrypoint_fnc=entrypoint, agent_name=AGENT_NAME)
+    """Factory exposed for unit tests. Prod-Optionen (Drain, Last, Idle) aus procctl."""
+    return WorkerOptions(entrypoint_fnc=entrypoint, agent_name=AGENT_NAME,
+                         **procctl.worker_option_kwargs())
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    cli.run_app(build_worker_options())
+    server = AgentServer.from_server_options(build_worker_options())
+    server.on("worker_registered", procctl.notify_ready)  # Type=notify: READY erst nach Registrierung
+    cli.run_app(server)
 
 
 if __name__ == "__main__":

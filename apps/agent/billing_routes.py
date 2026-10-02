@@ -101,14 +101,15 @@ def payer_for_call(request: Request, mode: str, ip: str) -> tuple[str | None, li
     wallet = acc if acc is not None and db.balance_ueur(acc) > 0 else None
     if freetier.enabled(mode):
         keys = freetier.identity_keys(request.headers.get(freetier.ANON_HEADER), ip)
-        if freetier.is_exempt(keys) or freetier.remaining_ueur(keys) > 0:
+        st = freetier.free_state(keys)  # dieselbe Rechnung wie /api/me und Worker
+        if st["exempt"] or st["left_ueur"] > 0:
             return wallet, keys
         if wallet:
             return wallet, None
         raise HTTPException(
             status_code=402,
             detail={"error": "free_limit", "topup_url": TOPUP_PATH,
-                    "free_eur_per_day": freetier.limit_eur()},
+                    "free_eur_per_day": st["eur_per_day"]},
         )
     if wallet:
         return wallet, None

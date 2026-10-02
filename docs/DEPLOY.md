@@ -32,40 +32,135 @@ checkout had uncommitted changes).
 |---|---|---|
 | auto (default) | always | Diff `.deployed-sha..HEAD` plus uncommitted files. Nothing changed: exit "up to date". Only `web/**`: web-only. Anything else, or SHA missing/dirty/unknown: full. |
 | `--web-only` | forced | rsync `web/` only. No pip, no agent restart, no caddy reload, no preflight. Non-web changes are listed as UNDEPLOYED. |
-| `--full` | forced | agent code, pip, `.env` LIVEKIT_URL sync (#68, prints old -> new), systemd restart, Caddyfile + reload, livekit container ensure. |
-| `--dry-run` | with any mode | Prints the plan and runs every rsync with `-n` (itemized). Only reads from the box (`.deployed-sha`, current LIVEKIT_URL). No preflight, no writes. |
-| `--force-restart` | full only | Restart even if a human is in a room. Does NOT bypass preflight errors. |
+| `--full` | forced | preflight, stage release, venv, `.env` LIVEKIT_URL sync (#68), Caddyfile + reload, livekit container ensure, Blue/Green activation (below). |
+| `--dry-run` | with any mode | Prints the plan and runs every rsync with `-n` (itemized). Only reads from the box (`.deployed-sha`, `.color`, unit state, LIVEKIT_URL). No preflight, no writes. |
+| `--wait[=MIN]` | full only | Human in a call: nothing is copied, re-check every 30 s for up to MIN minutes (default 30), then abort. |
+| `--force-restart` | full only | Deploy even if a human is in a room. Their call keeps running on the old color (drain). Lost: HTTPS-bridge sessions (see 5). Does NOT bypass preflight errors. |
 
 Make targets: `deploy`, `deploy-dry`, `deploy-web`, `deploy-full`; extra flags via
 `DEPLOY_ARGS=...`.
 
-## 3. Restart preflight (calls cost money, never cut a live call)
+## 3. Order of the full path (02.10.2026, no mixed versions)
 
-Before the full path changes anything on the box:
+Incident 02.10.: code was rsynced into the running tree at 08:58, the restart waited
+for a live call until 09:06. For 8 minutes every new job process (spawned from disk)
+ran new code while the HTTP server ran old code, with wrong free-tier decisions.
+Now:
 
-1. If `voicehook-agent` is not active, there is nothing to interrupt: continue.
+1. **Preflight before anything is copied.** Human in a room: nothing is copied, the box is
+   unchanged, abort (or `--wait`). Errors fail closed.
+2. **Next color must be idle.** If `voicehook-agent@<next>` is still `deactivating` (the
+   previous deploy is draining a call on it), abort before copying.
+3. **Stage** `/opt/voicehook/releases/<sha12>-<utc-ts>/` (`apps/agent`, `infra/systemd`,
+   `web`, pyproject, README). Venv: `/opt/voicehook/venvs/<sha256(pyproject)[:12]>`, built
+   only when the dependency set changes (deps only, no `pip install -e`), linked as
+   `<release>/venv`. Running processes are untouched.
+4. `.env` LIVEKIT_URL sync, Caddyfile render + validate + reload (Caddy first, so the HTTP
+   restart in 5 is already covered by `lb_try_duration`), livekit container ensure (only
+   starts it if missing; the new worker must be able to register).
+5. **Activate** (`infra/systemd/voicehook-release activate`, one step on the box):
+   symlink swap `current -> release` (`mv -T`, atomic), `systemctl start
+   voicehook-agent@<new> voicehook-agent-live@<new>` (Type=notify: returns only after the
+   new worker is registered with LiveKit; fails -> symlink back, old color keeps serving,
+   exit 1), restart `voicehook-http`, sync `web/` into the docroot, write `.color`, then
+   `systemctl stop --no-block` the old color = SIGTERM = drain. Keeps the newest 5
+   releases and their venvs.
+
+`infra/systemd/voicehook-run` resolves `current` once at process start (cwd, `sys.path[0]`
+and venv are real paths). A running worker and every job process it spawns later keep
+importing their own release, a symlink swap never changes a running process.
+
+## 4. Services and drain
+
+| Unit | Runs | Stop |
+|---|---|---|
+| `voicehook-http` | `python -m agent http` (FastAPI :7400 only) | SIGTERM, uvicorn finishes open requests (5 s). Restart ~1-2 s, Caddy retries the upstream for up to 10 s (`lb_try_duration`), clients see no 502 |
+| `voicehook-agent@blue\|green` | `python -m agent start` (worker `voice-ai`, no HTTP) | drain up to 60 min (`VH_DRAIN_TIMEOUT=3600` = CallGuard cap), `TimeoutStopSec=3660` |
+| `voicehook-agent-live@blue\|green` | same, `voice-ai-live` | drain up to 20 min (`VH_DRAIN_TIMEOUT=1200` = `VH_MAX_CALL_SECONDS`), `TimeoutStopSec=1260` |
+
+Why `start` instead of `dev` (livekit-agents 1.8.3, `cli/cli.py`): on SIGTERM/SIGINT the
+worker runs `server.drain()` only `if not devmode`. Drain = worker reports `WS_FULL`
+(LiveKit sends no new jobs), waits until all running jobs end or `drain_timeout`, then
+exits 0. In `dev` the worker shuts down at once and running calls die. `dev` also meant
+`load_threshold=inf` and `num_idle_processes=0`. Production options (`agent/procctl.py`,
+env-overridable): `VH_WORKER_LOAD_THRESHOLD=0.7`, `VH_WORKER_IDLE_PROCS=1` (one warm job
+process per worker, ~300 MB; during a deploy up to 4 workers run on the cx33 with 8 GB),
+`VH_DRAIN_TIMEOUT`, `VH_WORKER_HTTP_PORT=0` (worker health port; the prod default 8081
+would collide between colors).
+
+`KillMode=mixed`: systemd sends SIGTERM only to the worker main process (job processes
+would otherwise get it too and end the call), SIGKILL to leftovers only after
+`TimeoutStopSec`. A second SIGTERM during the drain force-exits (livekit behavior), so do
+not `systemctl kill` a draining worker unless you mean it.
+
+Check a drain: `systemctl is-active voicehook-agent@blue` (`deactivating` = draining),
+`tail -f /var/log/voicehook-agent-blue.log` ("draining worker"). Abort a drain on purpose:
+`systemctl kill -s SIGKILL voicehook-agent@blue`.
+
+**In-memory state (HTTP restart):** HTTPS-bridge sessions (`bridge.py`, `/api/bridge/*`),
+their SSE streams and the in-memory rate-limit counters live in the HTTP process and are
+lost on every deploy, as before. A bridged agent gets errors on its next poll and must
+rejoin; the voice call itself (browser + worker) keeps running on the old color. Everything
+the worker needs (wallet, free tier, budget) is in `/opt/voicehook/state/*.sqlite`, shared
+by HTTP and both colors.
+
+**Mixed versions that remain (by design):** during a drain the old color serves its
+running calls with old code while HTTP and new calls run new code. They share the sqlite
+files; a schema change must stay backward compatible for one drain window (max 60 min).
+
+**Deploy duration:** stage + Caddy ~20-40 s (+1-3 min when pyproject changed and a new venv
+is built), activation ~5-10 s (new worker registers in ~3 s locally, plus HTTP restart).
+The command returns then; the old color drains in the background for as long as its
+longest running call (max 60 min Normal, 20 min Live). A further full deploy during that
+window is refused (step 2); web-only deploys are not affected.
+
+**First deploy after this change (migration):** legacy `voicehook-agent.service` /
+`voicehook-agent-live.service` (dev mode, HTTP + worker in one process, cannot drain) are
+stopped and removed after the new color is registered and before `voicehook-http` starts
+(port 7400). That cut is only safe without a live call, so the preflight gate applies;
+do not use `--force-restart` for this first deploy. `/opt/voicehook/apps` and
+`/opt/voicehook/.venv` of the old layout stay on disk unused and can be removed by hand
+later.
+
+## 5. Restart preflight (calls cost money)
+
+Before the full path copies anything to the box:
+
+1. If no `voicehook-agent`, `voicehook-agent@blue` or `@green` is active, there is
+   nothing to interrupt: continue.
 2. Otherwise box-local LiveKit twirp `ListRooms` + `ListParticipants` on
    `127.0.0.1:7880`. The JWT is signed on the box from `/opt/voicehook/.env`; keys
    never leave the box.
 3. Any participant that is not agent-kind and not `voice-ai*` counts as human
-   (the senior CLI counts as human, on purpose). Human present: abort, unless
-   `--force-restart`.
+   (the senior CLI counts as human, on purpose). Human present: nothing copied, abort
+   (or `--wait`), unless `--force-restart`.
 4. Any error (ssh, timeout, missing keys, HTTP): abort (fail closed).
 
 Hard caps: `timeout 120` around the ssh call, `timeout 90` on python, an 80s
 internal deadline and 10s per request.
 
-## 4. rsync and box-only files
+## 6. rsync and box-only files
 
-- `web/` -> `/var/www/voicehook`: **no `--delete`**. Box-only files in the docroot
+- `web/` is staged into the release and copied into `/var/www/voicehook` during activation
+  (web-only mode: directly): **no `--delete`**. Box-only files in the docroot
   (`.deployed-sha`, verification files) are never removed. A file deleted from
   `web/` stays on the box until removed by hand.
-- `apps/agent/` -> `/opt/voicehook/apps/agent`: `--delete` (repo mirror, avoids stale
-  modules), but `.env*`, `.venv`, `__pycache__`, `.git`, `*.egg-info` are excluded and
-  therefore protected.
-- Single files (pyproject, README, unit, Caddyfile, compose) are plain copies.
+- `apps/agent/` goes into a fresh release dir; `.env*`, `.venv`, `__pycache__`, `.git`,
+  `*.egg-info` are excluded. `/opt/voicehook/.env` and `/opt/voicehook/state/` live outside
+  the releases.
+- Single files (pyproject, README, units, Caddyfile, compose) are plain copies.
 
 Note: Caddy serves the docroot, so `/.deployed-sha` is publicly readable (commit SHA only).
+
+## 7. Tests
+
+- `apps/agent/tests/test_deploy_bluegreen.py`: deploy.sh against ssh/rsync stubs
+  (preflight before any copy, draining color blocks, order stage -> activate) and the box
+  script on a temp filesystem (swap, start-before-drain, legacy migration, rollback, prune,
+  launcher pins the real release path).
+- `tests/e2e/drain_bluegreen.py`: real local `livekit-server --dev`, real workers via
+  `voicehook-run`, real jobs. `LIVEKIT_SERVER=<bin> .venv/bin/python tests/e2e/drain_bluegreen.py`
+  (PASS) and `... dev` as negative control (FAIL: the call dies).
 
 ## Gemini-Live-Testraum (Admin)
 
@@ -221,12 +316,12 @@ auf der Box erzeugen (IP und Anon-ID gehen nicht in Logs; Anon-ID = `localStorag
 IPv6 zählt je /64):
 
 ```sh
-cd /opt/voicehook && .venv/bin/python -m agent.freetier keys --ip <ip> --anon <anon-id>
+cd /opt/voicehook/current/apps && ../venv/bin/python -m agent.freetier keys --ip <ip> --anon <anon-id>
 # Ausgabe: je Merkmal ein Key, zuletzt die fertige Zeile VH_FREE_EXEMPT_KEYS=anon:...,ip:...
 ```
 
-Zeile in `/opt/voicehook/.env` eintragen, danach `voicehook-agent` (enthält den HTTP-Server :7400)
-und `voicehook-agent-live` neu starten, nicht während eines laufenden Calls (die Env wird beim Start gelesen). Ein Key reicht (z. B. nur die Anon-ID,
+Zeile in `/opt/voicehook/.env` eintragen, danach `voicehook-http` und die aktive Worker-Farbe (`cat /opt/voicehook/.color`)
+neu starten, am einfachsten per `deploy.sh --full` (drainet laufende Calls) (die Env wird beim Start gelesen). Ein Key reicht (z. B. nur die Anon-ID,
 wenn die IP wechselt).
 
 ### Login per Magic-Link

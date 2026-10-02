@@ -140,12 +140,12 @@ async def test_interrupt_drops_current_say():
     session.interrupt.assert_called_once()
 
 
-def test_topic_dispatch_maps_all_six_topics():
+def test_topic_dispatch_maps_all_seven_topics():
     session, agent = _fake_session(), _fake_agent()
     h = build_relay_handlers(session, agent)
     routes = topic_dispatch(h)
     assert set(routes.keys()) == {TOPIC_SAY, TOPIC_PERSONA, TOPIC_MODE, TOPIC_INTERRUPT, TOPIC_INJECT,
-                                  "operator.status"}
+                                  "operator.status", "operator.alive"}
 
 
 def test_default_persona_includes_relay_discipline():

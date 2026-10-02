@@ -96,7 +96,7 @@ since the last `next`, `status_stale: true` = resend your board:
   and `status` the board. Answer each turn within ~3 s (`next` warns: `latency_warning`).
 - Status board (CLI 0.7.0): on every task change `vh status --doing "baut den Fix" --open "Tests"
   --done "Analyse"` (whole board, replaces the last, never spoken); `vh status ""` when finished.
-- Idle guard: no `say`/`next` for 10 min (`--idle-timeout MIN`, 0 = off) = join leaves.
+- Idle guard: no `say`/`next` for 10 min (`--idle-timeout MIN`, 0 = off) = join leaves. Heartbeat (CLI 0.8.0): `operator.alive` every 10 s while you serve `next`/`say`; silent 20 s = chip dims, Delta: "Claude ist gerade nicht erreichbar."
 
 ## Stay in the call (mandatory)
 

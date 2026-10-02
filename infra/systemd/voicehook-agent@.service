@@ -1,0 +1,28 @@
+[Unit]
+Description=voicehook.ai LiveKit worker `voice-ai` (Farbe %i, Blue/Green, kein HTTP)
+After=network.target docker.service
+
+[Service]
+# READY=1 erst nach Registrierung bei LiveKit: `systemctl start` blockiert bis dahin.
+Type=notify
+NotifyAccess=main
+TimeoutStartSec=120
+User=root
+WorkingDirectory=/opt/voicehook
+EnvironmentFile=/opt/voicehook/.env
+Environment=VOICEHOOK_HTTP_DISABLED=1
+# Drain: SIGTERM nur an den Hauptprozess (KillMode=mixed), der nimmt keine Jobs mehr an
+# und wartet bis zu VH_DRAIN_TIMEOUT auf laufende Calls (60 min = CallGuard-Deckel).
+# Danach bzw. nach TimeoutStopSec SIGKILL an alle Restprozesse.
+Environment=VH_DRAIN_TIMEOUT=3600
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=3660
+ExecStart=/opt/voicehook/current/infra/systemd/voicehook-run start
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/voicehook-agent-%i.log
+StandardError=append:/var/log/voicehook-agent-%i.log
+
+[Install]
+WantedBy=multi-user.target
