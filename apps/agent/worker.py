@@ -22,9 +22,17 @@ from collections.abc import Callable
 from typing import Any
 
 from livekit import rtc
-from livekit.agents import AgentSession, AutoSubscribe, JobContext, WorkerOptions, cli, room_io
+from livekit.agents import (
+    AgentServer,
+    AgentSession,
+    AutoSubscribe,
+    JobContext,
+    WorkerOptions,
+    cli,
+    room_io,
+)
 
-from . import budget, freetier
+from . import budget, freetier, procctl
 from .billing import db as billing_db
 from .billing import pricing as billing_pricing
 from .llm import build_llm
@@ -894,13 +902,16 @@ async def entrypoint(ctx: JobContext) -> None:
 
 
 def build_worker_options() -> WorkerOptions:
-    """Factory exposed for unit tests."""
-    return WorkerOptions(entrypoint_fnc=entrypoint, agent_name=AGENT_NAME)
+    """Factory exposed for unit tests. Prod-Optionen (Drain, Last, Idle) aus procctl."""
+    return WorkerOptions(entrypoint_fnc=entrypoint, agent_name=AGENT_NAME,
+                         **procctl.worker_option_kwargs())
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    cli.run_app(build_worker_options())
+    server = AgentServer.from_server_options(build_worker_options())
+    server.on("worker_registered", procctl.notify_ready)  # Type=notify: READY erst nach Registrierung
+    cli.run_app(server)
 
 
 if __name__ == "__main__":
