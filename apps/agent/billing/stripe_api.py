@@ -23,6 +23,23 @@ STRIPE_API = "https://api.stripe.com/v1"
 DEFAULT_TOLERANCE_S = 300
 
 
+# Rechnung + USt-ID für eine Aufladung (Checkout, mode=payment), nur wenn der Kunde
+# sie auf /aufladen anhakt (CheckoutRequest.invoice): Stripe berechnet jede
+# Rechnung extra. Laut Stripe-Doku
+# genügen diese beiden Schalter; customer_creation und billing_address_collection
+# sind dafür nicht nötig (ohne Customer legt Checkout einen Gastkunden an).
+INVOICE_PARAMS: dict = {
+    # Nach erfolgreicher Zahlung eine bezahlte Rechnung (PDF) erzeugen und mailen:
+    # https://docs.stripe.com/payments/checkout/receipts#paid-invoices
+    # https://docs.stripe.com/api/checkout/sessions/create#create_checkout_session-invoice_creation-enabled
+    "invoice_creation": {"enabled": "true"},
+    # Geschäftskunden können USt-ID + Firmenname angeben (erscheint auf der Rechnung):
+    # https://docs.stripe.com/tax/checkout/tax-ids
+    # https://docs.stripe.com/api/checkout/sessions/create#create_checkout_session-tax_id_collection-enabled
+    "tax_id_collection": {"enabled": "true"},
+}
+
+
 class SignatureError(ValueError):
     pass
 
