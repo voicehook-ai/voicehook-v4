@@ -55,7 +55,7 @@ def _verify(client, token, *, nonce=None, confirm=False, wallet=None):
     if confirm:
         params["confirm"] = 1
     headers = {"x-wallet-token": wallet} if wallet else {}
-    return client.get("/api/login/verify", params=params, headers=headers)
+    return client.post("/api/login/verify", json=params, headers=headers)
 
 
 # ----- (1) Rest-Login-CSRF: Browser ohne Wallet ------------------------------------

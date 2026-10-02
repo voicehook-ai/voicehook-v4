@@ -14,9 +14,9 @@ danach exakt wie per Magic-Link (billing_routes.py, PR #93):
      (Google: userinfo email_verified=true; GitHub: /user/emails primary+verified).
   3. Für diese E-Mail entsteht ein normaler Login-Link (db.create_login_link_for_nonce),
      gebunden an die Nonce und das Wallet aus Schritt 1, und der Browser geht per
-     302 auf /login?next=<next>#login=<token>. /login löst ihn über
-     GET /api/login/verify?token=&nonce= ein: passende Nonce -> 200, sonst 409
-     confirm_required mit Rückfrage. Ein Angreifer, der dem Opfer SEINEN Callback-
+     302 auf /login?next=<next>#login=<token>. /login zeigt "Jetzt anmelden" und löst
+     ihn erst nach dem Klick über POST /api/login/verify {token, nonce} ein: passende
+     Nonce -> 200, sonst 409 confirm_required mit Rückfrage. Ein Angreifer, der dem Opfer SEINEN Callback-
      oder #login=-Link schickt, schaltet dessen Browser also nie still um.
 
 Fehler im Callback -> 302 /login?next=<next>#error=<code>

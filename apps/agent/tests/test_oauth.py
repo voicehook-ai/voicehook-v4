@@ -231,7 +231,7 @@ def test_github_picks_primary_verified(client, oauth_env, fake):
     ]
     d, _, cb = _flow(client, "github")
     token = _fragment(cb.headers["location"])["login"]
-    r = client.get("/api/login/verify", params={"token": token, "nonce": d["login_nonce"]})
+    r = client.post("/api/login/verify", json={"token": token, "nonce": d["login_nonce"]})
     assert r.status_code == 200 and r.json()["email_masked"] == "m***@e***.com"
 
 
@@ -243,7 +243,7 @@ def test_success_login_with_matching_nonce(client, oauth_env, fake, provider):
     loc = cb.headers["location"]
     assert loc.startswith("/login?next=/r/room-1%3Fx%3D1#login=vhl_")
     token = _fragment(loc)["login"]
-    r = client.get("/api/login/verify", params={"token": token, "nonce": d["login_nonce"]})
+    r = client.post("/api/login/verify", json={"token": token, "nonce": d["login_nonce"]})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["wallet_token"].startswith("vhw_") and body["email_verified"] is True
@@ -261,18 +261,18 @@ def test_foreign_nonce_needs_confirmation(client, oauth_env, fake):
     _, _, cb = _flow(client, "google")
     token = _fragment(cb.headers["location"])["login"]
     victim_nonce = _start(client).json()["login_nonce"]  # Opfer hat eigene, andere Nonce
-    r = client.get("/api/login/verify", params={"token": token, "nonce": victim_nonce})
+    r = client.post("/api/login/verify", json={"token": token, "nonce": victim_nonce})
     assert r.status_code == 409 and r.json()["error"] == "confirm_required"
     assert r.json()["email_masked"] == "k***@e***.com"
-    assert client.get("/api/login/verify", params={"token": token}).status_code == 409
+    assert client.post("/api/login/verify", json={"token": token}).status_code == 409
 
 
 def test_same_email_same_account_as_mail_login(client, oauth_env, fake):
     d1, _, cb1 = _flow(client, "google")
-    w1 = client.get("/api/login/verify", params={
+    w1 = client.post("/api/login/verify", json={
         "token": _fragment(cb1.headers["location"])["login"], "nonce": d1["login_nonce"]}).json()
     d2, _, cb2 = _flow(client, "github")
-    w2 = client.get("/api/login/verify", params={
+    w2 = client.post("/api/login/verify", json={
         "token": _fragment(cb2.headers["location"])["login"], "nonce": d2["login_nonce"]}).json()
     assert db.account_for_token(w1["wallet_token"]) == db.account_for_token(w2["wallet_token"])
 
@@ -282,7 +282,7 @@ def test_requesting_wallet_is_linked(client, oauth_env, fake):
     wallet = _paid_wallet(client, "cs_oauth_1", 2000, "kim@example.com")["wallet_token"]
     d, _, cb = _flow(client, "google", wallet=wallet)
     token = _fragment(cb.headers["location"])["login"]
-    r = client.get("/api/login/verify", params={"token": token, "nonce": d["login_nonce"]},
+    r = client.post("/api/login/verify", json={"token": token, "nonce": d["login_nonce"]},
                    headers={"x-wallet-token": wallet})
     assert r.status_code == 200 and r.json()["wallet_linked"] is True
     assert r.json()["balance_eur"] == 20.0
@@ -293,7 +293,7 @@ def test_foreign_wallet_not_linked(client, oauth_env, fake):
     other = _paid_wallet(client, "cs_oauth_2", 1000, "victim@example.com")["wallet_token"]
     d, _, cb = _flow(client, "google")
     token = _fragment(cb.headers["location"])["login"]
-    r = client.get("/api/login/verify", params={"token": token, "nonce": d["login_nonce"]},
+    r = client.post("/api/login/verify", json={"token": token, "nonce": d["login_nonce"]},
                    headers={"x-wallet-token": other})
     assert r.status_code == 200 and r.json()["wallet_linked"] is False
     assert db.account_for_token(other) is not None

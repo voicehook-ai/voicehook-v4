@@ -349,11 +349,15 @@ wenn die IP wechselt).
 `POST /api/login {email}` schickt über Resend einen Link `https://voicehook.ai/aufladen#login=<token>`
 (einmal, 15 Minuten; Ratenlimit 5 je IP in 10 min (IPv6 je /64), 3 je Adresse und IP in 15 min,
 10 je Adresse in 60 min; fehlgeschlagener Mailversand zählt nicht). Die Antwort enthält eine
-`login_nonce`, die nur dieser Browser kennt. Die Seite ruft mit dem Link
-`GET /api/login/verify?token=...&nonce=...` auf und bekommt ein Wallet-Token für das Konto mit dieser
-jetzt bestätigten Adresse. Ohne passende Nonce (Link in einem anderen Browser geöffnet) wird der
-Link nicht verbraucht: 409 `confirm_required` mit maskierter Adresse; erst nach "Anmelden als ...?"
-und erneutem Aufruf mit `confirm=1` wird eingeloggt, ein Wallet dieses Browsers aber nie verknüpft
+`login_nonce`, die nur dieser Browser kennt. Die Seite zeigt zum Link nur den Knopf "Jetzt anmelden";
+erst der Klick schickt `POST /api/login/verify {token, nonce}` (Token im Body, nie in der URL) und
+bekommt ein Wallet-Token für das Konto mit dieser jetzt bestätigten Adresse. Ein GET löst nie ein:
+Mail-Scanner (Microsoft Safe Links, Gmail-Prefetch) rufen Links automatisch auf und dürfen den
+einmaligen Token nicht verbrauchen. `GET /api/login/verify?token=...` (alte oder direkt aufgerufene
+Links) leitet mit 303 auf `/login#login=<token>` um, dort wieder erst nach Klick. Beide Seiten setzen
+`Referrer-Policy: no-referrer` und nehmen den Token sofort aus der Adresszeile. Ohne passende Nonce
+(Link in einem anderen Browser geöffnet) wird der Link nicht verbraucht: 409 `confirm_required` mit
+maskierter Adresse; erst nach "Anmelden als ...?" und erneutem POST mit `confirm: true` wird eingeloggt, ein Wallet dieses Browsers aber nie verknüpft
 (Schutz gegen Rest-Login-CSRF: ein vom Angreifer an seine Adresse angeforderter Link schaltet einen
 fremden Browser nicht mehr still in sein Konto). Jeder Login widerruft die älteren Recovery-Codes des
 Kontos. Das Wallet des Browsers (`X-Wallet-Token`) wird nur verknüpft, wenn es exakt das
@@ -375,6 +379,11 @@ dem Deploy angefordert wurden, haben keine Nonce (Spalte `login_links.nonce_hash
 ergänzt, Altbestand NULL) und gehen nur über die Rückfrage (`confirm=1`). In den ersten 24 h im Log
 auf gehäufte `GET /api/login/verify` mit 409 achten; danach ist der Übergang vorbei, es ist nichts
 zurückzubauen.
+
+**Übergang "Jetzt anmelden" (POST statt GET):** ein noch offener Tab mit der alten Seite ruft
+`GET /api/login/verify` auf, bekommt jetzt die 303-Umleitung statt JSON und zeigt "Das hat nicht
+geklappt". Der Link ist dabei NICHT verbraucht; neu laden (Seiten sind `no-cache`) und den Link erneut
+öffnen genügt. Nichts zurückzubauen.
 
 ### Login-Seite `/login` (Google, GitHub, E-Mail-Link)
 

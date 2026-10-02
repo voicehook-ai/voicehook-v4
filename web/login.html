@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22%3E%3Cpath d=%22M20 4.5 37 35.5H3Z%22 fill=%22none%22 stroke=%22%236dc9d9%22 stroke-width=%223.5%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E">
 <title>voicehook · Anmelden</title>
 <style>
@@ -137,6 +138,13 @@ a.cta{ display:flex; align-items:center; justify-content:center; text-decoration
   <div class="msg" id="msg" aria-live="polite" hidden></div>
 </main>
 
+<!-- Login-Link (Mail, OAuth-Rückkehr, alter GET-Link): erst der Klick löst ein. -->
+<main class="wrap" id="view-link" hidden>
+  <h1 id="link-h1"></h1>
+  <div class="msg" id="link-txt"></div>
+  <button class="cta" id="link-go" type="button"></button>
+</main>
+
 <main class="wrap" id="view-ask" hidden>
   <h1 id="ask-h1"></h1>
   <div class="msg" id="ask-txt"></div>
@@ -165,6 +173,7 @@ const T = {
         loginExpired:'Dieser Anmelde-Link ist abgelaufen oder wurde schon benutzt. Bitte melde dich noch einmal an.',
         askH:e=>'Anmelden als '+e+'?', askTxt:'In diesem Browser ist schon ein Guthaben gespeichert. „Anmelden“ wechselt zu diesem Konto, „Abbrechen“ lässt alles wie es ist.',
         askYes:'Anmelden', askNo:'Abbrechen', askKept:'Abgebrochen. Dieser Browser bleibt im bisherigen Konto.',
+        linkTxt:'Bestätige die Anmeldung mit einem Klick.', linkGo:'Jetzt anmelden',
         e_denied:'Anmeldung abgebrochen.', e_state:'Die Anmeldung ist abgelaufen. Bitte versuch es noch einmal.',
         e_provider:'Der Anbieter hat nicht geantwortet. Bitte versuch es noch einmal.',
         e_email_unverified:'Bei diesem Konto ist keine bestätigte E-Mail hinterlegt. Bestätige sie beim Anbieter oder nimm den E-Mail-Link.',
@@ -180,6 +189,7 @@ const T = {
         loginExpired:'This login link has expired or was already used. Please log in again.',
         askH:e=>'Log in as '+e+'?', askTxt:'This browser already holds credit. “Log in” switches to this account, “Cancel” leaves everything as it is.',
         askYes:'Log in', askNo:'Cancel', askKept:'Cancelled. This browser stays in its previous account.',
+        linkTxt:'Confirm your login with one click.', linkGo:'Log in now',
         e_denied:'Login cancelled.', e_state:'The login expired. Please try again.',
         e_provider:'The provider did not respond. Please try again.',
         e_email_unverified:'This account has no verified email. Verify it with the provider or use the email link.',
@@ -213,6 +223,7 @@ document.title = 'voicehook · ' + T.brand;
 $('login-email').placeholder = T.loginPh; $('login-email').setAttribute('aria-label', T.loginPh);
 $('login-go').textContent = T.loginSend;
 $('ask-yes').textContent = T.askYes; $('ask-no').textContent = T.askNo;
+$('link-h1').textContent = T.h1; $('link-txt').textContent = T.linkTxt; $('link-go').textContent = T.linkGo;
 for (const p of ['google', 'github']) $('btn-' + p).querySelector('.lbl').textContent = T[p];
 
 // ---- Theme-Schalter (gleicher Schlüssel wie voice.html) ----
@@ -311,11 +322,13 @@ $('login-form').addEventListener('submit', async e => {
   go.disabled = false;
 });
 
-// ---- #login=<token> einlösen (OAuth-Callback; Logik wie aufladen.html) ----
-// GET /api/login/verify?token=&nonce= -> 200 {wallet_token, email_masked, ...}
+// ---- #login=<token> einlösen (OAuth-Callback, alter GET-Link; Logik wie aufladen.html) ----
+// Erst der Klick auf "Jetzt anmelden" löst ein (Mail-Scanner rufen Links per GET auf):
+// POST /api/login/verify {token, nonce} -> 200 {wallet_token, email_masked, ...}
 // 409 confirm_required {email_masked}: kein/falscher Nonce (Link aus einem anderen
-// Browser), noch NICHT verbraucht -> erst fragen, bei Ja &confirm=1.
+// Browser), noch NICHT verbraucht -> erst fragen, bei Ja confirm:true.
 // 400 invalid_or_expired. Erfolg -> Wallet speichern, weiter auf next.
+// Token nur im Body, nie in der URL (History, Referer, Logs).
 function setWithEmail(el, text, email){
   el.textContent = '';
   const i = email ? text.indexOf(email) : -1;
@@ -325,8 +338,10 @@ function setWithEmail(el, text, email){
 }
 async function verifyCall(token, confirm){
   const n = confirm ? '' : getNonce();
-  const u = '/api/login/verify?token=' + encodeURIComponent(token) + (n ? '&nonce=' + encodeURIComponent(n) : '') + (confirm ? '&confirm=1' : '');
-  const r = await fetch(u, { headers:headers() });
+  const body = { token };
+  if (n) body.nonce = n;
+  if (confirm) body.confirm = true;
+  const r = await fetch('/api/login/verify', { method:'POST', headers:headers(), body:JSON.stringify(body) });
   const d = await r.json().catch(() => ({}));
   return { r, d };
 }
@@ -339,6 +354,17 @@ function askLogin(email, onYes){
   $('ask-yes').onclick = () => { $('ask-yes').disabled = true; onYes(); };
   $('ask-no').onclick = () => backToLogin(getToken() ? T.askKept : '');
   $('ask-yes').focus();
+}
+// Login-Link geöffnet: nur der Knopf, kein Aufruf, keine Fehlermeldung vor dem Klick.
+function offerLink(token){
+  $('view-login').hidden = true; $('view-ask').hidden = true; $('view-link').hidden = false;
+  $('link-go').disabled = false;
+  $('link-go').onclick = () => {
+    $('link-go').disabled = true;
+    $('view-link').hidden = true; $('view-login').hidden = false;
+    verifyLogin(token);
+  };
+  $('link-go').focus();
 }
 async function verifyLogin(token, confirmed){
   showMsg(T.verifying);
@@ -364,7 +390,7 @@ async function init(){
   const hash = new URLSearchParams(location.hash.slice(1));
   const login = hash.get('login'), error = hash.get('error');
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
-  if (login) verifyLogin(login);
+  if (login) offerLink(login);
   else if (error) showMsg(T['e_' + error] || T.err, true);
   if (!login) refreshAcct();
   const cfg = await window.vhAuth.providers();

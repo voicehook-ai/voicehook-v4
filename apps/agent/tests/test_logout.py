@@ -39,7 +39,7 @@ def outbox(monkeypatch):
 
 def _login(client, email, outbox):
     n = client.post("/api/login", json={"email": email}).json()["login_nonce"]
-    r = client.get("/api/login/verify", params={"token": _link_token(outbox), "nonce": n})
+    r = client.post("/api/login/verify", json={"token": _link_token(outbox), "nonce": n})
     assert r.status_code == 200, r.text
     return r.json()["wallet_token"]
 
@@ -90,7 +90,7 @@ def test_logged_out_token_cannot_pay_for_calls(client, outbox):
 
 def test_logout_keeps_recovery_code(client, outbox):
     n = client.post("/api/login", json={"email": "rc@x.de"}).json()["login_nonce"]
-    v = client.get("/api/login/verify", params={"token": _link_token(outbox), "nonce": n}).json()
+    v = client.post("/api/login/verify", json={"token": _link_token(outbox), "nonce": n}).json()
     client.post("/api/logout", headers={"x-wallet-token": v["wallet_token"]})
     code = v["recovery_url"].split("#r=")[1]
     assert db.account_for_token(code, "recovery") is not None               # Wiederherstellen geht weiter

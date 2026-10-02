@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22%3E%3Cpath d=%22M20 4.5 37 35.5H3Z%22 fill=%22none%22 stroke=%22%236dc9d9%22 stroke-width=%223.5%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E">
 <title>voicehook · Aufladen</title>
 <style>
@@ -214,6 +215,13 @@ body.embed{ padding-bottom:calc(24px + env(safe-area-inset-bottom,0px)); }
   <button class="chip" id="more" type="button"></button>
 </main>
 
+<!-- Login-Link aus der Mail: erst der Klick löst ein (Mail-Scanner rufen Links per GET auf). -->
+<main class="wrap" id="view-link" hidden>
+  <h1 id="link-h1"></h1>
+  <div class="msg" id="link-txt"></div>
+  <button class="cta" id="link-go" type="button"></button>
+</main>
+
 <main class="wrap" id="view-ask" hidden>
   <h1 id="ask-h1"></h1>
   <div class="msg" id="ask-txt"></div>
@@ -243,6 +251,7 @@ const T = {
         verifying:'Anmeldung wird geprüft …', loggedInAs:e=>'Angemeldet als '+e,
         askH:e=>'Anmelden als '+e+'?', askTxt:'In diesem Browser ist schon ein Guthaben gespeichert. „Anmelden“ wechselt zu diesem Konto, „Abbrechen“ lässt alles wie es ist.',
         askYes:'Anmelden', askNo:'Abbrechen', askKept:'Abgebrochen. Dieser Browser bleibt im bisherigen Konto.',
+        linkH:'Anmelden', linkTxt:'Bestätige die Anmeldung mit einem Klick.', linkGo:'Jetzt anmelden',
         confirmMail:'E-Mail bestätigen', confirmHint:'Die E-Mail, die du bei Stripe angegeben hast. Öffne den Link in diesem Browser, danach meldest du dich auf anderen Geräten per E-Mail an.',
         bal:b=>'Guthaben: <b>'+b+'</b>', cancel:'Zahlung abgebrochen. Es wurde nichts abgebucht.',
         confirming:'Zahlung wird bestätigt …', slow:'Die Bestätigung dauert länger als üblich. Lade die Seite gleich neu.',
@@ -266,6 +275,7 @@ const T = {
         verifying:'Checking your login …', loggedInAs:e=>'Logged in as '+e,
         askH:e=>'Log in as '+e+'?', askTxt:'This browser already holds credit. “Log in” switches to this account, “Cancel” leaves everything as it is.',
         askYes:'Log in', askNo:'Cancel', askKept:'Cancelled. This browser stays in its previous account.',
+        linkH:'Log in', linkTxt:'Confirm your login with one click.', linkGo:'Log in now',
         confirmMail:'Confirm email', confirmHint:'The email you entered at Stripe. Open the link in this browser; afterwards you log in on other devices by email.',
         bal:b=>'Credit: <b>'+b+'</b>', cancel:'Payment cancelled. Nothing was charged.',
         confirming:'Confirming payment …', slow:'Confirmation is taking longer than usual. Reload the page in a moment.',
@@ -310,6 +320,7 @@ $('login-open').textContent = T.login; $('t-invoice').textContent = T.invoice;
 $('confirm-open').textContent = T.confirmMail; $('confirm-email').placeholder = T.loginPh;
 $('confirm-email').setAttribute('aria-label', T.loginPh); $('confirm-go').textContent = T.loginSend;
 $('ask-yes').textContent = T.askYes; $('ask-no').textContent = T.askNo;
+$('link-h1').textContent = T.linkH; $('link-txt').textContent = T.linkTxt; $('link-go').textContent = T.linkGo;
 
 // ---- Theme-Schalter (gleicher Schlüssel wie voice.html) ----
 const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
@@ -515,8 +526,9 @@ function loginHref(){ return '/login?next=' + encodeURIComponent(location.pathna
 // ---- "E-Mail bestätigen" nach dem Checkout (Vertrag PR #93) ----
 // POST /api/login {email} MIT X-Wallet-Token (falls vorhanden): der Server bindet
 // den Link an genau dieses Wallet und antwortet mit login_nonce (localStorage).
-// Die Mail enthält /aufladen#login=<token>; init() löst ihn über
-// GET /api/login/verify?token=&nonce= ein. Kein Token kommt je aus der URL.
+// Die Mail enthält /aufladen#login=<token>; init() zeigt "Jetzt anmelden", erst der
+// Klick löst ihn über POST /api/login/verify {token, nonce} ein. Kein Token kommt je
+// aus der URL.
 let loginUnavail = false;
 function setMsg(el, text, warn){ el.textContent = text; el.className = 'msg' + (warn ? ' warn' : ''); el.hidden = !text; }
 function markLoginUnavail(){
@@ -560,14 +572,17 @@ async function offerConfirm(){
   $('confirm-box').hidden = false;
 }
 
-// GET /api/login/verify?token=&nonce= -> 200 {wallet_token, recovery_url, wallet_linked, email_masked, ...}
+// POST /api/login/verify {token, nonce} -> 200 {wallet_token, recovery_url, wallet_linked, email_masked, ...}
 // 409 confirm_required {email_masked}: Link aus einem anderen Browser (kein/falscher
-// Nonce), noch NICHT verbraucht -> erst fragen "Anmelden als …?", bei Ja &confirm=1.
+// Nonce), noch NICHT verbraucht -> erst fragen "Anmelden als …?", bei Ja confirm:true.
 // Abbrechen speichert nichts. 400 invalid_or_expired: alt oder schon benutzt.
+// Token nur im Body, nie in der URL (History, Referer, Logs). Ein GET löst nie ein.
 async function verifyCall(token, confirm){
   const n = confirm ? '' : getNonce();
-  const u = '/api/login/verify?token=' + encodeURIComponent(token) + (n ? '&nonce=' + encodeURIComponent(n) : '') + (confirm ? '&confirm=1' : '');
-  const r = await fetch(u, { headers:headers() });
+  const body = { token };
+  if (n) body.nonce = n;
+  if (confirm) body.confirm = true;
+  const r = await fetch('/api/login/verify', { method:'POST', headers:headers(), body:JSON.stringify(body) });
   const d = await r.json().catch(() => ({}));
   return { r, d };
 }
@@ -584,6 +599,17 @@ function askLogin(email, onYes){
     await loadBalance(); showMsg(getToken() ? T.askKept : '');
   };
   $('ask-yes').focus();
+}
+// Login-Link geöffnet: nur der Knopf, kein Aufruf, keine Fehlermeldung vor dem Klick.
+function offerLink(token){
+  $('view-topup').hidden = true; $('view-done').hidden = true; $('view-ask').hidden = true; $('view-link').hidden = false;
+  $('link-go').disabled = false;
+  $('link-go').onclick = () => {
+    $('link-go').disabled = true;
+    $('view-link').hidden = true; $('view-topup').hidden = false;
+    verifyLogin(token);
+  };
+  $('link-go').focus();
 }
 async function verifyLogin(token, confirmed){
   showMsg(T.verifying);
@@ -636,6 +662,7 @@ async function init(){
   const hash = new URLSearchParams(location.hash.slice(1));
   const sid = q.get('session_id'), rec = hash.get('r'), login = hash.get('login');
   if (sid || q.get('topup') || rec || login || q.has('wallet')) history.replaceState(null, '', location.pathname);
+  if (login) offerLink(login);
   // Eingebettet: OAuth-Seiten blocken Framing, die Elternseite bleibt (Call) -> neuer Tab,
   // Rückweg auf /aufladen; das Wallet-Token kommt per storage-Event hier und in voice.html an.
   $('login-open').href = FRAMED ? '/login?next=' + encodeURIComponent('/aufladen') : loginHref();
@@ -656,7 +683,7 @@ async function init(){
 
   if (getToken()) $('login-box').hidden = true;
   if (rec) return recover(rec);
-  if (login) return verifyLogin(login);
+  if (login) return;  // eingelöst wird erst beim Klick auf "Jetzt anmelden"
   await loadBalance();
   if (sid) return claim(sid);
   if (q.get('topup') === 'cancel') showMsg(T.cancel);

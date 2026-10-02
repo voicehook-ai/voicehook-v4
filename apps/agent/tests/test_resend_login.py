@@ -120,18 +120,18 @@ def test_positive_control_link_logs_in_once(client, outbox):
     nonce = _login(client).json()["login_nonce"]
     assert outbox[-1][0] == NORM                                    # normalisiert verschickt
     tok = _link(outbox)
-    r = client.get("/api/login/verify", params={"token": tok, "nonce": nonce})
+    r = client.post("/api/login/verify", json={"token": tok, "nonce": nonce})
     assert r.status_code == 200 and r.json()["wallet_token"].startswith("vhw_")
-    again = client.get("/api/login/verify", params={"token": tok, "nonce": nonce})
+    again = client.post("/api/login/verify", json={"token": tok, "nonce": nonce})
     assert again.status_code == 400                                 # einmalig
 
 
 def test_ttl_is_15_minutes_and_boundary(client):
     assert db.LOGIN_TTL_S == 15 * 60
     fresh, n1 = db.create_login_link("edge@x.de", now=time.time() - db.LOGIN_TTL_S + 30)
-    assert client.get("/api/login/verify", params={"token": fresh, "nonce": n1}).status_code == 200
+    assert client.post("/api/login/verify", json={"token": fresh, "nonce": n1}).status_code == 200
     old, n2 = db.create_login_link("edge@x.de", now=time.time() - db.LOGIN_TTL_S - 1)
-    assert client.get("/api/login/verify", params={"token": old, "nonce": n2}).status_code == 400
+    assert client.post("/api/login/verify", json={"token": old, "nonce": n2}).status_code == 400
 
 
 def test_db_stores_only_hash_of_token(client, outbox):
@@ -162,7 +162,7 @@ def test_rate_limit_per_ip_across_mails(client, outbox):
 def test_email_never_logged(client, outbox, monkeypatch, caplog):
     caplog.set_level(logging.DEBUG)
     nonce = _login(client).json()["login_nonce"]
-    client.get("/api/login/verify", params={"token": _link(outbox), "nonce": nonce})
+    client.post("/api/login/verify", json={"token": _link(outbox), "nonce": nonce})
     for _ in range(5):
         _login(client)                                              # bis ins Rate-Limit
     monkeypatch.setattr(mail, "send", lambda *a, **k: (_ for _ in ()).throw(mail.MailError("resend 500")))
