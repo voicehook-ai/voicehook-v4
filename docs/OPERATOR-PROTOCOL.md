@@ -165,6 +165,12 @@ The voicebot puts it in its own block "Zuletzt hat Claude gemacht: ..." next to 
 (budget 800 chars, `VOICEHOOK_ACTIVITY_BUDGET`, oldest lines dropped first; scrubbed
 again), replaced on every update, cleared when you leave. Delta may tell the user from it,
 in the third person and without exaggerating ("Claude hat gerade die Tests laufen lassen").
+The board field `doing` is not needed for "was macht Claude gerade": Delta answers from the
+newest feed line, and a `status_request` answered with a board without `doing` is spoken
+from the feed ("Zuletzt bei Claude: Tests laufen lassen."). The voicebot applies at most one
+feed update per 5 s in Normal (`VOICEHOOK_ACTIVITY_INTERVAL_S`) and per 20 s in Live
+(`VOICEHOOK_ACTIVITY_INTERVAL_LIVE_S`), because in Live every update is a turn that costs
+the whole context; the newest state in the window wins.
 Own topic instead of a board field: the board is your curated state per task change, the
 feed is mechanical and frequent; mixing them would overwrite the board or compete for its
 rate limit. Live mode: one `[System]` turn at a fixed place, like the board.

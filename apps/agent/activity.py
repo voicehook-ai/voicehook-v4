@@ -26,6 +26,10 @@ TOPIC_ACTIVITY = "operator.activity"
 ACTIVITY_BUDGET = 800   # Zeichen über alle Zeilen (Auftrag Oliver 02.10.: ca. 800)
 ACTIVITY_LINES = 15     # so viele Zeilen schickt die CLI höchstens
 LINE_MAX = 160          # eine Zeile: Zeit + Tool + Beschreibung (CLI kappt auf 120)
+# Takt: höchstens ein angewandtes Update je Fenster, das letzte gewinnt (Oliver 02.10.).
+# Live kostet jedes Update einen Turn mit dem ganzen Kontext, deshalb dort 20 s.
+ACTIVITY_INTERVAL_S = 5.0        # Normal (Env VOICEHOOK_ACTIVITY_INTERVAL_S)
+ACTIVITY_INTERVAL_LIVE_S = 20.0  # Live (Env VOICEHOOK_ACTIVITY_INTERVAL_LIVE_S)
 
 _SECRET = re.compile(
     r"\b(?:sk|rk|pk)[_-](?:live|test)?_?[A-Za-z0-9_-]{8,}"
@@ -50,6 +54,33 @@ def activity_budget() -> int:
     except (TypeError, ValueError):
         return ACTIVITY_BUDGET
     return n if n > 0 else ACTIVITY_BUDGET
+
+
+def activity_interval_s(live: bool) -> float:
+    """Mindestabstand zweier Feed-Updates: Normal 5 s, Live 20 s; per Env überschreibbar
+    (Sekunden, >= 0; ungültig -> Default)."""
+    env, default = (("VOICEHOOK_ACTIVITY_INTERVAL_LIVE_S", ACTIVITY_INTERVAL_LIVE_S) if live
+                    else ("VOICEHOOK_ACTIVITY_INTERVAL_S", ACTIVITY_INTERVAL_S))
+    try:
+        n = float(os.environ.get(env, default))
+    except (TypeError, ValueError):
+        return default
+    return n if n >= 0 else default
+
+
+_PREFIX = re.compile(r"^(?:\d{1,2}:\d{2}(?::\d{2})?\s+)?(?:[A-Za-z][\w.-]{0,30}:\s+)?")
+
+
+def activity_sentence(lines: list[str] | None, dat: str) -> str | None:
+    """Ein gesprochener Satz aus der neuesten Feed-Zeile (ohne Uhrzeit und Tool-Namen),
+    Antwort auf "was macht Claude gerade", wenn das Board kein `doing` hat. `dat` = Name
+    oder "deinem Agenten" (guide.agent_refs)."""
+    if not lines:
+        return None
+    desc = _PREFIX.sub("", lines[-1]).strip().rstrip(".")
+    if not desc:
+        return None
+    return f"Zuletzt bei {dat}: {desc}."
 
 
 def _clean(v: object) -> str:
@@ -86,4 +117,6 @@ def activity_block(lines: list[str] | None, nom: str) -> str:
             f"zuerst, ersetzt jedes frühere; gehört zum Status): " + "; ".join(
                 x.rstrip(".") for x in lines) + "."
             f" Daraus darfst du erzählen, was {who} gerade macht, in der dritten Person, nur was "
-            "dort steht, ohne zu übertreiben, nie Tool-Namen vorlesen.")
+            "dort steht, ohne zu übertreiben, nie Tool-Namen vorlesen. Fragt der Nutzer, was "
+            f"{who} gerade macht, antworte aus der neuesten Zeile, auch wenn im Status kein "
+            "\"macht gerade\" steht.")

@@ -49,7 +49,13 @@ from typing import TYPE_CHECKING
 from livekit.agents import Agent, StopResponse
 from livekit.agents import llm as lk_llm
 
-from .activity import TOPIC_ACTIVITY, activity_block, normalize_activity
+from .activity import (
+    TOPIC_ACTIVITY,
+    activity_block,
+    activity_interval_s,
+    activity_sentence,
+    normalize_activity,
+)
 from .alive import (
     TOPIC_ALIVE,
     OperatorAlive,
@@ -393,6 +399,7 @@ def build_relay_handlers(
     hold_s: float = HOLD_S,
     live: bool = False,
     status_interval_s: float = STATUS_MIN_INTERVAL_S,
+    activity_interval: float | None = None,  # None: activity_interval_s(live) (Env/Default)
     clock=None,  # noqa: ANN001  Tests: monotone Uhr injizieren
     say_quiet: float | None = None,  # Tests: Stille vor einer say (sonst Env/Default)
 ) -> RelayHandlers:
@@ -895,7 +902,9 @@ def build_relay_handlers(
         req = st["request_at"]
         if req is not None and _now() - req <= STATUS_ANSWER_WINDOW_S:
             st["request_at"] = None
-            line = status_sentence(board, agent_refs(role["name"])["nom"])
+            refs = agent_refs(role["name"])
+            # doing ist nicht nötig: ohne doing antwortet der Aktivitäts-Feed (Oliver 02.10.)
+            line = status_sentence(board, refs["nom"]) or activity_sentence(role["activity"], refs["dat"])
             if line:
                 speak_notice(session, line, live=live)
 
@@ -918,6 +927,7 @@ def build_relay_handlers(
 
     # ----- Aktivitäts-Feed (operator.activity, activity.py) --------------------------
     act: dict = {"last": None, "pending": None, "task": None, "n": 0}
+    act_interval = activity_interval_s(live) if activity_interval is None else activity_interval
 
     async def _apply_activity() -> None:
         lines, act["pending"] = act["pending"], None
@@ -950,11 +960,11 @@ def build_relay_handlers(
             act["task"] = None
 
     async def on_activity(packet: DataPacket) -> None:
-        """Feed ersetzen (nie anhängen). Rate-Limit wie beim Board: höchstens 1 Update je
-        status_interval_s, das letzte im Fenster gewinnt. Kommt er vor der Presence, gilt er
-        ab dem Join (wie die Persona)."""
+        """Feed ersetzen (nie anhängen). Rate-Limit: höchstens 1 Update je act_interval
+        (Normal 5 s, Live 20 s: dort kostet jedes Update einen Turn mit ganzem Kontext),
+        das letzte im Fenster gewinnt. Kommt er vor der Presence, gilt er ab dem Join."""
         act["pending"] = normalize_activity(_decode(packet.data))
-        wait = 0.0 if act["last"] is None else act["last"] + status_interval_s - _now()
+        wait = 0.0 if act["last"] is None else act["last"] + act_interval - _now()
         if wait <= 0 and act["task"] is None:
             await _apply_activity()
         elif act["task"] is None:

@@ -205,7 +205,7 @@ async def test_activity_with_board_and_budget():
 @pytest.mark.asyncio
 async def test_activity_rate_limit_last_one_wins():
     clock = _Clock()
-    agent, h = _normal(clock, status_interval_s=0.05)
+    agent, h = _normal(clock, activity_interval=0.05)
     await h.on_agent_presence(True, "Claude")
     await h.on_activity(_pkt({"lines": ["a eins"]}))              # sofort
     assert agent.update_instructions.await_count == 2
@@ -235,7 +235,7 @@ async def test_live_activity_replaces_turn_in_local_context():
     await h.on_agent_presence(True, "Claude")
     counts = []
     for i in range(20):
-        clock.t += 6
+        clock.t += 21  # Live-Takt 20 s
         await h.on_activity(_pkt({"lines": [f"17:{i:02d}:00 Bash: Schritt {i}"]}))
         counts.append(len(agent.chat_ctx.items))
     assert len(set(counts)) == 1
@@ -303,3 +303,96 @@ async def test_faq_reaches_instructions_normal_and_live():
     await h2.on_status(_pkt({"doing": "baut", "faq": [["Wann live?", "Heute Abend."]]}, "operator.status"))
     st = [i for i in la.chat_ctx.items if i.id.startswith("vh-status-")]
     assert "Frage: Wann live? Antwort: Heute Abend." in st[0].text_content
+
+
+# ===== 4 doing nicht nötig + eigener Feed-Takt (integ/r8, Oliver 02.10.) ==============
+# Positivkontrolle: auf integ/r8 ohne diesen Commit rot (kein activity_sentence, kein
+# activity_interval_s, Feed-Takt = Board-Takt 5 s auch in Live).
+from agent.activity import (  # noqa: E402
+    ACTIVITY_INTERVAL_LIVE_S,
+    ACTIVITY_INTERVAL_S,
+    activity_interval_s,
+    activity_sentence,
+)
+
+
+def test_activity_interval_defaults_and_env(monkeypatch):
+    monkeypatch.delenv("VOICEHOOK_ACTIVITY_INTERVAL_S", raising=False)
+    monkeypatch.delenv("VOICEHOOK_ACTIVITY_INTERVAL_LIVE_S", raising=False)
+    assert (ACTIVITY_INTERVAL_S, ACTIVITY_INTERVAL_LIVE_S) == (5.0, 20.0)
+    assert activity_interval_s(False) == 5.0 and activity_interval_s(True) == 20.0
+    monkeypatch.setenv("VOICEHOOK_ACTIVITY_INTERVAL_LIVE_S", "30")
+    monkeypatch.setenv("VOICEHOOK_ACTIVITY_INTERVAL_S", "2.5")
+    assert activity_interval_s(True) == 30.0 and activity_interval_s(False) == 2.5
+    monkeypatch.setenv("VOICEHOOK_ACTIVITY_INTERVAL_LIVE_S", "kaputt")
+    monkeypatch.setenv("VOICEHOOK_ACTIVITY_INTERVAL_S", "-1")
+    assert activity_interval_s(True) == 20.0 and activity_interval_s(False) == 5.0
+
+
+@pytest.mark.asyncio
+async def test_live_activity_at_most_every_20s(monkeypatch):
+    monkeypatch.delenv("VOICEHOOK_ACTIVITY_INTERVAL_LIVE_S", raising=False)
+    agent = _live_agent()
+    clock = _Clock()
+    h = build_relay_handlers(MagicMock(), agent, live=True, clock=clock)
+    await h.on_agent_presence(True, "Claude")
+    n0 = agent.update_chat_ctx.await_count
+    await h.on_activity(_pkt({"lines": ["17:00:00 Bash: eins"]}))      # erstes: sofort
+    assert agent.update_chat_ctx.await_count == n0 + 1
+    clock.t += 6                                                       # Normal-Takt reicht nicht
+    await h.on_activity(_pkt({"lines": ["17:00:06 Bash: zwei"]}))
+    assert agent.update_chat_ctx.await_count == n0 + 1
+    h_task = [t for t in asyncio.all_tasks() if "_apply_activity_later" in repr(t.get_coro())]
+    assert h_task                                                      # nachgereicht, nicht verloren
+    for t in h_task:
+        t.cancel()
+
+
+@pytest.mark.asyncio
+async def test_normal_activity_every_5s(monkeypatch):
+    monkeypatch.delenv("VOICEHOOK_ACTIVITY_INTERVAL_S", raising=False)
+    clock = _Clock()
+    agent, h = _normal(clock)
+    await h.on_agent_presence(True, "Claude")
+    await h.on_activity(_pkt({"lines": ["17:00:00 Bash: eins"]}))
+    n = agent.update_instructions.await_count
+    clock.t += 5.5
+    await h.on_activity(_pkt({"lines": ["17:00:05 Bash: zwei"]}))
+    assert agent.update_instructions.await_count == n + 1 and "zwei" in _last(agent)
+
+
+def test_activity_sentence_strips_time_and_tool():
+    assert activity_sentence(["17:00:00 Bash: eins", "17:12:03 Bash: Tests laufen lassen"],
+                             "Claude") == "Zuletzt bei Claude: Tests laufen lassen."
+    assert activity_sentence(["Edit: Login-Formular angepasst."], "deinem Agenten") == \
+        "Zuletzt bei deinem Agenten: Login-Formular angepasst."
+    assert activity_sentence(None, "Claude") is None and activity_sentence(["17:00:00 "], "Claude") is None
+
+
+def test_activity_block_answers_doing_question_without_doing():
+    t = activity_block(["17:12:03 Bash: Tests laufen lassen"], "Claude")
+    assert "was Claude gerade macht, antworte aus der neuesten Zeile" in t
+    assert 'kein "macht gerade" steht' in t
+
+
+@pytest.mark.asyncio
+async def test_status_request_answered_from_activity_without_doing():
+    agent = RelayAgent(instructions=DEFAULT_PERSONA, speakers=None)
+    agent.update_instructions = AsyncMock()
+    session = MagicMock()
+    room = SimpleNamespace(local_participant=SimpleNamespace(publish_data=AsyncMock()))
+    clock = _Clock()
+    h = build_relay_handlers(session, agent, room=room, clock=clock)
+    await h.on_agent_presence(True, "Claude")
+    await h.on_activity(_pkt({"lines": ["17:12:03 Bash: Tests laufen lassen"]}))
+    await h.on_user_text("Was macht Claude gerade?")
+    clock.t += 3
+    await h.on_status(_pkt({"open": ["Doku"], "faq": [{"q": "Wann live?", "a": "Heute."}]},
+                           "operator.status"))                         # Board ohne doing
+    session.say.assert_called_once_with("Zuletzt bei Claude: Tests laufen lassen.",
+                                        allow_interruptions=True)
+
+
+def test_core_reads_activity_with_status():
+    for t in (core_normal("Claude"), core_live("Claude")):
+        assert "(gerade, offen, erledigt, zuletzt gemacht)" in t

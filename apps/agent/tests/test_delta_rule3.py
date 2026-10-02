@@ -65,7 +65,7 @@ def test_rules_no_progress_example(core):
 def test_status_read_out_and_user_instruction_precedence(core):
     t = core("Claude")
     assert "Bittet der Nutzer, den Status oder die Liste vorzulesen" in t
-    assert "ganzen Status vor (gerade, offen, erledigt), ruhig in mehreren Sätzen" in t
+    assert "ganzen Status vor (gerade, offen, erledigt, zuletzt gemacht), ruhig in mehreren Sätzen" in t
     assert '"Im Status steht gerade nichts."' in t
     rule8 = t.split("8. ", 1)[1]
     assert rule8.startswith("Eine ausdrückliche Anweisung des Nutzers geht vor Stil- und "
