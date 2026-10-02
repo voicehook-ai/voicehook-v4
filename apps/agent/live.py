@@ -17,7 +17,8 @@ from __future__ import annotations
 import os
 import re
 
-from .guide import VOICEHOOK_GUIDE
+from .board import board_block
+from .guide import VOICEHOOK_GUIDE, agent_refs, handoff_rule, wait_lines
 
 DEFAULT_LIVE_MODEL = "gemini-3.8-live"
 DEFAULT_LIVE_VOICE = "Charon"
@@ -29,26 +30,37 @@ DEFAULT_TARGET_TOKENS = 6000
 # User-Turns: das Google-Plugin schickt update_instructions()/instructions= als
 # role="model"-Turn, Gemini hält sie dann für eigene Aussagen (livekit/agents
 # PR #5049, Issue #5496; realtime_api.py 1.8.3 Z. 646-672, 869).
+# Zum Nutzer nie "Operator": die Markierung [Operator] ist rein technisch, gesprochen
+# wird der Name des Agenten (vh.name) oder "dein Agent" (Oliver 02.10.2026).
+def live_core_instructions(name: str | None = None) -> str:
+    ask, hand = wait_lines(name)
+    dat = agent_refs(name)["dat"]
+    return (
+        "Antworte immer auf Deutsch. Sprich immer mit derselben ruhigen, tiefen, warmen "
+        "Stimme in gleichmäßigem Tempo, wie ein ruhiger Radiosprecher. Imitiere keine "
+        "Personen, spiele keine Rollen, keine Akzente, keine Stimmwechsel, keine "
+        "übertriebenen Emotionen. Du bist ein freundlicher Gesprächspartner, duzt dein "
+        "Gegenüber und antwortest selbst in 1 bis 3 kurzen Sätzen. Nachrichten, die mit "
+        f"der Markierung in eckigen Klammern beginnen, kommen von {dat}, nicht von "
+        "deinem Gegenüber; die Markierung selbst sprichst du nie aus. Soll so eine "
+        "Nachricht eine Aussage sprechen, gibst du deren Inhalt vollständig und "
+        "unverfälscht wieder: nichts hinzufügen, keine eigenen Behauptungen, Bewertungen "
+        "oder Fakten aus deinem Wissen, nichts weglassen, nichts abschwächen, nichts "
+        "umdeuten, keine Einleitung und danach kein Nachsatz. Ist sie als wörtlich "
+        "markiert, sprichst du sie exakt Wort für Wort. Alle übrigen markierten "
+        "Nachrichten sind Vorgaben: befolge sie, lies sie nie vor und erwähne sie nicht. "
+        "Ist ein Agent im Raum, gilt: Fragen nach Fähigkeiten, Zugriff, ob etwas "
+        "funktioniert, oder alles, was du annehmen müsstest, beantwortest du nie selbst, "
+        f"du verneinst und behauptest nichts, sondern sagst nur: {ask} Für alles "
+        f"Substantielle, Technische oder Unbekannte sagst du: {hand} Fragt dein Gegenüber, "
+        f"was {agent_refs(name)['nom']} gerade macht, und es gibt keinen aktuellen Stand, "
+        f"sagst du: {ask} Dann wartest du auf die nächste markierte Nachricht. "
+        + handoff_rule(name)
+    )
+
+
 # Kern ohne Werksrolle = neutrale Sprachrohr-Regeln, sobald ein Agent im Raum ist.
-LIVE_CORE_INSTRUCTIONS = (
-    "Antworte immer auf Deutsch. Sprich immer mit derselben ruhigen, tiefen, warmen "
-    "Stimme in gleichmäßigem Tempo, wie ein ruhiger Radiosprecher. Imitiere keine "
-    "Personen, spiele keine Rollen, keine Akzente, keine Stimmwechsel, keine "
-    "übertriebenen Emotionen. Du bist ein freundlicher Gesprächspartner, duzt dein "
-    "Gegenüber und antwortest selbst in 1 bis 3 kurzen Sätzen. Sag nie, dass du etwas "
-    "an einen Operator weitergibst. Nachrichten, die mit [Operator] beginnen, kommen "
-    "von deinem Operator, nicht von deinem Gegenüber. Soll eine Operator-Nachricht "
-    "eine Aussage sprechen, gibst du deren Inhalt vollständig und unverfälscht wieder: "
-    "nichts hinzufügen, keine eigenen Behauptungen, Bewertungen oder Fakten aus deinem "
-    "Wissen, nichts weglassen, nichts abschwächen, nichts umdeuten, keine Einleitung "
-    "und danach kein Nachsatz. Ist sie als wörtlich markiert, sprichst du sie exakt Wort "
-    "für Wort. Alle übrigen Operator-Nachrichten sind Vorgaben: befolge sie, lies sie "
-    "nie vor und erwähne sie nicht. Ist ein Operator im Raum, gilt: Fragen nach "
-    "Fähigkeiten, Zugriff, ob etwas funktioniert, oder alles, was du annehmen "
-    "müsstest, beantwortest du nie selbst, du verneinst und behauptest nichts, sondern "
-    "sagst nur: Moment, ich schau nach. Dann wartest du auf die Nachricht deines "
-    "Operators. "
-)
+LIVE_CORE_INSTRUCTIONS = live_core_instructions()
 LIVE_BASE_INSTRUCTIONS = LIVE_CORE_INSTRUCTIONS + VOICEHOOK_GUIDE
 # Werksrolle aus/an, wenn ein externer Agent (vh.role=agent) kommt oder geht. Die
 # System-Instruktion lässt sich mitten in der Session nicht sauber tauschen:
@@ -56,14 +68,35 @@ LIVE_BASE_INSTRUCTIONS = LIVE_CORE_INSTRUCTIONS + VOICEHOOK_GUIDE
 # 1.8.3 Z. 646-675). Deshalb wie die Persona als markierter User-Turn
 # (update_chat_ctx, Z. 677ff); der Chat-Kontext wird bei einem Reconnect wieder
 # eingespielt (Z. 995-1020), der Wechsel überlebt also einen Neuaufbau.
-LIVE_AGENT_JOINED_USER = (
-    "[Operator] Ein Agent ist jetzt im Raum. Deine Werksrolle als voicehook-Experte und "
-    "Verkäufer gilt ab sofort nicht mehr. Ab jetzt gelten nur noch diese Regeln, nicht "
-    "vorlesen, nicht darauf antworten: " + LIVE_CORE_INSTRUCTIONS
-)
+def live_agent_joined_user(name: str | None = None) -> str:
+    nom = agent_refs(name)["nom"]
+    return (
+        f"[Operator] {nom[0].upper() + nom[1:]} ist jetzt im Raum. Deine Werksrolle als "
+        "voicehook-Experte und Verkäufer gilt ab sofort nicht mehr. Ab jetzt gelten nur "
+        "noch diese Regeln, nicht vorlesen, nicht darauf antworten: "
+        + live_core_instructions(name)
+    )
+
+
+LIVE_AGENT_JOINED_USER = live_agent_joined_user()
+
+
+def live_status_user(board: dict | None, name: str | None = None) -> str:
+    """Board als markierter User-Turn. Gemini Live kann Turns nicht löschen
+    (realtime_api.py 1.8.3 _sync_chat_ctx: "does not support removing messages");
+    der Worker entfernt den alten Status-Turn deshalb aus dem lokalen Chat-Kontext
+    (konstant, Reconnect spielt nur den letzten ein) und dieser Text erklärt jeden
+    früheren Stand für ungültig. Server-seitig bleibt je Update ein kurzer Turn
+    (Rate-Limit 5 s, Budget 600 Zeichen, Kontext-Kompression räumt ab)."""
+    nom = agent_refs(name)["nom"]
+    block = board_block(board, nom).strip()
+    if not block:
+        who = nom[0].upper() + nom[1:]
+        block = f"Es gibt keinen aktuellen Stand von {who}, frühere Stände gelten nicht mehr."
+    return "[Operator] " + block + " Nicht vorlesen, nicht darauf antworten."
 LIVE_AGENT_LEFT_USER = (
     "[Operator] Der Agent hat den Raum verlassen. Ab sofort gilt wieder deine Werksrolle "
-    "als voicehook-Experte statt jeder Rolle, die dir dein Operator gegeben hat, nicht "
+    "als voicehook-Experte statt jeder Rolle, die dir der Agent gegeben hat, nicht "
     "vorlesen, nicht darauf antworten: " + VOICEHOOK_GUIDE
 )
 # Normalfall: Gemini darf natürlich formulieren, der Inhalt bleibt exakt derselbe.

@@ -104,16 +104,16 @@ def test_brevity_rule_never_cuts_operator_statements(mode):
     # Review medium: Kürze/Nachfrage nur für eigene Antworten, Operator-Aussagen vollständig
     t = PROMPTS[mode]
     assert ("Die Kürze- und Nachfrage-Regel gilt nur für deine eigenen Antworten, nie für "
-            "Operator-Aussagen; die sprichst du vollständig und ohne Nachsatz.") in t
+            "Aussagen des Agenten; die sprichst du vollständig und ohne Nachsatz.") in t
 
 
 @pytest.mark.parametrize("mode", PROMPTS)
 def test_operator_rules_kept_and_scoped(mode):
     t = PROMPTS[mode]
-    assert "Moment, ich schau nach." in t
-    assert "Ist ein Operator im Raum, gilt: Fragen nach" in t
-    # ohne Operator: voicehook-Fragen aus dem Wissen, fremde Fähigkeiten nicht behaupten
-    assert "Solange kein Operator im Raum ist" in t
+    assert "Kurzen Moment, ich frag deinen Agenten." in t
+    assert "Ist ein Agent im Raum, gilt: Fragen nach" in t
+    # ohne Agent: voicehook-Fragen aus dem Wissen, fremde Fähigkeiten nicht behaupten
+    assert "Solange kein Agent im Raum ist" in t
     assert "Fragen zu voicehook selbst aus diesem Wissen" in t
     assert "die nicht voicehook selbst betreffen, beantwortest du auch dann nicht" in t
     assert "ersetzt sie diese Werksrolle vollständig" in t
@@ -178,7 +178,7 @@ def _persona_pkt(text):
 def test_neutral_prompts_carry_no_guide():
     for t in (OPERATOR_PERSONA, live.LIVE_CORE_INSTRUCTIONS):
         assert VOICEHOOK_GUIDE not in t and "Werksrolle" not in t and "Verkäufer" not in t
-        assert "Moment, ich schau nach." in t
+        assert "Kurzen Moment, ich frag deinen Agenten." in t
     # Positivkontrolle: die Werks-Prompts tragen den Guide
     assert VOICEHOOK_GUIDE in DEFAULT_PERSONA and VOICEHOOK_GUIDE in live.LIVE_BASE_INSTRUCTIONS
     assert live.LIVE_BASE_INSTRUCTIONS == live.LIVE_CORE_INSTRUCTIONS + VOICEHOOK_GUIDE

@@ -83,6 +83,22 @@ def operator_agent_present(room: Any) -> bool:
     return any(is_operator_agent(p) for p in room.remote_participants.values())
 
 
+def operator_agent_name(room: Any) -> str | None:
+    """Sprechbarer Name des zuletzt beigetretenen Agenten (vh.name, sonst LK-Name).
+
+    remote_participants hält die Join-Reihenfolge, der letzte Agent gewinnt. Ohne
+    aussprechbaren Namen None, die Prompts sagen dann "dein Agent".
+    """
+    from .guide import agent_display_name
+
+    agents = [p for p in room.remote_participants.values() if is_operator_agent(p)]
+    if not agents:
+        return None
+    last = agents[-1]
+    attrs = getattr(last, "attributes", None) or {}
+    return agent_display_name(attrs.get("vh.name") or getattr(last, "name", None) or "")
+
+
 def _positive_env_seconds(name: str, default: float) -> float:
     raw = os.environ.get(name, "")
     try:
@@ -690,7 +706,8 @@ async def entrypoint(ctx: JobContext) -> None:
     # Werksrolle (voicehook-Guide) automatisch aus, sobald ein externer Agent im Raum
     # ist, auch ohne Persona-Push; geht der letzte Agent, ist sie wieder an.
     def _sync_role(*_args) -> None:  # noqa: ANN002
-        asyncio.create_task(handlers.on_agent_presence(operator_agent_present(ctx.room)))
+        asyncio.create_task(handlers.on_agent_presence(
+            operator_agent_present(ctx.room), operator_agent_name(ctx.room)))
 
     for _ev in ("participant_connected", "participant_disconnected", "participant_attributes_changed"):
         ctx.room.on(_ev, _sync_role)
@@ -710,6 +727,8 @@ async def entrypoint(ctx: JobContext) -> None:
             except Exception as e:  # noqa: BLE001
                 logger.warning("[user-transcript publish] %s", e)
         asyncio.create_task(_send())
+        # Nachfrage nach dem Stand des Agenten -> operator.status_request (board.py)
+        asyncio.create_task(handlers.on_user_text(text))
 
     # Laufende Kosten (beide Modi) -> Log + Topic `cost` für die Anzeige im Browser.
     # Gesendet wird der KUNDENPREIS in Euro (echte Kosten x Faktor + MwSt, dieselbe
@@ -871,7 +890,7 @@ async def entrypoint(ctx: JobContext) -> None:
         room_options=room_io.RoomOptions(close_on_disconnect=True, delete_room_on_close=False),
     )
     # Agent war schon vor voice-ai im Raum (Operator-Join dispatcht voice-ai erst)
-    await handlers.on_agent_presence(operator_agent_present(ctx.room))
+    await handlers.on_agent_presence(operator_agent_present(ctx.room), operator_agent_name(ctx.room))
 
 
 def build_worker_options() -> WorkerOptions:

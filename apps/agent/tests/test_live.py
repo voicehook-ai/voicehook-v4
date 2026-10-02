@@ -129,7 +129,7 @@ async def test_live_persona_is_user_turn_not_update_instructions():
 
 def test_live_base_instructions_pin_voice_and_language():
     t = live.LIVE_BASE_INSTRUCTIONS
-    assert "Deutsch" in t and "Stimme" in t and "[Operator]" in t
+    assert "Deutsch" in t and "Stimme" in t and "Markierung in eckigen Klammern" in t
 
 
 # ── Kosten mit offengelegter Basis: Menge aus Metrik x geprüfter Preis ──
@@ -290,7 +290,7 @@ def test_base_prompts_defer_capability_questions_to_operator():
     """Oliver 01.10.: Stimme verneinte Gmail-Zugriff des Operators. Faehigkeitsfragen -> nachschauen."""
     from agent.relay import DEFAULT_PERSONA
 
-    assert "ich schau nach" in live.LIVE_BASE_INSTRUCTIONS
+    assert "ich frag deinen Agenten" in live.LIVE_BASE_INSTRUCTIONS
     assert "Fähigkeiten" in live.LIVE_BASE_INSTRUCTIONS
-    assert "ich schau nach" in DEFAULT_PERSONA
+    assert "ich frag deinen Agenten" in DEFAULT_PERSONA
     assert "Faehigkeiten" in DEFAULT_PERSONA

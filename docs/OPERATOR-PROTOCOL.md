@@ -59,12 +59,12 @@ in the header `Authorization: Bearer <session>`, never in a URL.
 | endpoint | body / query | answer |
 |---|---|---|
 | `POST /api/bridge/join` | `{invite_url` or `room`+`invite?, name, model, identity?, greet?, persona?, force_persona?, idle_timeout?}` (`idle_timeout` in minutes, default 10, 0 = off) | `{session, expires_in, room, identity, idle_timeout_s, peers, notes}` |
-| `GET /api/bridge/next?timeout=50` | max 120 s | one object like CLI `next`: `{type: user\|revise\|timeout\|ended, text, ...}` |
+| `GET /api/bridge/next?timeout=50` | max 120 s | one object like CLI `next`: `{type: user\|revise\|status_request\|timeout\|ended, text, ...}`; plus `status_stale: true` when the board is older than 5 min and the user spoke since; `agent_said: [..]` = what the voicebot said on its own since the last `next` (max 3 lines / 400 chars, never your own echoes) |
 | `POST /api/bridge/say` | `{text, mode?}` | `{ok, seq}`; payload on the wire `{text, _seq, _ts, mode?}` like the CLI |
 | `POST /api/bridge/leave` | `{say?}` (optional) | `{ok, type: "leaving"}`; `say` is spoken with `mode:"append"` first |
 | `GET /api/bridge/status` | | `{connected, pending, idle_s, peers[], sse_clients, ...}` |
 | `GET /api/bridge/events` | | Server-Sent Events, see below |
-| `POST /api/bridge/send` | `{topic, payload, force?}` | raw publish; topics: `operator.say`, `operator.persona`, `operator.mode`, `operator.interrupt`, `operator.inject`, `operator.backchannel` (else 400) |
+| `POST /api/bridge/send` | `{topic, payload, force?}` | raw publish; topics: `operator.say`, `operator.persona`, `operator.mode`, `operator.interrupt`, `operator.inject`, `operator.backchannel`, `operator.status` (else 400) |
 
 SSE events (`event: <type>` + `data: <json>`; comment `: ping` every 15 s): `hello`
 `{room, identity, expires_in, peers}`, `room-state` `{peers}`, `data` `{topic, payload,
@@ -104,11 +104,36 @@ All payloads are JSON on the LiveKit data channel. The CLI maps stdin lines
 | `operator.mode` | operator to agent | `{mode:"strict"\|"auto"}` | strict: the agent never answers on its own (`--strict-relay`) |
 | `operator.interrupt` | operator to agent | `{}` | stop everything; unspoken rest comes back as `operator.revise` |
 | `operator.inject` | operator to agent | `{text, role?}` | synthetic chat-context entry, not spoken |
+| `operator.status` | operator to agent | `{doing, open[], done[]}` (or `{text}` = doing) | status board, see below; replaces the previous one, never spoken |
+| `operator.status_request` | agent to operator | `{text}` | the user asked for your status; answer at once with `operator.status` |
 | `operator.notice` | agent to everyone | `{kind, minutes_left, seconds_left, free_s, free_eur, balance_eur, topup_url, text}` | server notice, see below; sent reliable |
 | `cost` | agent to everyone | `{eur, mode}` (admin rooms also `usd, basis, prices_as_of`) | running customer price of the call, see below; only sent when the sum changed |
 | `transcript` | agent to everyone | `{role, text}` | see transcript roles |
 | `transcript.live` | agent to everyone | `{phase:"start", role:"operator", id, text}` / `{phase:"end", role, id, interrupted}` | an `operator.say` output started / finished playing (pipeline mode only); for the browser's live reading. Not an echo: `transcript` alone means "spoken" |
 | `agent.heartbeat` | agent to everyone | `{ts, room, probe, healthy}` | every 30 s; no tick for more than 60 s = worker dead |
+
+## operator.status (board)
+
+The voicebot never says "Operator" to the user; it names you by your `vh.name`
+(`--name`, letters only, max 24 chars, else "dein Agent"): "Kurzen Moment, ich frag
+Claude." Your status board sits at a fixed place in its instructions:
+`{doing: "baut gerade den Fix", open: ["Tests"], done: ["Analyse"]}`. Every send
+REPLACES the whole board (context never grows). Budget 600 chars in total (each item
+max 120, 10 per list): `done` is cut first (oldest), then `open` (last). Empty or
+`doing:"fertig"` with no lists clears it. At most one update per 5 s per room is applied,
+the last one wins. Nothing is spoken; asked for the status, the voicebot answers from the
+board ("Kurz Moment, Claude baut gerade den Fix").
+
+Triggers: push the board on every task change (started, finished, new task). When the
+user asks for your status, the voicebot sends `operator.status_request`
+(`next` -> `{type:"status_request"}`); answer with a fresh board at once. If it arrives
+within 8 s, the voicebot speaks one sentence from `doing`. `next` also carries
+`status_stale: true` when your board is older than 5 min and the user spoke since.
+
+Keep the main loop free: answer a `user` turn within ~3 s and hand slow work (shell, web,
+edits, builds) to a background agent. CLI 0.7.0 measures the time from a `user` turn
+leaving `next` to your next `say`; over 8 s the following `next` carries
+`latency_warning: {seconds, hint}`. Nothing is spoken automatically.
 
 ## operator.say modes
 
