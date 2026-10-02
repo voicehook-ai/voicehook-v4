@@ -1846,6 +1846,50 @@ body.theme-light #vh-auth-modal .vh-auth-msg.warn { color: #b8641a; }
 <script type="module">
 import * as THREE from 'three';
 
+// ── Handy-Profil (Oliver 02.10.) ─────────────────────────────────────────────
+// NUR Handys: grober Zeiger UND kurze Bildschirmseite <= 500 CSS-px. Tablets und
+// Desktop laufen exakt wie bisher (alle Abweichungen unten hängen an VH_PHONE).
+// Standard = Olivers Handy-Werte (Zoom 0,96x auf 390x664, Partikel 0 %, Helligkeit
+// 100 %, Bewegung 99 %, Ring-Puls 84 %, Satelliten 40 %, Cluster 48 %) als Mitte
+// der Handy-Stufen; Punktgröße auf erweiterter Skala (max x1,8) für einen
+// geschlossen wirkenden Ring. Die Werte stehen als HTML-Standard in den Reglern,
+// damit "Zurücksetzen" und die Prozentanzeige sie ohne Sonderweg verwenden.
+const VH_PHONE = (() => {
+  try { return matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 500; }
+  catch (_) { return false; }
+})();
+window.vhPhone = VH_PHONE;
+const VH_PHONE_SIZE_MAX = 0.36;   // 0,20 x 1,8
+const VH_PHONE_DEF = {
+  'size': 0.24, 'particle-count': 0.10, 'brightness': 1.5, 'fx-intensity': 1.72,
+  'ring-fx': 2.1, 'sat-amount': 0.40, 'cluster': 0.48,
+};
+const VH_PHONE_SAT_MUSIC = 0.70;   // Musikmodus: Satelliten 70 %
+if (VH_PHONE) {
+  // Einmalig: gespeicherte Regler-Werte und Stufe vom alten Handy-Standard
+  // (Eco, Renderauflösung 0,75) verwerfen, damit der neue Standard greift.
+  try {
+    if (localStorage.getItem('vh-phone-look-v1') !== '1') {
+      const raw = localStorage.getItem('vh-music-state-v3');
+      if (raw) {
+        const s = JSON.parse(raw) || {};
+        ['fx', 'ring', 'sat', 'pc', 'bright', 'size', 'cl', 'zoom'].forEach(k => { delete s[k]; });
+        localStorage.setItem('vh-music-state-v3', JSON.stringify(s));
+      }
+      localStorage.removeItem('vh-akku-v1');
+      localStorage.removeItem('vh-akku-custom-v1');
+      localStorage.removeItem('vh-hd-v1');
+      localStorage.setItem('vh-phone-look-v1', '1');
+    }
+  } catch (_) {}
+  const sz = document.getElementById('size');
+  if (sz) sz.max = String(VH_PHONE_SIZE_MAX);
+  for (const [id, v] of Object.entries(VH_PHONE_DEF)) {
+    const el = document.getElementById(id);
+    if (el) { el.setAttribute('value', String(v)); el.value = String(v); }
+  }
+}
+
 // ── Scene ────────────────────────────────────────────────────────────────────
 const scene    = new THREE.Scene();
 const camera   = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 100);
@@ -1989,6 +2033,8 @@ function makeDustTexture() {
   // closer to the brightest source pixel, so small sprites still pop.
   tex.generateMipmaps = true;
   tex.minFilter = THREE.NearestMipmapLinearFilter;
+  // Handy: trilinear statt Nearest-Mip -> runde, weich ausgekantete Punkte statt Treppen.
+  if (VH_PHONE) tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.magFilter = THREE.LinearFilter;
   return tex;
 }
@@ -2273,6 +2319,13 @@ const VH_AKKU = {
   high:   { cap: 1.00, fps: 0,  pr: 0    },
   ultra:  { cap: 1.00, fps: 0,  pr: 0    },
 };
+// Handy: eigene Pixeldichte je Stufe (HD = echte Geräteauflösung ab Hoch, mind. 2
+// ab Normal; Eco 1,5; SD immer 1). Eco darunter, Hoch/Ultra darüber.
+const VH_PHONE_PR = { eco: 1.5, normal: 2, high: 3, ultra: 3 };
+if (VH_PHONE) {
+  VH_AKKU.eco = { cap: 0.10, capPat: 0.20, fps: 30, pr: 0 };
+  VH_AKKU.normal = { cap: 1.00, fps: 0, pr: 0 };
+}
 const VH_AKKU_OLD = { full: 'normal', balanced: 'normal', saver: 'eco', minimal: 'eco' };
 const VH_AKKU_KEY = 'vh-akku-v1';
 // Punkt 9: jede Stufe setzt sichtbar Partikel und Punktgröße (weniger, dafür
@@ -2289,6 +2342,17 @@ const VH_AKKU_PRESET = {
 // (Oliver 02.10.: Normal und Hoch waren bei Mustern gleich, der Regler unter 60 %
 // wirkungslos). Paletten-Styles behalten VH_AKKU_PRESET.
 const VH_AKKU_PRESET_PAT = { eco: 0.25, normal: 0.60, high: 0.80, ultra: 1.00 };
+// Handy: Normal = Olivers Werte (Partikel 0 %, Punktgröße VH_PHONE_DEF.size);
+// Eco gleiche Partikel, größere Punkte; Hoch/Ultra mehr Partikel, feinere Punkte.
+// Muster-Styles auf dem Handy mit weniger Partikeln (die Punkte wachsen mit, furMul).
+if (VH_PHONE) {
+  const s0 = VH_PHONE_DEF.size;
+  VH_AKKU_PRESET.eco    = { pc: 0.10, size: +(s0 * 1.15).toFixed(3) };
+  VH_AKKU_PRESET.normal = { pc: VH_PHONE_DEF['particle-count'], size: s0 };
+  VH_AKKU_PRESET.high   = { pc: 0.20, size: +(s0 * 0.85).toFixed(3) };
+  VH_AKKU_PRESET.ultra  = { pc: 0.35, size: +(s0 * 0.75).toFixed(3) };
+  Object.assign(VH_AKKU_PRESET_PAT, { eco: 0.20, normal: 0.30, high: 0.45, ultra: 0.60 });
+}
 const VH_AKKU_CUSTOM_KEY = 'vh-akku-custom-v1';
 // "Eigene" (Regler von Hand verstellt): der Deckel der Stufe entfällt, der Regler
 // wirkt voll. Spiegel des localStorage-Flags, weil vhEffectiveN je Bild läuft.
@@ -2300,6 +2364,7 @@ function vhSetAkkuCustom(on) {
 // Schwaches Gerät (Punkt 15): Touch/grob + kleiner Viewport, oder <= 4 Kerne.
 // Die Bildzeit der ersten 2 s prüft vhAkkuAutoCheck() zusätzlich.
 function vhAkkuDefault() {
+  if (VH_PHONE) return 'normal';   // Handy-Stufen sind eigens kalibriert, Normal = Mitte
   try {
     const small = matchMedia('(max-width: 640px)').matches;
     const coarse = matchMedia('(pointer: coarse)').matches;
@@ -2398,6 +2463,7 @@ function vhPcForStyle(prevPat) {
   }
 }
 let vhDrawN = -1;
+let vhFreqBinsN = N;   // Handy: bis hierhin sind freqBin aktuell (rebuildFreqBins)
 // Zeichenbereich sofort aus vhEffectiveN setzen und den Cache mitführen. Direktes
 // geo.setDrawRange(0, activeN) umging den Cache: unter Eco (Kappung 10 %) blieben
 // dann ungekappt Punkte in Hintergrundfarbe sichtbar (helles Theme: blasse Decke).
@@ -2545,7 +2611,7 @@ function vhSimStep() {
   if (points) { points.scale.set(1, 1, 1); }
 
   // ── Dynamische Inseln: Noise-Pattern driftet langsam mit clock ───────────
-  if (islandStrength > 0.001 && (clock - lastIslandT) > 0.18) {
+  if ((islandStrength > 0.001 && (clock - lastIslandT) > 0.18) || (VH_PHONE && nA > vhFreqBinsN)) {
     rebuildFreqBins(clock * 0.18);
     lastIslandT = clock;
   }
@@ -2567,6 +2633,10 @@ function vhSimStep() {
   // Plus: idle low-activity mode (30 min ohne call-activity) downgraded
   // alle heavyFx-pfade — sparen CPU bis activity resumed (vhBumpActivity).
   const heavyFx = intensity > 0.05 && !window.vhIdleLowActivity;
+  // Handy: die Trig-Kräfte (heavyFx) je Schritt nur für jedes zweite Partikel,
+  // abwechselnd, mit doppelter Stärke -> gleicher Mittelwert, halbe Trig-Last.
+  const hfxPar = VH_PHONE ? (vhLayoutTick & 1) : -1;
+  const hfxMul = VH_PHONE ? 2 : 1;
 
   for (let i = 0; i < nA; i++) {
     const i3 = i * 3;
@@ -2651,11 +2721,11 @@ function vhSimStep() {
 
       // Chaos-Kick: regulär bei beatEnv>0.15, leichtes Sub-Bass-Plus zusätzlich
       // Bei niedrigem fx-Slider komplett aus (3 Trig/Particle eingespart)
-      if (heavyFx && (beatEnv > 0.15 || ultraDeep > 0.10)) {
+      if (heavyFx && (hfxPar < 0 || (i & 1) === hfxPar) && (beatEnv > 0.15 || ultraDeep > 0.10)) {
         const cX = Math.sin(turb[i] * 11.3 + clock * 0.5);
         const cY = Math.cos(turb[i] *  9.7 + clock * 0.3);
         const cZ = Math.sin(turb[i] * 13.1 + clock * 0.7);
-        const cMag = (beatStrong + deepEject * 1.2) * satReact * 0.018;
+        const cMag = (beatStrong + deepEject * 1.2) * satReact * 0.018 * hfxMul;
         vel[i3]   += cX * cMag;
         vel[i3+1] += cY * cMag;
         vel[i3+2] += cZ * cMag;
@@ -2668,13 +2738,14 @@ function vhSimStep() {
       const phase    = turb[i];
       const speedFreq = 4 + fNorm * 28;
       const liftI    = lift[i] * intensity;            // FX-Slider-skaliert
+      const hfx      = heavyFx && (hfxPar < 0 || (i & 1) === hfxPar);
 
       const breathe = amp * liftI * 0.0012;
       vel[i3]   += radX * breathe;
       vel[i3+1] += radY * breathe;
 
-      if (heavyFx) {
-        const univOsc = Math.sin(clock * 9 + phase * 1.2) * amp * liftI * 0.0020;
+      if (hfx) {
+        const univOsc = Math.sin(clock * 9 + phase * 1.2) * amp * liftI * 0.0020 * hfxMul;
         vel[i3]   += radX * univOsc;
         vel[i3+1] += radY * univOsc;
       }
@@ -2692,8 +2763,8 @@ function vhSimStep() {
         vel[i3+1] += radY * burst;
       }
 
-      if (heavyFx && bassRaw > 0.04 && bassMask > 0) {
-        const bassW = bassRaw * (0.6 + bassRaw * 0.7);
+      if (hfx && bassRaw > 0.04 && bassMask > 0) {
+        const bassW = bassRaw * (0.6 + bassRaw * 0.7) * hfxMul;
         const vib = Math.sin(clock * 38 + phase * 2.7) * bassW * liftI * bassMask * 0.009;
         vel[i3]   += radX * vib;
         vel[i3+1] += radY * vib;
@@ -2706,9 +2777,9 @@ function vhSimStep() {
         vel[i3+1] += tanY * spin;
       }
 
-      if (heavyFx) {
+      if (hfx) {
         const oscDrive = band * 0.55 + amp * 0.45;
-        const eqOsc = Math.sin(clock * speedFreq + phase) * oscDrive * liftI * 0.0025;
+        const eqOsc = Math.sin(clock * speedFreq + phase) * oscDrive * liftI * 0.0025 * hfxMul;
         vel[i3]   += radX * eqOsc;
         vel[i3+1] += radY * eqOsc;
       }
@@ -2893,9 +2964,18 @@ function vhSimStep() {
   const invR = lightInvert ? 0.957 : 0;
   const invG = lightInvert ? 0.957 : 0;
   const invB = lightInvert ? 0.969 : 0;
-  for (let i = nA; i < N; i++) {
-    const i3 = i * 3;
-    col[i3] = invR; col[i3+1] = invG; col[i3+2] = invB;
+  // Handy: die Punkte ab nA liegen außerhalb der drawRange und werden nie
+  // gezeichnet -> weder umfärben noch hochladen (bei Partikel 0 % sonst
+  // 36000 Schleifen-Durchläufe und 2 x 480 KB Upload je Schritt umsonst).
+  if (!VH_PHONE) {
+    for (let i = nA; i < N; i++) {
+      const i3 = i * 3;
+      col[i3] = invR; col[i3+1] = invG; col[i3+2] = invB;
+    }
+  } else {
+    const pa = geo.attributes.position, ca = geo.attributes.color;
+    pa.clearUpdateRanges(); pa.addUpdateRange(0, nA * 3);
+    ca.clearUpdateRanges(); ca.addUpdateRange(0, nA * 3);
   }
 
   geo.attributes.position.needsUpdate = true;
@@ -3009,6 +3089,10 @@ const HD_KEY = 'vh-hd-v1';
 const btnHd = document.getElementById('btn-hd');
 let hdOn = (() => { try { return localStorage.getItem(HD_KEY) !== '0'; } catch { return true; } })();
 function vhPixelRatio() {
+  // Handy (Ursache "auch in HD pixelig"): bisher Eco-Stufe mit pr 0,75 -> Canvas mit
+  // 0,75 statt 3 Pixeln je CSS-Pixel, HD/SD ohne Wirkung. Jetzt HD = Stufen-Dichte
+  // bis zur echten Geräteauflösung, SD = 1.
+  if (VH_PHONE) return hdOn ? Math.min(devicePixelRatio, VH_PHONE_PR[vhAkku] || 2) : 1;
   const a = VH_AKKU[vhAkku] || VH_AKKU.full;
   if (a.pr) return Math.min(a.pr, hdOn ? Math.min(2, devicePixelRatio) : 1);
   return hdOn ? Math.min(2, devicePixelRatio) : 1;
@@ -3131,7 +3215,8 @@ let vhZoomMax = VH_ZOOM_MAX;
 // Außendurchmesser des Rings = 61 % der kleineren Fensterseite (Referenz:
 // Olivers Screenshot, 225 von 372 px). Gilt, solange der Nutzer nicht selbst
 // zoomt; ein eigener Zoom wird gespeichert, "Zurücksetzen" kehrt hierher zurück.
-const VH_ZOOM_DIAM = 0.61;
+// Handy: Olivers Zoom 0,96x auf 390x664 (Safari) = Ring über 93 % der Breite.
+const VH_ZOOM_DIAM = VH_PHONE ? 0.93 : 0.61;
 let vhZoomDefault = 1;
 let vhZoomUser = false;
 // Ruhe-Kamera für Layout-Rechnungen: Blickrichtung wie bei Zoom 1, Abstand zur
@@ -3550,6 +3635,9 @@ const vhDiscNoise = new Float32Array(N);
 const vhDiscHist  = new Uint32Array(VH_DISC_HIST);
 function rebuildFreqBins(t) {
   t = t || 0;
+  // Handy: nur die gezeichneten Partikel (vhDrawN); wächst die Zahl, baut vhSimStep neu.
+  const nB = (VH_PHONE && vhDrawN > 0) ? Math.min(N, vhDrawN) : N;
+  vhFreqBinsN = nB;
   // Discrete-Mode (Earth): pure-spatial Inseln + tiefere Noise-Frequenzen für
   // größere zusammenhängende Patches (Kontinente statt speckle).
   const isDisc = !!discreteHues;
@@ -3557,7 +3645,7 @@ function rebuildFreqBins(t) {
   const dScale = isDisc ? discreteScale : 1;
   if (isDisc) vhDiscHist.fill(0);
   let nDisc = 0;
-  for (let i = 0; i < N; i++) {
+  for (let i = 0; i < nB; i++) {
     if (lift[i] > SAT_LIFT) continue;
     const x = orig[i*3], y = orig[i*3+1], z = orig[i*3+2];
     // Statt atan2(y,x) (hat seam bei ±π) nutzen wir cos/sin direkt — nahtlos
@@ -3588,7 +3676,7 @@ function rebuildFreqBins(t) {
   let acc = 0;
   for (let k = 0; k < VH_DISC_HIST; k++) { const c = vhDiscHist[k]; vhDiscHist[k] = acc; acc += c; }
   const inv = 1 / nDisc, hw = 1 / VH_DISC_HIST;
-  for (let i = 0; i < N; i++) {
+  for (let i = 0; i < nB; i++) {
     if (lift[i] > SAT_LIFT) continue;
     const v = vhDiscNoise[i];
     const k = Math.min(VH_DISC_HIST - 1, Math.max(0, Math.floor(v * VH_DISC_HIST)));
@@ -4397,14 +4485,17 @@ const btnModeMusic  = _vhById('btn-mode-music');
 const btnModeSpeech = _vhById('btn-mode-speech');
 
 function applyProfile(mode) {
-  const p = PROFILES[mode]; if (!p) return;
+  let p = PROFILES[mode]; if (!p) return;
   const prevActiveN = activeN;
   // Mobile-aggressive Defaults: weniger Partikel + sanftere FX um Akku/CPU zu
   // schonen. Desktop bleibt auf Original-Profile-Werten.
   const isMobile = matchMedia('(max-width: 640px)').matches;
-  const pcVal = isMobile ? Math.max(0.10, p.pc * 0.55) : p.pc;
-  const fxVal = isMobile ? p.fx * 0.80 : p.fx;
-  const ringVal = isMobile ? p.ring * 0.80 : p.ring;
+  // Handy: Olivers Standard (VH_PHONE_DEF) statt der pauschalen Mobil-Skalierung.
+  if (VH_PHONE) p = Object.assign({}, p, { fx: VH_PHONE_DEF['fx-intensity'], ring: VH_PHONE_DEF['ring-fx'],
+    sat: VH_PHONE_DEF['sat-amount'], bright: VH_PHONE_DEF.brightness, size: VH_PHONE_DEF.size });
+  const pcVal = VH_PHONE ? VH_PHONE_DEF['particle-count'] : isMobile ? Math.max(0.10, p.pc * 0.55) : p.pc;
+  const fxVal = (isMobile && !VH_PHONE) ? p.fx * 0.80 : p.fx;
+  const ringVal = (isMobile && !VH_PHONE) ? p.ring * 0.80 : p.ring;
   fxInput.value = fxVal;            intensity = fxToIntensity(fxVal);
   ringFxInput.value = ringVal;      ringFx = ringVal;
   satInput.value = p.sat;           satFraction = p.sat;
@@ -7213,7 +7304,10 @@ async function vhMusicOffForCall() {
     ['fx-intensity','island'].forEach(_maxRange);
     ['ring-fx','sat-amount'].forEach(_halfGlow);
     _setRange('brightness', VH_MUSIC_BRIGHT_REL);
-    _setRange('particle-count', 0.55);
+    // Handy: Satelliten 70 % und Partikel aus dem Handy-Standard (0,55 = 22000
+    // Partikel lief auf dem Handy mit ~15 Bildern/s).
+    if (VH_PHONE) { _setRange('sat-amount', VH_PHONE_SAT_MUSIC); _setRange('particle-count', VH_PHONE_DEF['particle-count']); }
+    else _setRange('particle-count', 0.55);
     const sizeEl = document.getElementById('size');
     if (sizeEl) _setRange('size', sizeEl.getAttribute('value') || 0.155);
   };
