@@ -10,7 +10,7 @@ variable "server_name" {
 
 variable "server_type" {
   type    = string
-  default = "cx23"
+  default = "cx33"
 }
 
 variable "location" {
