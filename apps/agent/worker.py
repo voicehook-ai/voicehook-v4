@@ -32,7 +32,7 @@ from livekit.agents import (
     room_io,
 )
 
-from . import budget, freetier, procctl
+from . import budget, freetier, procctl, turntiming
 from .billing import db as billing_db
 from .billing import pricing as billing_pricing
 from .llm import build_llm
@@ -758,6 +758,7 @@ async def entrypoint(ctx: JobContext) -> None:
     # TTS-Kanal jetzt aufbauen, nicht im ersten Satz (Prod 02.10.: 107 ms Loop-Blockade, verzerrt)
     if not live_mode:
         warm_tts(getattr(session, "tts", None))
+        turntiming.attach(session)  # [timing]-Zeile je Nutzer-Turn (nur Zeiten, keine Inhalte)
     if live_mode:
         from .live import live_base_instructions
 
