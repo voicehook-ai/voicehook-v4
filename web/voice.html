@@ -405,6 +405,15 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
     'auth.rate': 'Too many attempts. Please wait a few minutes.', 'auth.mailfail': 'The email could not be sent. Please try again later.',
     'auth.err': 'That did not work. Please try again.', 'auth.redirect': 'Continuing to {p} …'
   });
+  // Zweck-Hinweis oben (wegklickbar, localStorage vh-purpose-dismissed-v1)
+  Object.assign(D.de, {
+    'purpose.html': '<strong>voicehook.ai: Sprich mit deinen Agenten.</strong> Du redest, Delta hört zu und gibt es an deinen KI-Agenten (etwa Claude) weiter. Der arbeitet im Hintergrund und antwortet dir per Stimme.',
+    'purpose.aria': 'Worum es hier geht', 'purpose.close': 'Hinweis schließen'
+  });
+  Object.assign(D.en, {
+    'purpose.html': '<strong>voicehook.ai: Talk with your agents.</strong> You speak, Delta listens and relays it to your AI agent (e.g. Claude), which works in the background and answers you by voice.',
+    'purpose.aria': 'What this is about', 'purpose.close': 'Dismiss hint'
+  });
   window.VH_LANG = lang;
   window.VH_I18N = D;
   window.vhT = function (key, vars) {
@@ -1022,6 +1031,33 @@ body.theme-light #label .by, body.theme-light #label .tld { color: #5c5c66; }
   #label, #tagline { background: rgba(0,0,0,0.78); }
   body.theme-light #label, body.theme-light #tagline { background: rgba(255,255,255,0.88); }
 }
+/* Zweck-Hinweis (wegklickbar). Glas und Schrift wie #label/#tagline, X wie im
+   Design-Panel (.vh-dp-x). Desktop: links oben neben der Knopfreihe, außerhalb
+   des Rings. Schmal: unter der Kopfzeile, über dem Ring. Nie im Call. */
+#vh-purpose {
+  position: fixed; z-index: 10; top: 18px; left: 18px;
+  width: min(340px, calc(50vw - 120px));
+  padding: 8px 6px 9px 12px; border-radius: 12px;
+  font-family: var(--vh-mono); font-size: 12px; line-height: 1.45; letter-spacing: 0.01em;
+  color: rgba(255,255,255,0.78);
+  background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(10px) saturate(1.1); -webkit-backdrop-filter: blur(10px) saturate(1.1);
+}
+#vh-purpose[hidden] { display: none; }
+#vh-purpose p { margin: 0; }
+#vh-purpose strong { color: var(--vh-fg-0); font-weight: 500; }
+#vh-purpose .vh-dp-x { float: right; margin: -4px 0 0 4px; padding: 2px 6px; font-size: 16px; color: inherit; background: none; border: 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
+body.theme-light #vh-purpose { background: rgba(255,255,255,0.62); border-color: rgba(0,0,0,0.08); color: rgba(0,0,0,0.70); }
+body.theme-light #vh-purpose strong { color: #0b0b0f; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  #vh-purpose { background: rgba(0,0,0,0.78); }
+  body.theme-light #vh-purpose { background: rgba(255,255,255,0.88); }
+}
+@media (max-width: 640px) {
+  #vh-purpose { top: calc(env(safe-area-inset-top, 0px) + 58px); left: 12px; right: 12px; width: auto; font-size: 11px; line-height: 1.36; padding: 5px 4px 6px 10px; }
+}
+html.vh-phone #vh-purpose { top: calc(var(--vhm-sat, 0px) + 56px); left: calc(var(--vhm-sal, 0px) + 12px); right: calc(var(--vhm-sar, 0px) + 12px); width: auto; }
+html.vh-phone #vh-purpose .vh-dp-x { width: 32px; height: 32px; margin: -6px -2px 0 2px; padding: 0; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
 <style>#fx-ctl .section-head{font-size:0.65rem;opacity:0.5;letter-spacing:0.06em;text-transform:uppercase;padding:6px 2px 2px;font-weight:500;}#fx-ctl .section-sep{height:1px;background:rgba(255,255,255,0.06);margin:6px 0;}#fx-ctl select{background:rgba(255,255,255,0.04);color:var(--vh-fg-0,#f4f4f7);border:1px solid rgba(255,255,255,0.12);border-radius:6px;font:inherit;font-size:0.72rem;padding:4px 6px;outline:none;cursor:pointer;width:100%;}#fx-ctl select:hover{border-color:rgba(255,255,255,0.22);}#fx-ctl select:focus{border-color:var(--vh-teal,#6dc9d9);}#fx-ctl optgroup{font-style:normal;color:var(--vh-teal,#6dc9d9);}#fx-ctl option{color:var(--vh-fg-0,#f4f4f7);background:#101218;}</style>
@@ -1681,6 +1717,46 @@ body.theme-light #vh-auth-modal .vh-auth-msg.warn { color: #b8641a; }
   <span class="dlt"><svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg></span><span class="by">by</span><span>voicehook<span class="tld">.ai</span></span>
 </div>
 <div id="tagline" data-i18n="tagline">Talk with your agents</div>
+<div id="vh-purpose" role="note" aria-label="What this is about" data-i18n-aria="purpose.aria" hidden>
+  <button type="button" class="vh-dp-x" id="vh-purpose-x" aria-label="Dismiss hint" data-i18n-aria="purpose.close" data-i18n-title="purpose.close" title="Dismiss hint">&#215;</button>
+  <p data-i18n-html="purpose.html"></p>
+</div>
+<script>
+/* Zweck-Hinweis: sichtbar bis zum Klick auf X (localStorage). Ohne localStorage
+   trotzdem sichtbar und wegklickbar (nur für diese Seite). Während eines Calls
+   (Call-Knopf .on oder #vh-presence.vh-in-call) ausgeblendet. */
+(function () {
+  var KEY = 'vh-purpose-dismissed-v1';
+  var el = document.getElementById('vh-purpose');
+  var x = document.getElementById('vh-purpose-x');
+  if (!el || !x) return;
+  var dismissed = false;
+  try { dismissed = localStorage.getItem(KEY) === '1'; } catch (_) {}
+  function inCall() {
+    var c = document.getElementById('btn-vh-call'), p = document.getElementById('vh-presence');
+    return !!((c && c.classList.contains('on')) || (p && p.classList.contains('vh-in-call')));
+  }
+  function render() { el.hidden = dismissed || inCall(); }
+  x.addEventListener('click', function () {
+    dismissed = true;
+    try { localStorage.setItem(KEY, '1'); } catch (_) {}
+    render();
+  });
+  function watch() {
+    try {
+      var mo = new MutationObserver(render);
+      ['btn-vh-call', 'vh-presence'].forEach(function (id) {
+        var n = document.getElementById(id);
+        if (n) mo.observe(n, { attributes: true, attributeFilter: ['class'] });
+      });
+    } catch (_) {}
+    render();
+  }
+  render();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch);
+  else watch();
+})();
+</script>
 <script>
   // (spotify-iframe removed 2026-05-18 per Olli)
   if (false) {
