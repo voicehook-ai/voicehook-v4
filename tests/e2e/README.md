@@ -68,3 +68,16 @@ timeout 60  python3 tests/e2e/real_call.py --scenario joingate --offline   # 0 c
 ```
 
 Test rooms are named `etest-<word>-<word>-<CODE>`.
+
+## `purpose_banner.py` (offline, 0 cost)
+
+Purpose hint `#vh-purpose` in web/voice.html at 320/390/1280 px plus a touch
+phone (html.vh-phone): visible on first load, no overlap with the header, hidden
+during a call, X dismisses it (localStorage `vh-purpose-dismissed-v1`), stays
+hidden after reload, back after the key is removed, works without localStorage,
+0 console errors. Serves web/ locally, /api/* is stubbed in the browser.
+
+```bash
+timeout 150 python3 tests/e2e/purpose_banner.py --shots /tmp/shots
+timeout 60  python3 tests/e2e/purpose_banner.py --width 390 --web <old checkout>/web   # negative control: must FAIL
+```
