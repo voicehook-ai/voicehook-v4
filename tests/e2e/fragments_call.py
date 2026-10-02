@@ -676,22 +676,7 @@ def analyse(call: Call, out: Path) -> dict:
         for w in PROGRESS_WORDS.findall(line):
             f.append(f"Fortschritt '{w}' prüfen")
         flags.append({"t": t, "text": line, "flags": f})
-    # Inhaltlich oder "Moment": Delta-Zeilen (role agent) zwischen Ende dieses Frage-Turns und
-    # Ende des nächsten Turns. Nur Wartesätze (<= 10 Wörter, Muster WAIT_LINE) = "moment".
-    ends = [turn_end.get(i) for i in range(len(call.turns))]
-    answers = []
-    for ti, te in sorted(turn_end.items()):
-        if not call.turns[ti][0] or ti == 0:
-            continue  # nur Fragen, Begrüßung zählt nicht
-        nxt = next((ends[j] for j in range(ti + 1, len(ends)) if ends[j] is not None), call.ev[-1]["t"])
-        lines = [x for t, x in agent_lines if te < t <= nxt]
-        if not lines:
-            kind = "keine"
-        elif all(WAIT_LINE.search(x) and len(words(x)) <= 10 for x in lines):
-            kind = "moment"
-        else:
-            kind = "inhaltlich"
-        answers.append({"turn": ti, "frage": " ".join(call.turns[ti][1]), "kind": kind, "delta": lines})
+    answers = classify_answers(ev, call.turns)
     n_q = len(answers)
 
     return {
@@ -699,6 +684,7 @@ def analyse(call: Call, out: Path) -> dict:
         "answers_inhaltlich": sum(a["kind"] == "inhaltlich" for a in answers),
         "answers_moment": sum(a["kind"] == "moment" for a in answers),
         "answers_keine": sum(a["kind"] == "keine" for a in answers),
+        "answers_operator": sum(a["kind"] == "operator" for a in answers),
         "answers_n": n_q,
         "says": says,
         "says_total": len(says),
@@ -718,6 +704,32 @@ def analyse(call: Call, out: Path) -> dict:
         "tts_chars_spoken": sum(len(x) for x in op_lines) + sum(len(x) for _t, x in agent_lines),
         "board_text": board_txt,
     }
+
+
+def classify_answers(ev: list[dict], turns: list) -> list[dict]:
+    """Je Frage-Turn (ohne Begrüßung und Verabschiedung): Delta-Zeilen (role agent) zwischen
+    Ende dieses Turns und Ende des nächsten. Nur Wartesätze (<= 10 Wörter, WAIT_LINE) =
+    "moment"; keine Delta-Zeile, aber Operator spricht = "operator" (Delta schweigt, solange
+    eine say offen ist); gar nichts = "keine"; sonst "inhaltlich"."""
+    turn_end = {e["turn"]: e["t"] for e in ev if e["kind"] == "turn_end"}
+    ends = [turn_end.get(i) for i in range(len(turns))]
+    out = []
+    for ti, te in sorted(turn_end.items()):
+        if not turns[ti][0] or ti in (0, len(turns) - 1):
+            continue
+        nxt = next((ends[j] for j in range(ti + 1, len(ends)) if ends[j] is not None), ev[-1]["t"])
+        win = [e for e in ev if e["kind"] == "transcript" and te < e["t"] <= nxt]
+        lines = [e["text"] for e in win if e["role"] == "agent"]
+        ops = [e["text"] for e in win if e["role"] == "operator"]
+        if not lines:
+            kind = "operator" if ops else "keine"
+        elif all(WAIT_LINE.search(x) and len(words(x)) <= 10 for x in lines):
+            kind = "moment"
+        else:
+            kind = "inhaltlich"
+        out.append({"turn": ti, "frage": " ".join(turns[ti][1]), "kind": kind, "delta": lines,
+                    "operator": ops})
+    return out
 
 
 def timing_lines(log: Path) -> dict:
@@ -764,7 +776,7 @@ def main() -> int:
     res = asyncio.run(run(args))
     print(json.dumps({k: res.get(k) for k in (
         "label", "scenario", "live", "sha", "says_total", "says_delivered", "says_lost",
-        "answers_n", "answers_inhaltlich", "answers_moment", "answers_keine",
+        "answers_n", "answers_inhaltlich", "answers_moment", "answers_operator", "answers_keine",
         "delta_latency_median_s", "delta_latency_p90_s", "timing_play_median_ms", "timing_play_p90_ms",
         "timing_play_n", "says_repeated", "says_interrupted", "interrupts_total",
         "activity_applied", "longest_wait_silence_s", "deepgram")}, ensure_ascii=False))
