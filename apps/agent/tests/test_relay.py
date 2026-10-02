@@ -158,7 +158,7 @@ def test_default_persona_includes_relay_discipline():
     # nur das Verbot selbst (Kern-Regel 4) nennt das Wort
     assert DEFAULT_PERSONA.replace('Sag nie "Operator"', "").count("Operator") == 0
     assert "operator.say" not in DEFAULT_PERSONA
-    assert "Ich frag deinen Agenten kurz." in DEFAULT_PERSONA
+    assert "Moment, dein Agent schaut." in DEFAULT_PERSONA
     assert "Erfinde nichts." in DEFAULT_PERSONA  # no invention
 
 

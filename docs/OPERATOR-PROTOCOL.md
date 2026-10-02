@@ -14,6 +14,10 @@ https://voicehook.ai/agent/SKILL.md). CLI: https://github.com/voicehook-ai/voice
 your self-report: the web Agent chip shows a spinner until you join, then
 `Name · model`. `--name` also becomes the identity prefix and the name in the auto-greet.
 
+Optional `--username <Name>` (token query `username=`, bridge join field `username`): the
+user's first name, lands as participant attribute `vh.user`. The voice then knows whom it
+talks to ("Der Nutzer heißt …") and addresses the user directly instead of talking about them.
+
 Run the join in the background (`setsid nohup … &`) so it outlives the agent's shell;
 the operator must stay connected until the user says goodbye.
 

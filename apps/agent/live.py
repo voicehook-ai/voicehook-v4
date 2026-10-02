@@ -68,9 +68,9 @@ def compress_tokens() -> tuple[int, int]:
 # realtime_api.py 1.8.3 Z. 646-672, 869).
 # Markierungen: [Agent] = Aussage des Agenten, [System] = Vorgabe. Das Wort
 # "Operator" steht nicht mehr in den Turns (Priming, Oliver 02.10.2026).
-def live_core_instructions(name: str | None = None) -> str:
+def live_core_instructions(name: str | None = None, user: str | None = None) -> str:
     """Kern Live ohne Werksrolle (neutrale Sprachrohr-Regeln)."""
-    return core_live(name)
+    return core_live(name, user)
 
 
 LIVE_CORE_INSTRUCTIONS = live_core_instructions()
@@ -101,13 +101,13 @@ _SILENT = " Nicht vorlesen, nicht darauf antworten."
 # (realtime_api.py 1.8.3 Z. 646-675), deshalb ein markierter User-Turn
 # (update_chat_ctx, Z. 677ff); der Chat-Kontext wird bei einem Reconnect wieder
 # eingespielt (Z. 995-1020). Der Kern gilt weiter und wird mit Namen wiederholt.
-def live_agent_joined_user(name: str | None = None) -> str:
+def live_agent_joined_user(name: str | None = None, user: str | None = None) -> str:
     nom = agent_refs(name)["nom"]
     return (
         f"{MARK_SYSTEM} {nom[0].upper() + nom[1:]} ist jetzt im Raum. Deine Werksrolle als "
         "voicehook-Experte und Verkäufer gilt ab sofort nicht mehr, keine Verkaufssätze. "
         f"Die Regeln gelten weiter, mit {nom} als Agent:{_SILENT}\n"
-        + live_core_instructions(name)
+        + live_core_instructions(name, user)
     )
 
 

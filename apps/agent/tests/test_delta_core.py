@@ -105,7 +105,8 @@ async def test_positivkontrolle_override_persona_cannot_remove_core():
 # ===== Kern + Schichtung ==============================================================
 def test_core_lengths_under_budget():
     for name in (None, "Claude"):
-        assert len(core_normal(name)) <= 1200 and len(core_live(name)) <= 1200
+        # 1300: Regel 3 neu (wörtlich, Oliver 02.10.) + Markierung [Name] + Nutzername
+        assert len(core_normal(name, "Oliver")) <= 1300 and len(core_live(name, "Oliver")) <= 1300
 
 
 def test_compose_order_core_role_status_anchor():
@@ -117,8 +118,11 @@ def test_compose_order_core_role_status_anchor():
 def test_core_text_matches_delta_core_md():
     # Kerntext 1:1 aus DELTA_CORE.md 3a (Platzhalter ersetzt)
     t = core_normal("Claude")
-    assert '"Kurz Moment.", "Ich frag Claude kurz.", "Sekunde, Claude schaut nach."' in t
-    assert '"Claude baut gerade den Fix."' in t and "Was Claude sagt, ist die Antwort" in t
+    assert ('3. Weißt du etwas nicht, sag genau einen kurzen Wartesatz, z. B. "Moment, Claude '
+            'schaut.", und sonst nichts, keine zweite Zeile. Was Claude gerade macht, nennst du '
+            "nur, wenn es wörtlich im Status steht; steht dort nichts, behauptest du keinen "
+            "Fortschritt.\n") in t
+    assert "Was Claude sagt, ist die Antwort" in t
 
 
 def test_live_core_in_system_instruction_first():
@@ -132,12 +136,14 @@ def test_t1_t2_capability_rule_in_all_prompts():
         assert "beantwortest du nie selbst" in t
 
 
-# ===== T3 Wartesätze wechselnd ========================================================
-def test_t3_wait_lines_vary():
-    t = core_normal("Claude")
-    waits = re.findall(r'"([^"]{5,40})"', t.split("3. ", 1)[1].split("\n", 1)[0])
-    assert len(set(waits)) >= 3 and all(len(w) <= 40 for w in waits)
-    assert "nie zweimal derselbe" in t and "jedes Mal anders" in core_live("Claude")
+# ===== T3 genau ein Wartesatz, kein erfundener Fortschritt (fix/delta-core-rule3) =====
+def test_t3_single_wait_line_no_invented_progress():
+    for t in (core_normal("Claude"), core_live("Claude")):
+        rule = t.split("Weißt du etwas nicht", 1)[1].split("\n", 1)[0]
+        assert re.findall(r'"([^"]+)"', rule) == ["Moment, Claude schaut."]
+        assert "genau einen kurzen Wartesatz" in rule and "behauptest du keinen Fortschritt" in rule
+        assert "baut gerade den Fix" not in t and "nie zweimal derselbe" not in t
+        assert "jedes Mal anders" not in t
 
 
 # ===== T4 nie "Operator", Name des Agenten ============================================

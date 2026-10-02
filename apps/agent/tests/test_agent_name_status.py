@@ -127,12 +127,12 @@ async def test_normal_join_names_agent_and_switches_on_new_agent():
     h = build_relay_handlers(MagicMock(), agent)
     await h.on_agent_presence(True, "Claude")
     t = agent.update_instructions.await_args.args[0]
-    assert "Ich frag Claude kurz." in t and "Sekunde, Claude schaut nach." in t
+    assert "Moment, Claude schaut." in t
     assert "deinen Agenten" not in t and "dein Agent" not in t
     await h.on_agent_presence(True, "Claude")            # gleiches Event: idempotent
     assert agent.update_instructions.await_count == 1
     await h.on_agent_presence(True, "Hermes")            # neuer zuletzt beigetretener Agent
-    assert "Ich frag Hermes kurz." in agent.update_instructions.await_args.args[0]
+    assert "Moment, Hermes schaut." in agent.update_instructions.await_args.args[0]
     await h.on_agent_presence(False)
     assert agent.update_instructions.await_args.args[0] == DEFAULT_PERSONA
 
@@ -143,7 +143,7 @@ async def test_normal_join_without_name_falls_back():
     h = build_relay_handlers(MagicMock(), agent)
     await h.on_agent_presence(True, None)
     t = agent.update_instructions.await_args.args[0]
-    assert t == OPERATOR_PERSONA and "Ich frag deinen Agenten kurz." in t
+    assert t == OPERATOR_PERSONA and "Moment, dein Agent schaut." in t
 
 
 @pytest.mark.asyncio
@@ -153,7 +153,7 @@ async def test_live_join_names_agent_in_user_turn():
     await h.on_agent_presence(True, "Claude")
     turn = agent.chat_ctx.items[-1].text_content
     assert turn.startswith("[System] Claude ist jetzt im Raum.")
-    assert "Ich frag Claude kurz." in turn
+    assert "Moment, Claude schaut." in turn
     agent.update_instructions.assert_not_awaited()
 
 
@@ -303,11 +303,11 @@ async def test_status_answer_window_expires():
     ("live_joined_claude", live.live_agent_joined_user("Claude")),
 ])
 def test_prompts_forbid_excuses_and_vary_handoff(label, text):
-    # seit dem Delta-Kern: Rechtfertigungsverbot + wechselnde Wartesätze stehen im Kern
+    # seit dem Delta-Kern: Rechtfertigungsverbot + genau ein Wartesatz stehen im Kern
     assert "rechtfertige dich nie" in text, label
-    name = "Claude" if "claude" in label else "deinen Agenten"
-    assert f"Ich frag {name} kurz." in text
-    assert ("nie zweimal derselbe" in text) or ("jedes Mal anders" in text)
+    name = "Claude" if "claude" in label else "dein Agent"
+    assert f'"Moment, {name} schaut."' in text
+    assert "genau einen kurzen Wartesatz" in text and "behauptest du keinen Fortschritt" in text
 
 
 def test_handoff_variants_named():
