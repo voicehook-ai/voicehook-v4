@@ -369,6 +369,7 @@ class FreeBudget:
         self.done = False      # Gratis-Teil aufgebraucht, Wallet zahlt weiter
         self.left_ueur: int | None = None  # zuletzt bekannter Gratis-Rest (µEUR)
         self.unlimited = False  # Merkmal in VH_FREE_EXEMPT_KEYS: nie leer, nichts gebucht
+        self.owner = False  # Raum-Merkmal in VH_FREE_EXEMPT_KEYS (Owner): keine Guthaben-Hinweise
         self._looked_up = False
         self._found: tuple[str, list[str]] | None = None
 
@@ -396,6 +397,9 @@ class FreeBudget:
             self._found = None
         self.known = self._found is not None
         self.exempt = self._found is not None and not self._found[1]
+        # Owner (Oliver 02.10.: "Guthaben-Gedöns raus bei mir"): gilt auch, wenn der
+        # Gratis-Teil nicht zählt (Live-Monatsbudget weg, Wallet zahlt).
+        self.owner = self._found is not None and freetier.is_exempt(self._found[1])
         return self._found
 
     def start(self, guard: CallGuard) -> None:
@@ -853,7 +857,9 @@ async def entrypoint(ctx: JobContext) -> None:
         await publish_notice(ctx.room, p)
         speak_notice(session, LOW_BALANCE_ANNOUNCEMENT, live=live_mode)
 
-    if counted or paid:
+    # Owner-Ausnahme (VH_FREE_EXEMPT_KEYS): keine Low-Balance-Warnung, weder Notice
+    # noch Ansage (Oliver 02.10.). Live-Monatssperre, Gratis-/Wallet-Ende bleiben.
+    if (counted or paid) and not free.owner:
         watch.start(guard, _warn)
     # Explicit room options (don't rely on lib defaults): close the session when
     # the linked participant leaves. Room deletion is owned by CallGuard so it
