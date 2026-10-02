@@ -154,13 +154,9 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'free.left': 'Gratis heute: {v}',
       'free.unl': 'Gratis: unbegrenzt (Test)',
       'bal.label': 'Guthaben {v}',
-      'login.link': 'Anmelden', 'login.have': 'Schon Guthaben? Anmelden',
+      'login.link': 'Anmelden',
       'login.as': 'angemeldet: {e}',
-      'topup.title': 'Guthaben aufladen', 'topup.amount': 'Betrag', 'topup.close': 'Schließen',
-      'topup.go': 'Weiter zu Stripe · {a}', 'topup.busy': 'Verbinde mit Stripe …',
-      'topup.soon': 'Aufladen bald verfügbar', 'topup.err': 'Das hat nicht geklappt. Bitte versuch es noch einmal.',
-      'topup.opened': 'Stripe ist in einem neuen Tab offen. Nach der Zahlung bist du hier automatisch angemeldet.',
-      'topup.fine': 'Zahlung über Stripe, kein Abo. Mit deiner E-Mail aus Stripe wird dein Konto angelegt.',
+      'topup.title': 'Guthaben aufladen', 'topup.close': 'Schließen',
       'topup.done': 'Guthaben aufgeladen: {v}',
       'low.notice': 'Noch etwa {n} min, dann endet der Call',
       'pay.ended': 'Call beendet: Gratis-Verbrauch und Guthaben aufgebraucht',
@@ -291,13 +287,9 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'free.left': 'Free today: {v}',
       'free.unl': 'Free: unlimited (test)',
       'bal.label': 'credit {v}',
-      'login.link': 'Log in', 'login.have': 'Already have credit? Log in',
+      'login.link': 'Log in',
       'login.as': 'logged in: {e}',
-      'topup.title': 'Top up credit', 'topup.amount': 'Amount', 'topup.close': 'Close',
-      'topup.go': 'Continue to Stripe · {a}', 'topup.busy': 'Connecting to Stripe …',
-      'topup.soon': 'Top-up coming soon', 'topup.err': 'That did not work. Please try again.',
-      'topup.opened': 'Stripe is open in a new tab. After paying you are logged in here automatically.',
-      'topup.fine': 'Payment via Stripe, no subscription. Your account is created with the email you give Stripe.',
+      'topup.title': 'Top up credit', 'topup.close': 'Close',
       'topup.done': 'Credit topped up: {v}',
       'low.notice': 'About {n} min left, then the call ends',
       'pay.ended': 'Call ended: free allowance and credit used up',
@@ -1232,17 +1224,17 @@ body.theme-light #vh-mode-info .vh-md-price{color:#1f7f90;}
 #vh-mode-info a,.vh-pay-link{color:var(--vh-teal,#6dc9d9);text-decoration:underline;text-underline-offset:2px;}
 body.theme-light #vh-mode-info a,body.theme-light .vh-pay-link{color:#1f7f90;}
 /* Billing-Runde 4: Gratis + Guthaben + Aufladen/Anmelden als Link-Knöpfe in der
-   Gratis-Zeile; Aufladen öffnet INLINE #vh-topup (Chips + Drehregler aus
-   aufladen.html), Anmelden führt auf /login?next=<diese Seite>. Beide auch im Call sichtbar. */
+   Gratis-Zeile; Aufladen öffnet das Overlay #vh-tuo (Original-Seite /aufladen im
+   iframe), Anmelden führt auf /login?next=<diese Seite>. Beide auch im Call sichtbar. */
 .vh-linkbtn{appearance:none;background:none;border:0;padding:0;margin:0;font:inherit;cursor:pointer;color:var(--vh-teal,#6dc9d9);text-decoration:underline;text-underline-offset:2px;}
 body.theme-light .vh-linkbtn{color:#1f7f90;}
 .vh-linkbtn.vh-quiet{color:inherit;opacity:0.85;}
 #vh-mode-info .vh-free-left{opacity:1;}
 #vh-mode-info .vh-me-txt{opacity:0.6;}
 #vh-mode-info .vh-sep{opacity:0.45;}
-#vh-topup,#vh-low-bal{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--vh-btn-fg);flex-shrink:0;
+#vh-low-bal{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--vh-btn-fg);flex-shrink:0;
   border:1px solid var(--vh-btn-border);background:var(--vh-btn-bg);border-radius:8px;padding:8px 10px;margin:0 0 6px;}
-#vh-topup[hidden],#vh-low-bal[hidden]{display:none;}
+#vh-low-bal[hidden]{display:none;}
 /* Panel oder Modus-Details offen: Glas-Panel wächst nach oben, statt Inhalt unter
    die Call-Leiste zu schieben oder das Transkript zu zerquetschen (Review-Altlast 320 px). */
 body.vh-wrap-grow:not(.vh-transcript-expanded):not(.vh-transcript-min) #vh-transcript-wrap{height:auto;min-height:var(--vh-wrap-h,140px);}
@@ -1251,36 +1243,8 @@ body.vh-wrap-grow:not(.vh-transcript-expanded):not(.vh-transcript-min) #vh-trans
    Kopieren/Teilen nicht unter die Call-Leiste rutschen (320 px). */
 body:not(.vh-transcript-expanded):not(.vh-transcript-min) #vh-transcript-wrap:not(.vh-agent-in):has(#vh-invite-banner:not([hidden]) .vh-invite-actions){height:auto;min-height:var(--vh-wrap-h,140px);}
 body:not(.vh-transcript-expanded):not(.vh-transcript-min) #vh-transcript-wrap:not(.vh-agent-in):has(#vh-invite-banner:not([hidden]) .vh-invite-actions) #vh-transcript{min-height:40px;}
-/* Sehr schmal: "Anmelden" steht im Aufladen-Panel, die Gratis-Zeile bleibt einzeilig. */
+/* Sehr schmal: "Anmelden" steht im Aufladen-Overlay, die Gratis-Zeile bleibt einzeilig. */
 @media (max-width:360px){#vh-mode-info .vh-login-wrap{display:none;}}
-#vh-tu-login{align-self:flex-start;text-align:left;font-size:10px;}
-.vh-tu-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;letter-spacing:0.06em;text-transform:uppercase;opacity:0.75;}
-.vh-tu-x{appearance:none;background:none;border:0;color:inherit;font:inherit;font-size:14px;line-height:1;cursor:pointer;padding:2px 4px;opacity:0.8;}
-.vh-tu-x:hover{opacity:1;}
-.vh-tu-body{display:flex;gap:12px;align-items:center;}
-.vh-tu-dial{position:relative;width:112px;height:112px;flex:0 0 112px;touch-action:none;cursor:grab;outline:none;border-radius:50%;}
-.vh-tu-dial:focus-visible{box-shadow:0 0 0 2px var(--vh-teal,#6dc9d9);}
-.vh-tu-dial.dragging{cursor:grabbing;}
-.vh-tu-dial svg{width:100%;height:100%;transform:rotate(-90deg);display:block;}
-.vh-tu-dial .track{fill:none;stroke:var(--vh-btn-border);stroke-width:16;}
-.vh-tu-dial .fill{fill:none;stroke:var(--vh-teal,#6dc9d9);stroke-width:16;stroke-linecap:round;transition:stroke-dashoffset .08s linear;}
-.vh-tu-dial .knob{fill:var(--vh-teal,#6dc9d9);stroke:var(--vh-bg-0,#000);stroke-width:4;}
-body.theme-light .vh-tu-dial .fill,body.theme-light .vh-tu-dial .knob{stroke:#1f8fa3;}
-body.theme-light .vh-tu-dial .knob{fill:#1f8fa3;stroke:#f4f4f7;}
-.vh-tu-amt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600;pointer-events:none;color:var(--vh-btn-fg-hov);}
-.vh-tu-side{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:7px;}
-.vh-tu-chips{display:flex;gap:6px;flex-wrap:wrap;}
-.vh-tu-chip{appearance:none;font:inherit;padding:5px 9px;border-radius:12px;cursor:pointer;background:transparent;color:var(--vh-btn-fg);border:1px solid var(--vh-btn-border);min-height:28px;}
-.vh-tu-chip:hover{border-color:var(--vh-btn-border-hov);}
-.vh-tu-chip.on{border-color:var(--vh-teal,#6dc9d9);color:var(--vh-teal,#6dc9d9);}
-body.theme-light .vh-tu-chip.on{border-color:#1f7f90;color:#1f7f90;}
-.vh-tu-go{appearance:none;border:0;cursor:pointer;font:inherit;font-size:11px;font-weight:600;min-height:34px;padding:8px 10px;border-radius:8px;background:var(--vh-teal,#6dc9d9);color:#000;letter-spacing:0.02em;}
-body.theme-light .vh-tu-go{background:#1f8fa3;color:#fff;}
-.vh-tu-go:disabled{opacity:0.45;cursor:not-allowed;}
-.vh-tu-msg{line-height:1.45;opacity:0.85;}
-.vh-tu-msg.warn{color:#f2a65a;opacity:1;}
-body.theme-light .vh-tu-msg.warn{color:#b8641a;}
-.vh-tu-fine{opacity:0.5;line-height:1.45;font-size:9.5px;}
 #vh-low-bal{border-color:rgba(242,166,90,0.55);color:#f2a65a;text-align:center;line-height:1.5;padding:5px 10px;}
 body.theme-light #vh-low-bal{color:#b8641a;border-color:rgba(184,100,26,0.5);}
 /* Review-Altlast: Vorteile-Text quetscht bei 320 px das Transkript. Schmal: eine
@@ -1598,6 +1562,43 @@ body.theme-light #vh-auth-modal .vh-auth-msg.warn { color: #b8641a; }
     <button type="button" id="vh-acct-out" data-i18n="acct.logout">Abmelden</button>
   </div>
 </div>
+<!-- Aufladen-Overlay (Oliver 02.10.): Original-Seite /aufladen maximiert im iframe, Call läuft darunter weiter. -->
+<style>
+#vh-tuo{position:fixed;inset:0;z-index:10000;width:100vw;height:100vh;height:100dvh;background:rgba(0,0,0,.72);
+  opacity:0;transition:opacity .2s ease;}
+#vh-tuo[hidden]{display:none;}
+#vh-tuo.on{opacity:1;}
+#vh-tuo-frame{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:transparent;color-scheme:normal;}
+#vh-tuo-x{position:absolute;z-index:2;top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));
+  width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;
+  background:rgba(0,0,0,.55);color:#fff;border:1px solid rgba(255,255,255,.28);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:background .15s,border-color .15s;}
+#vh-tuo-x:hover{background:rgba(0,0,0,.75);border-color:rgba(255,255,255,.5);}
+#vh-tuo-x:focus-visible{outline:2px solid #6dc9d9;outline-offset:2px;}
+#vh-tuo-x svg{width:16px;height:16px;}
+body.theme-light #vh-tuo{background:rgba(20,20,26,.45);}
+body.theme-light #vh-tuo-x{background:rgba(255,255,255,.8);color:#0b0b0f;border-color:rgba(0,0,0,.16);}
+body.theme-light #vh-tuo-x:hover{background:#fff;border-color:rgba(0,0,0,.34);}
+body.theme-light #vh-tuo-x:focus-visible{outline-color:#1f7f90;}
+/* Handy: Vollbild-Sheet, fährt von unten ein */
+@media (max-width:640px){
+  #vh-tuo{opacity:1;transform:translateY(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1);}
+  #vh-tuo.on{transform:none;}
+}
+@media (prefers-reduced-motion:reduce){#vh-tuo,#vh-tuo.on{transition:none;}}
+html.vh-tuo-lock,html.vh-tuo-lock body{overflow:hidden;}
+#vh-tuo-toast{position:fixed;z-index:10001;left:50%;transform:translateX(-50%);top:calc(16px + env(safe-area-inset-top,0px));
+  max-width:calc(100vw - 32px);padding:10px 16px;border-radius:10px;font:12px/1.4 ui-monospace,Menlo,monospace;letter-spacing:.02em;
+  background:rgba(0,0,0,.78);color:#fff;border:1px solid #6dc9d9;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  box-shadow:0 8px 28px rgba(0,0,0,.35);text-align:center;}
+#vh-tuo-toast[hidden]{display:none;}
+body.theme-light #vh-tuo-toast{background:rgba(255,255,255,.94);color:#0b0b0f;border-color:#1f7f90;box-shadow:0 8px 28px rgba(0,0,0,.12);}
+</style>
+<div id="vh-tuo" role="dialog" aria-modal="true" aria-label="Guthaben aufladen" data-i18n-aria="topup.title" hidden>
+  <iframe id="vh-tuo-frame" title="Guthaben aufladen" src="about:blank"></iframe>
+  <button type="button" id="vh-tuo-x" aria-label="Schließen" title="Schließen" data-i18n-aria="topup.close" data-i18n-title="topup.close"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+</div>
+<div id="vh-tuo-toast" role="status" aria-live="polite" hidden></div>
 <div id="vh-auth-modal" role="dialog" aria-modal="true" aria-labelledby="vh-auth-h" hidden>
   <div class="vh-auth-bg" id="vh-auth-bg"></div>
   <div class="vh-auth-card">
@@ -1797,26 +1798,6 @@ body.theme-light #vh-auth-modal .vh-auth-msg.warn { color: #b8641a; }
     <div class="vh-mode-detail" hidden></div>
   </div>
   <div id="vh-low-bal" role="alert" hidden></div>
-  <div id="vh-topup" role="group" hidden>
-    <div class="vh-tu-head"><span data-i18n="topup.title">Top up credit</span><button type="button" class="vh-tu-x" id="vh-topup-x" aria-label="Close" data-i18n-aria="topup.close">&times;</button></div>
-    <div class="vh-tu-body">
-      <div class="vh-tu-dial" id="vh-tu-dial" tabindex="0" role="slider" aria-valuemin="5" aria-valuemax="200" aria-valuenow="20" aria-label="Amount" data-i18n-aria="topup.amount">
-        <svg viewBox="0 0 300 300" aria-hidden="true">
-          <circle class="track" cx="150" cy="150" r="120"/>
-          <circle class="fill" id="vh-tu-fill" cx="150" cy="150" r="120" stroke-dasharray="753.98" stroke-dashoffset="753.98"/>
-          <circle class="knob" id="vh-tu-knob" cx="150" cy="30" r="15"/>
-        </svg>
-        <div class="vh-tu-amt" id="vh-tu-amt"></div>
-      </div>
-      <div class="vh-tu-side">
-        <div class="vh-tu-chips" id="vh-tu-chips"></div>
-        <button type="button" class="vh-tu-go" id="vh-tu-go"></button>
-        <div class="vh-tu-msg" id="vh-tu-msg" aria-live="polite" hidden></div>
-        <div class="vh-tu-fine" data-i18n="topup.fine"></div>
-        <button type="button" class="vh-linkbtn vh-quiet" id="vh-tu-login" data-i18n="login.have">Already have credit? Log in</button>
-      </div>
-    </div>
-  </div>
   <div id="vh-tr-ticker" aria-live="polite"></div>
   <div id="vh-invite-banner" hidden></div>
   <div id="vh-transcript"><div id="vh-transcript-empty" data-i18n="tr.empty">Transcript: start a call to see live turns.</div></div>
@@ -4773,17 +4754,17 @@ async function vhPayErrMsg(r) {
 // Seite zeigt Hinweis + Aufladen-Panel (Review-Altlast UI-Runde 3).
 function vhPayError(msg) { const e = new Error(msg); e.vhPay = true; return e; }
 function vhSep() { const s = document.createElement('span'); s.className = 'vh-sep'; s.textContent = ' · '; return s; }
-// "Aufladen" öffnet INLINE das Panel #vh-topup (kein Seitenwechsel, Call läuft weiter).
+// "Aufladen" öffnet das Overlay #vh-tuo mit /aufladen (kein Seitenwechsel, Call läuft weiter).
 function vhTopupBtn() {
   const b = document.createElement('button');
   b.type = 'button'; b.className = 'vh-linkbtn vh-pay-link vh-topup-open';
   b.textContent = vhT('pay.topup');
-  b.addEventListener('click', () => vhTopupToggle());
+  b.addEventListener('click', () => vhTopupOpen());
   return b;
 }
-// Hinweis mit Aufladen-Knopf in der Zeile über dem Call-Knopf, Panel geht auf.
+// Hinweis mit Aufladen-Knopf in der Zeile über dem Call-Knopf, Overlay geht auf.
 // Steht dieselbe "aufgebraucht"-Meldung samt Aufladen schon sichtbar in der
-// Gratis-Zeile (#vh-mode-info), kein zweiter Banner; nur das Panel geht auf.
+// Gratis-Zeile (#vh-mode-info), kein zweiter Banner; nur das Overlay geht auf.
 function vhFreeLineShows(msg) {
   const info = document.getElementById('vh-mode-info');
   const el = info && info.querySelector('.vh-free-left');
@@ -4809,146 +4790,112 @@ function vhPayShow(msg) {
   vhTopupOpen();
 }
 
-// ── Aufladen-Panel: Chips + Drehregler aus aufladen.html, ein Klick zu Stripe ──
-// Stripe öffnet in einem NEUEN Tab (ein laufender Call bricht nicht ab). Der
-// Rückweg landet auf /aufladen, das das Wallet-Token in localStorage legt; diese
-// Seite hört auf 'storage' + Fokus und lädt /api/me neu.
-const VH_TU = { min: 5, max: 200, step: 5, amounts: [5, 10, 20, 50], amount: 20, on: false };
-const vhTu = {
-  box: document.getElementById('vh-topup'), dial: document.getElementById('vh-tu-dial'),
-  fill: document.getElementById('vh-tu-fill'), knob: document.getElementById('vh-tu-knob'),
-  amt: document.getElementById('vh-tu-amt'), chips: document.getElementById('vh-tu-chips'),
-  go: document.getElementById('vh-tu-go'), msg: document.getElementById('vh-tu-msg'),
-};
-const VH_TU_R = 120, VH_TU_C = 2 * Math.PI * VH_TU_R;
+// ── Aufladen-Overlay (Oliver 02.10.: "maximiert als Overlay die originale
+// Aufladeseite zeigen, nicht dieses Schnipsel") ──────────────────────────────
+// Jeder Aufladen-Einstieg öffnet #vh-tuo: /aufladen?embed=1 im iframe, gleicher
+// Origin, also gleicher localStorage (Wallet-Token). Die Seite liegt nur ÜBER
+// dem Call (DOM-Ebene), der Raum bleibt verbunden. Stripe und die OAuth-Anbieter
+// lassen sich nicht rahmen: /aufladen öffnet sie eingebettet in einem NEUEN Tab.
+// Der Stripe-Rückkehr-Tab (/aufladen?session_id=...) meldet den Erfolg per
+// BroadcastChannel 'vh-wallet' (Fallback: localStorage 'vh-topup-ping', weil
+// dasselbe Wallet-Token beim Nachladen kein storage-Event auslöst).
+const VH_TU_CHANNEL = 'vh-wallet', VH_TU_PING = 'vh-topup-ping';
+const vhTuo = document.getElementById('vh-tuo');
+const vhTuoFrame = document.getElementById('vh-tuo-frame');
+const vhTuoToast = document.getElementById('vh-tuo-toast');
 let vhTopupPending = null;  // {before: Guthaben vor dem Checkout}
-const vhEurWhole = (() => { try { return new Intl.NumberFormat(VH_LANG === 'de' ? 'de-DE' : 'en-IE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0, minimumFractionDigits: 0 }); } catch (_) { return { format: (a) => a + ' €' }; } })();
-function vhTopupConfig(c) {
-  if (!c || typeof c !== 'object') return;
-  if (Number(c.min_eur) > 0) VH_TU.min = Number(c.min_eur);
-  if (Number(c.max_eur) > 0) VH_TU.max = Number(c.max_eur);
-  if (Array.isArray(c.amounts_eur) && c.amounts_eur.length) VH_TU.amounts = c.amounts_eur.map(Number).filter((a) => a > 0);
-  VH_TU.on = c.checkout_available === true;
-  VH_TU.amount = VH_TU.amounts.includes(20) ? 20 : VH_TU.amounts[0] || VH_TU.min;
-  if (vhTu.dial) { vhTu.dial.setAttribute('aria-valuemin', VH_TU.min); vhTu.dial.setAttribute('aria-valuemax', VH_TU.max); }
-  vhTuChips(); vhTuRender();
-}
-function vhTuChips() {
-  if (!vhTu.chips) return;
-  vhTu.chips.innerHTML = '';
-  VH_TU.amounts.forEach((a) => {
-    const b = document.createElement('button');
-    b.type = 'button'; b.className = 'vh-tu-chip'; b.dataset.eur = a; b.textContent = vhEurWhole.format(a);
-    vhTu.chips.appendChild(b);
-  });
-}
-function vhTuRender() {
-  if (!vhTu.dial) return;
-  const frac = VH_TU.amount / VH_TU.max, ang = frac * 2 * Math.PI;
-  vhTu.fill.setAttribute('stroke-dashoffset', VH_TU_C * (1 - frac));
-  vhTu.knob.setAttribute('cx', 150 + VH_TU_R * Math.cos(ang));
-  vhTu.knob.setAttribute('cy', 150 + VH_TU_R * Math.sin(ang));
-  vhTu.amt.textContent = vhEurWhole.format(VH_TU.amount);
-  vhTu.dial.setAttribute('aria-valuenow', VH_TU.amount); vhTu.dial.setAttribute('aria-valuetext', vhEurWhole.format(VH_TU.amount));
-  if (!vhTu.go.dataset.busy) {
-    vhTu.go.disabled = !VH_TU.on;
-    vhTu.go.textContent = VH_TU.on ? vhT('topup.go', { a: vhEurWhole.format(VH_TU.amount) }) : vhT('topup.soon');
-  }
-  [...vhTu.chips.children].forEach((c) => c.classList.toggle('on', +c.dataset.eur === VH_TU.amount));
-}
-function vhTuSet(v) {
-  v = Math.round(v / VH_TU.step) * VH_TU.step;
-  VH_TU.amount = Math.max(VH_TU.min, Math.min(VH_TU.max, v));
-  vhTuRender();
-}
-function vhTuMsg(text, warn) {
-  if (!vhTu.msg) return;
-  vhTu.msg.textContent = text || ''; vhTu.msg.className = 'vh-tu-msg' + (warn ? ' warn' : ''); vhTu.msg.hidden = !text;
-}
+let vhTuoPrevFocus = null, vhTuoToastT = 0, vhTuoToastAt = 0;
 function vhPanelSync() {
   const det = vhModeInfo && vhModeInfo.querySelector('.vh-mode-detail');
   const low = document.getElementById('vh-low-bal');
-  const open = (vhTu.box && !vhTu.box.hidden) || (det && !det.hidden && !vhModeInfo.hidden) || (low && !low.hidden);
+  const open = (det && !det.hidden && !vhModeInfo.hidden) || (low && !low.hidden);
   document.body.classList.toggle('vh-wrap-grow', !!open);
 }
+function vhTopupIsOpen() { return !!(vhTuo && !vhTuo.hidden); }
 function vhTopupOpen() {
-  if (!vhTu.box) return;
-  if (vhTu.box.hidden) { vhTuChips(); vhTuRender(); vhTuMsg(''); vhTu.box.hidden = false; }
-  vhPanelSync();
+  if (!vhTuo || !vhTuoFrame || vhTopupIsOpen()) return;
+  try { vhAcctOpen(false); } catch (_) {}
+  vhTuoPrevFocus = document.activeElement;
+  vhTuoFrame.title = vhT('topup.title');
+  vhTuoFrame.src = '/aufladen?embed=1';  // jedes Öffnen frisch: Guthaben, Anmeldestatus
+  vhTuo.hidden = false;
+  void vhTuo.offsetWidth;                // Startzustand rendern, dann einblenden
+  vhTuo.classList.add('on');
+  document.documentElement.classList.add('vh-tuo-lock');
+  const x = document.getElementById('vh-tuo-x');
+  if (x) try { x.focus({ preventScroll: true }); } catch (_) {}
 }
-function vhTopupClose() { if (vhTu.box) vhTu.box.hidden = true; vhPanelSync(); }
-function vhTopupToggle() { if (vhTu.box && !vhTu.box.hidden) vhTopupClose(); else vhTopupOpen(); }
-if (vhTu.dial) {
-  let drag = false;
-  const angOf = (e) => {
-    const rc = vhTu.dial.getBoundingClientRect(), pt = e.touches ? e.touches[0] : e;
-    let a = Math.atan2(pt.clientY - (rc.top + rc.height / 2), pt.clientX - (rc.left + rc.width / 2)) + Math.PI / 2;
-    if (a < 0) a += 2 * Math.PI;
-    return a / (2 * Math.PI);
-  };
-  const move = (e) => { if (drag) { vhTuSet(angOf(e) * VH_TU.max); if (e.cancelable) e.preventDefault(); } };
-  const down = (e) => { drag = true; vhTu.dial.classList.add('dragging'); move(e); };
-  const up = () => { drag = false; vhTu.dial.classList.remove('dragging'); };
-  vhTu.dial.addEventListener('mousedown', down);
-  vhTu.dial.addEventListener('touchstart', down, { passive: false });
-  window.addEventListener('mousemove', move);
-  window.addEventListener('touchmove', move, { passive: false });
-  window.addEventListener('mouseup', up);
-  window.addEventListener('touchend', up);
-  vhTu.dial.addEventListener('wheel', (e) => { e.preventDefault(); vhTuSet(VH_TU.amount + (e.deltaY < 0 ? VH_TU.step : -VH_TU.step)); }, { passive: false });
-  vhTu.dial.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { vhTuSet(VH_TU.amount + VH_TU.step); e.preventDefault(); }
-    if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { vhTuSet(VH_TU.amount - VH_TU.step); e.preventDefault(); }
-  });
+function vhTopupClose() {
+  if (!vhTopupIsOpen()) return;
+  vhTuo.classList.remove('on');
+  vhTuo.hidden = true;
+  vhTuoFrame.src = 'about:blank';
+  document.documentElement.classList.remove('vh-tuo-lock');
+  const f = vhTuoPrevFocus; vhTuoPrevFocus = null;
+  if (f && f.focus && document.contains(f)) try { f.focus({ preventScroll: true }); } catch (_) {}
 }
-if (vhTu.chips) vhTu.chips.addEventListener('click', (e) => { const b = e.target.closest('.vh-tu-chip'); if (b) vhTuSet(+b.dataset.eur); });
-const vhTopupX = document.getElementById('vh-topup-x');
-if (vhTopupX) vhTopupX.addEventListener('click', vhTopupClose);
-if (vhTu.go) vhTu.go.addEventListener('click', async () => {
-  if (!VH_TU.on || vhTu.go.dataset.busy) return;
-  // Tab synchron im Klick öffnen (sonst blockt der Popup-Blocker nach dem await).
-  let w = null;
-  try { w = window.open('', '_blank'); } catch (_) {}
-  vhTu.go.dataset.busy = '1'; vhTu.go.disabled = true; vhTu.go.textContent = vhT('topup.busy'); vhTuMsg('');
-  try {
-    const r = await fetch('/api/checkout', { method: 'POST', headers: vhPayHeaders(), body: JSON.stringify({ amount_eur: VH_TU.amount }) });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok || !d.url || !/^https:\/\//.test(d.url)) throw new Error('checkout ' + r.status);
-    vhTopupPending = { before: vhMe && typeof vhMe.balance_eur === 'number' ? vhMe.balance_eur : 0 };
-    if (w && !w.closed) {
-      try { w.opener = null; } catch (_) {}
-      w.location.href = d.url;
-      vhTuMsg(vhT('topup.opened'));
-    } else {
-      // Popup blockiert: Link im Panel, nie die Seite selbst wegnavigieren (Call).
-      vhTuMsg(vhT('topup.opened'));
-      const a = document.createElement('a');
-      a.href = d.url; a.target = '_blank'; a.rel = 'noopener'; a.className = 'vh-pay-link';
-      a.textContent = vhT('topup.go', { a: vhEurWhole.format(VH_TU.amount) });
-      vhTu.msg.appendChild(document.createTextNode(' ')); vhTu.msg.appendChild(a);
-    }
-  } catch (_) {
-    try { if (w) w.close(); } catch (_) {}
-    vhTuMsg(vhT('topup.err'), true);
-  } finally {
-    delete vhTu.go.dataset.busy; vhTuRender();
-  }
+{ const x = document.getElementById('vh-tuo-x'); if (x) x.addEventListener('click', vhTopupClose); }
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && vhTopupIsOpen()) { e.stopImmediatePropagation(); e.preventDefault(); vhTopupClose(); }
+}, true);
+// Links auf /aufladen (Konto-Popover, Burger-Menü, Mehr-Sheet) -> Overlay statt Seitenwechsel.
+// Strg/Cmd/Shift/Mittelklick bleiben normale Links.
+document.addEventListener('click', (e) => {
+  const a = e.target && e.target.closest ? e.target.closest('a[href="/aufladen"]') : null;
+  if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  const m = document.getElementById('vh-foot-menu'); if (m && m.contains(a)) m.hidden = true;
+  vhTopupOpen();
+}, true);
+function vhTopupToast(bal) {
+  if (!vhTuoToast || Date.now() - vhTuoToastAt < 8000) return;  // Kanal + Ping + Fokus: nur einmal
+  vhTuoToastAt = Date.now();
+  vhTuoToast.textContent = typeof bal === 'number' && isFinite(bal) && vhEur
+    ? vhT('topup.done', { v: vhEur.format(bal) }) : vhT('topup.title');
+  vhTuoToast.hidden = false;
+  clearTimeout(vhTuoToastT);
+  vhTuoToastT = setTimeout(() => { vhTuoToast.hidden = true; }, 6000);
+}
+// Erfolg aus dem Stripe-Tab: Guthaben ohne Reload neu, Overlay zu (vhPayAfterRefresh), Hinweis.
+async function vhTopupDone(bal) {
+  if (!vhTopupPending) vhTopupPending = { before: -Infinity };
+  vhTopupToast(bal);
+  await vhFreeRefresh();
+}
+// Nachrichten der eingebetteten Seite (nur gleicher Origin, nur unser iframe).
+window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin || !vhTuoFrame || e.source !== vhTuoFrame.contentWindow) return;
+  const d = e.data;
+  if (!d || d.vh !== 'topup') return;
+  if (d.type === 'close') vhTopupClose();
+  else if (d.type === 'checkout') vhTopupPending = { before: vhMe && typeof vhMe.balance_eur === 'number' ? vhMe.balance_eur : 0 };
 });
+try {
+  const ch = new BroadcastChannel(VH_TU_CHANNEL);
+  ch.onmessage = (e) => { const d = e.data; if (d && d.type === 'topup-done') vhTopupDone(Number(d.balance_eur)); };
+} catch (_) {}
 // Rückkehr aus Stripe: anderer Tab legt das Token ab (storage) oder der Nutzer
 // kommt zurück (focus / sichtbar) -> /api/me neu.
-window.addEventListener('storage', (e) => { if (e.key === VH_WALLET_KEY) vhFreeRefresh(); });
-function vhReturnCheck() { if (vhTopupPending && !document.hidden) vhFreeRefresh(); }
+window.addEventListener('storage', (e) => {
+  if (e.key === VH_WALLET_KEY) vhFreeRefresh();
+  if (e.key === VH_TU_PING && e.newValue) { let d = null; try { d = JSON.parse(e.newValue); } catch (_) {} vhTopupDone(d ? Number(d.balance_eur) : NaN); }
+});
+async function vhReturnCheck() {
+  if (!vhTopupPending || document.hidden) return;
+  const before = vhTopupPending.before;
+  await vhFreeRefresh();
+  if (vhMe && typeof vhMe.balance_eur === 'number' && vhMe.balance_eur > before) vhTopupToast(vhMe.balance_eur);
+}
 window.addEventListener('focus', vhReturnCheck);
 document.addEventListener('visibilitychange', vhReturnCheck);
 
 // ── Anmelden: Seite /login (Google, GitHub, E-Mail-Link) ─────────────────────
 // Alle Anmelden-Knöpfe führen auf /login?next=<diese Seite> (nur relativer Pfad,
 // /login prüft ihn nochmals). Der Rückweg setzt das Wallet-Token in localStorage;
-// das storage-Event oben lädt /api/me dann neu.
+// das storage-Event oben lädt /api/me dann neu. Im Aufladen-Overlay öffnet
+// /aufladen den Login in einem neuen Tab (OAuth-Seiten lassen sich nicht rahmen).
 function vhLoginHref() { return '/login?next=' + encodeURIComponent(location.pathname + location.search); }
 function vhLoginGo() { location.href = vhLoginHref(); }
-const vhTuLogin = document.getElementById('vh-tu-login');
-if (vhTuLogin) vhTuLogin.addEventListener('click', vhLoginGo);
 
 // ── Hinweis "bald leer" (Data-Topic operator.notice {kind:'low_balance', minutes_left})
 // Sichtbar im Call mit Aufladen-Knopf. Nach Call-Ende: waren Gratis UND Guthaben
@@ -5232,7 +5179,6 @@ async function vhPriceLoad() {
     const r = await fetch('/api/billing/config', { cache: 'no-store' });
     const j = r.ok ? await r.json() : null;
     vhPriceCfg = j && j.approx_eur_per_hour && typeof j.approx_eur_per_hour === 'object' ? j.approx_eur_per_hour : null;
-    vhTopupConfig(j);
   } catch (_) { vhPriceCfg = null; }
   vhModeInfoRender();
 }

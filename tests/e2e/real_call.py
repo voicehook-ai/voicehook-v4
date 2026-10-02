@@ -376,8 +376,13 @@ def main():
                         time.sleep(0.2)
                         left = obs.saw(f"peer-left: {host_id}", since=t_click)
                 if a.expect == "keep":
-                    check("keep: new tab opened for Aufladen", bool(opened) and "/aufladen" in new_url,
-                          f"new_tabs={len(opened)} url={new_url or '-'}")
+                    # Aufladen öffnet seit dem Overlay-Umbau /aufladen im iframe über dem Call (kein neuer Tab).
+                    try:
+                        ov = page.evaluate("() => { const o = document.getElementById('vh-tuo'), f = document.getElementById('vh-tuo-frame');"
+                                           " return !!o && !o.hidden && /\\/aufladen/.test(f.getAttribute('src') || ''); }")
+                    except Exception:
+                        ov = False
+                    check("keep: Aufladen overlay opened over the call", ov, f"new_tabs={len(opened)} url={new_url or '-'}")
                     check("keep: original page URL unchanged", page.url == url_before)
                     check("keep: still connected 5s after click", still)
                     check("keep: same document (no reload)", same_doc)
