@@ -148,7 +148,7 @@ Quickstart B: `$D/out` (JSON lines) should show within ~5 s:
 |---|---|---|
 | `operator.say` | `{text, mode?}` | speak `text` verbatim. Modes below |
 | `operator.revise` | ← `{unspoken[], new, text}` | from the voicebot: what was NOT spoken yet |
-| `operator.say_status` | ← `{seq, state, spoken_chars}` | per say: `queued`/`spoken`/`interrupted`/`requeued`/`replaced` |
+| `operator.say_status` | ← `{seq, state, spoken_chars}` | per say: `queued`/`spoken`/`interrupted`/`requeued`/`replaced` (live mode: no `requeued`, `interrupted` is final) |
 | `operator.persona` | `{text}` | knowledge block after Delta's fixed core, for everyone (see above) |
 | `operator.interrupt` | `{}` | stop speaking; unspoken rest comes back as `operator.revise` |
 | `operator.inject` | `{text, role?}` | context entry, not spoken |
