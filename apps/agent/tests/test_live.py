@@ -83,7 +83,7 @@ async def test_live_say_becomes_generate_reply_instruction():
     kwargs = session.generate_reply.call_args.kwargs
     # als User-Turn, NICHT instructions= (das würde ein role="model"-Turn)
     assert "instructions" not in kwargs
-    assert kwargs["user_input"].startswith("[Operator]") and "Termin ist Dienstag" in kwargs["user_input"]
+    assert kwargs["user_input"].startswith("[Agent]") and "Termin ist Dienstag" in kwargs["user_input"]
     assert kwargs["allow_interruptions"] is True
 
 
@@ -124,12 +124,13 @@ async def test_live_persona_is_user_turn_not_update_instructions():
     agent.update_instructions.assert_not_called()
     ctx = agent.update_chat_ctx.call_args.args[0]
     last = ctx.items[-1]
-    assert last.role == "user" and "[Operator]" in last.text_content and "Du bist Coach" in last.text_content
+    assert last.role == "user" and "[System]" in last.text_content and "Du bist Coach" in last.text_content
 
 
 def test_live_base_instructions_pin_voice_and_language():
     t = live.LIVE_BASE_INSTRUCTIONS
-    assert "Deutsch" in t and "Stimme" in t and "Markierung in eckigen Klammern" in t
+    assert "Deutsch" in t and "dieselbe ruhige, warme Stimme" in t
+    assert "Nachrichten mit [Agent]" in t and "Nachrichten mit [System]" in t
 
 
 # ── Kosten mit offengelegter Basis: Menge aus Metrik x geprüfter Preis ──
@@ -214,7 +215,7 @@ def test_live_say_prompt_no_longer_allows_paraphrase():
     # Positivkontrolle gegen den alten Prompt: der erlaubte genau das Fehlverhalten
     assert "sinngemäß" not in live.LIVE_SAY_USER and "kurz" not in live.LIVE_SAY_USER
     for tpl in (live.LIVE_SAY_USER, live.LIVE_SAY_VERBATIM_USER):
-        assert tpl.startswith("[Operator]")
+        assert tpl.startswith("[Agent]")
         for rule in ("Einleitung", "Nachsatz"):
             assert rule in tpl
     for rule in ("nichts hinzufügen", "keine eigenen Behauptungen", "nichts weglassen", "abschwächen", "umdeuten"):
@@ -223,12 +224,13 @@ def test_live_say_prompt_no_longer_allows_paraphrase():
 
 
 def test_live_base_instructions_require_content_fidelity():
-    t = live.LIVE_BASE_INSTRUCTIONS
-    for rule in ("vollständig und unverfälscht", "nichts hinzufügen", "keine eigenen Behauptungen",
-                 "nichts weglassen", "nichts abschwächen", "nichts umdeuten", "Wort für Wort"):
+    # Delta-Kern Live (core.py, DELTA_CORE.md 3b): Inhalt treu, Formulierung frei
+    t = live.LIVE_BASE_INSTRUCTIONS.lower()
+    for rule in ("vollständig und unverfälscht", "nichts hinzufügen", "keine eigenen fakten",
+                 "nichts weglassen", "kein nachsatz", "wort für wort"):
         assert rule in t, rule
-    # Persona-Vorgaben bleiben stumm, Aussagen werden gesprochen
-    assert "lies sie nie vor" in t
+    # Vorgaben ([System]) bleiben stumm, Aussagen ([Agent]) werden gesprochen
+    assert "nie vorlesen" in t
 
 
 def test_live_say_plain_text_uses_fidelity_prompt_with_exact_text():
@@ -240,19 +242,19 @@ def test_live_say_plain_text_uses_fidelity_prompt_with_exact_text():
 def test_live_say_transcript_text_is_verbatim():
     # der Fall aus dem Live-Test 01.10.
     u = live.live_say_user_input(BUG_TEXT)
-    assert u.startswith("[Operator] Wörtlich.") and _quoted(u) == BUG_TEXT
+    assert u.startswith("[Agent] Wörtlich.") and _quoted(u) == BUG_TEXT
 
 
 @pytest.mark.parametrize("prefix", ["wörtlich: ", "Wörtlich:", "eins zu eins: ", "Eins zu Eins : ", "1:1: ", "1 zu 1: "])
 def test_live_say_explicit_verbatim_prefix_is_stripped(prefix):
     u = live.live_say_user_input(prefix + "Ich bin gleich zurück.")
-    assert u.startswith("[Operator] Wörtlich.") and _quoted(u) == "Ich bin gleich zurück."
+    assert u.startswith("[Agent] Wörtlich.") and _quoted(u) == "Ich bin gleich zurück."
 
 
 @pytest.mark.parametrize("text", ['Er sagte "morgen".', "Sie schrieb „passt“.", "Zitat von Max: geht klar"])
 def test_live_say_quotes_are_verbatim(text):
     assert _quoted(live.live_say_user_input(text)) == text
-    assert live.live_say_user_input(text).startswith("[Operator] Wörtlich.")
+    assert live.live_say_user_input(text).startswith("[Agent] Wörtlich.")
 
 
 @pytest.mark.parametrize("text", ["1:1-Kopie liegt bereit.", "wörtlich:", "Das ist wörtlich gemeint."])
@@ -290,7 +292,6 @@ def test_base_prompts_defer_capability_questions_to_operator():
     """Oliver 01.10.: Stimme verneinte Gmail-Zugriff des Operators. Faehigkeitsfragen -> nachschauen."""
     from agent.relay import DEFAULT_PERSONA
 
-    assert "ich frag deinen Agenten" in live.LIVE_BASE_INSTRUCTIONS
-    assert "Fähigkeiten" in live.LIVE_BASE_INSTRUCTIONS
-    assert "ich frag deinen Agenten" in DEFAULT_PERSONA
-    assert "Faehigkeiten" in DEFAULT_PERSONA
+    for t in (live.LIVE_BASE_INSTRUCTIONS, DEFAULT_PERSONA):
+        assert "Ich frag deinen Agenten kurz." in t
+        assert "Zugriff hast" in t and "beantwortest du nie selbst" in t

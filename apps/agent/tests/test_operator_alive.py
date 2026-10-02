@@ -95,7 +95,7 @@ async def test_live_mode_marked_turns():
     clock.t += ALIVE_STALE_S + 1
     await h.check_reach()
     last = agent.chat_ctx.items[-1].text_content
-    assert last.startswith("[Operator]") and "Claude ist gerade nicht erreichbar." in last
+    assert last.startswith("[System]") and "Claude ist gerade nicht erreichbar." in last
     await h.on_alive(_alive())
     assert "wieder erreichbar" in agent.chat_ctx.items[-1].text_content
 

@@ -14,6 +14,7 @@ nichts. Daraus folgt pro Raum:
 
 from __future__ import annotations
 
+from .core import MARK_SYSTEM
 from .guide import agent_refs
 
 TOPIC_ALIVE = "operator.alive"
@@ -67,12 +68,12 @@ def unreachable_block(name: str | None) -> str:
 
 
 def live_unreachable_user(name: str | None) -> str:
-    return ("[Operator]" + unreachable_block(name)
+    return (MARK_SYSTEM + unreachable_block(name)
             + "Nicht vorlesen, nicht darauf antworten.")
 
 
 def live_reachable_user(name: str | None) -> str:
     who = agent_refs(name)["nom"]
-    return (f"[Operator] {who[:1].upper()}{who[1:]} ist wieder erreichbar. Der Satz "
+    return (f"{MARK_SYSTEM} {who[:1].upper()}{who[1:]} ist wieder erreichbar. Der Satz "
             f"'{unreachable_sentence(name)}' gilt nicht mehr, es gelten wieder die "
-            "Weitergabe-Regeln. Nicht vorlesen, nicht darauf antworten.")
+            "Wartesatz-Regeln. Nicht vorlesen, nicht darauf antworten.")

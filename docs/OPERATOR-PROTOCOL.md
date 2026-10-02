@@ -100,7 +100,7 @@ All payloads are JSON on the LiveKit data channel. The CLI maps stdin lines
 |---|---|---|---|
 | `operator.say` | operator to agent | `{text, mode?, priority?}` | speak `text`, see modes below |
 | `operator.revise` | agent to operator | `{unspoken[], new, text}` | what was NOT spoken yet, plus an instruction |
-| `operator.persona` | operator to agent | `{text}` | replace the agent's instructions live; first push triggers the auto-greet |
+| `operator.persona` | operator to agent | `{text}` | knowledge of the agent, appended after Delta's fixed core (`apps/agent/core.py`), never replaces it; sanitized (max 1500 chars, override lines dropped, `operator.notice` `persona_sanitized`); first push triggers the auto-greet |
 | `operator.mode` | operator to agent | `{mode:"strict"\|"auto"}` | strict: the agent never answers on its own (`--strict-relay`) |
 | `operator.interrupt` | operator to agent | `{}` | stop everything; unspoken rest comes back as `operator.revise` |
 | `operator.inject` | operator to agent | `{text, role?}` | synthetic chat-context entry, not spoken |
@@ -228,8 +228,9 @@ call: the agent says "Das Live-Budget für diesen Monat ist aufgebraucht. Ich be
 Call." and ends it.
 
 In live mode `operator.say` is not verbatim: it reaches the model as a marked user turn
-("[Operator] Sag jetzt sinngemäß, kurz und natürlich, ohne etwas zu erfinden: ..."), and
-`operator.persona` is added as a marked user turn as well.
+("[Agent] Sprich jetzt diese Aussage. Übernimm ihren Inhalt vollständig ..."; "wörtlich:" =
+word for word), and `operator.persona` is added as a "[System]" turn framed as knowledge.
+The fixed Delta core sits in the system instruction set at connect time.
 
 ## Server-side filters (pipeline mode)
 

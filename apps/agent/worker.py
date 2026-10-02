@@ -751,7 +751,13 @@ async def entrypoint(ctx: JobContext) -> None:
         from .gate import SpeechGate, gate_enabled, load_vad
 
         gate = SpeechGate(load_vad()) if gate_enabled() else None
-        agent = RelayAgent(instructions=DEFAULT_PERSONA, gate=gate)
+        from .core import history_turns
+        from .history import HistoryKeeper, gemini_summarizer, summary_enabled
+
+        # Verlauf (#9): letzte N Wechsel + laufende Zusammenfassung (Gemini, ohne Denken)
+        summarizer = gemini_summarizer() if summary_enabled() else None
+        agent = RelayAgent(instructions=DEFAULT_PERSONA, gate=gate,
+                           history=HistoryKeeper(history_turns(), summarizer))
     handlers = build_relay_handlers(session, agent, room=ctx.room, live=live_mode)
     routes = topic_dispatch(handlers)
 

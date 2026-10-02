@@ -63,7 +63,10 @@ def test_worker_takes_last_joined_agents_name():
 
 # ----- kein "Operator" zum Nutzer (grep über alle Prompt-Texte) -----------------------
 _OPERATOR = re.compile(r"operator", re.IGNORECASE)
-_MARKER = "[Operator] "  # rein technische Turn-Markierung im Live-Modus, nie gesprochen
+_MARKER = "[System] "  # rein technische Turn-Markierung im Live-Modus, nie gesprochen
+_SAY_MARKER = "[Agent] "
+# Einzige erlaubte Stelle: das Verbot selbst im Delta-Kern (Regel 4, DELTA_CORE.md 3a/3b)
+_BAN = 'Sag nie "Operator"'
 
 
 def _user_facing_texts():
@@ -82,12 +85,14 @@ def _user_facing_texts():
     yield "LIVE_BASE", live.LIVE_BASE_INSTRUCTIONS
     yield "LEFT", live.LIVE_AGENT_LEFT_USER.removeprefix(_MARKER)
     yield "PERSONA", live.LIVE_PERSONA_USER.removeprefix(_MARKER)
-    yield "SAY", live.LIVE_SAY_USER.removeprefix(_MARKER)
-    yield "SAY_VERBATIM", live.LIVE_SAY_VERBATIM_USER.removeprefix(_MARKER)
+    yield "SAY", live.LIVE_SAY_USER.removeprefix(_SAY_MARKER)
+    yield "SAY_VERBATIM", live.LIVE_SAY_VERBATIM_USER.removeprefix(_SAY_MARKER)
 
 
 @pytest.mark.parametrize("label,text", list(_user_facing_texts()))
 def test_no_operator_word_in_prompts(label, text):
+    assert text.count(_BAN) <= 1, label   # das Verbot steht höchstens einmal (im Kern)
+    text = text.replace(_BAN, "Sag nie")
     assert not _OPERATOR.search(text), (label, text[max(0, _OPERATOR.search(text).start() - 40):][:90])
 
 
@@ -122,12 +127,12 @@ async def test_normal_join_names_agent_and_switches_on_new_agent():
     h = build_relay_handlers(MagicMock(), agent)
     await h.on_agent_presence(True, "Claude")
     t = agent.update_instructions.await_args.args[0]
-    assert "Kurzen Moment, ich frag Claude." in t and "ich geb das an Claude." in t
-    assert "Operator" not in t and "deinen Agenten" not in t
+    assert "Ich frag Claude kurz." in t and "Sekunde, Claude schaut nach." in t
+    assert "deinen Agenten" not in t and "dein Agent" not in t
     await h.on_agent_presence(True, "Claude")            # gleiches Event: idempotent
     assert agent.update_instructions.await_count == 1
     await h.on_agent_presence(True, "Hermes")            # neuer zuletzt beigetretener Agent
-    assert "ich frag Hermes." in agent.update_instructions.await_args.args[0]
+    assert "Ich frag Hermes kurz." in agent.update_instructions.await_args.args[0]
     await h.on_agent_presence(False)
     assert agent.update_instructions.await_args.args[0] == DEFAULT_PERSONA
 
@@ -138,7 +143,7 @@ async def test_normal_join_without_name_falls_back():
     h = build_relay_handlers(MagicMock(), agent)
     await h.on_agent_presence(True, None)
     t = agent.update_instructions.await_args.args[0]
-    assert t == OPERATOR_PERSONA and "Kurzen Moment, ich frag deinen Agenten." in t
+    assert t == OPERATOR_PERSONA and "Ich frag deinen Agenten kurz." in t
 
 
 @pytest.mark.asyncio
@@ -147,8 +152,8 @@ async def test_live_join_names_agent_in_user_turn():
     h = build_relay_handlers(MagicMock(), agent, live=True)
     await h.on_agent_presence(True, "Claude")
     turn = agent.chat_ctx.items[-1].text_content
-    assert turn.startswith("[Operator] Claude ist jetzt im Raum.")
-    assert "Kurzen Moment, ich frag Claude." in turn
+    assert turn.startswith("[System] Claude ist jetzt im Raum.")
+    assert "Ich frag Claude kurz." in turn
     agent.update_instructions.assert_not_awaited()
 
 
@@ -237,7 +242,7 @@ async def test_status_rate_limit_last_one_wins():
     await asyncio.sleep(0.1)
     assert agent.update_instructions.await_count == 3            # genau ein weiteres Update
     t = agent.update_instructions.await_args.args[0]
-    assert "Claude vier" in t and "zwei" not in t and "drei" not in t
+    assert "Gerade: vier." in t and "Gerade: zwei." not in t and "Gerade: drei." not in t
 
 
 @pytest.mark.parametrize("q", ["Was macht Claude gerade?", "wie weit bist du?", "Wie ist der Stand?",
@@ -298,13 +303,11 @@ async def test_status_answer_window_expires():
     ("live_joined_claude", live.live_agent_joined_user("Claude")),
 ])
 def test_prompts_forbid_excuses_and_vary_handoff(label, text):
-    from agent.guide import NO_EXCUSE_RULE
-
-    assert NO_EXCUSE_RULE in text, label
-    assert "Gib nie eine Begründung oder Erklärung, warum du etwas nicht weißt" in text
+    # seit dem Delta-Kern: Rechtfertigungsverbot + wechselnde Wartesätze stehen im Kern
+    assert "rechtfertige dich nie" in text, label
     name = "Claude" if "claude" in label else "deinen Agenten"
-    assert f"Kurzen Moment, ich frag {name}." in text
-    assert "nicht immer denselben" in text and text.count(" / ") >= 3
+    assert f"Ich frag {name} kurz." in text
+    assert ("nie zweimal derselbe" in text) or ("jedes Mal anders" in text)
 
 
 def test_handoff_variants_named():

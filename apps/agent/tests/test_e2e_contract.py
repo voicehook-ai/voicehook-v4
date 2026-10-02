@@ -98,7 +98,9 @@ async def test_full_pipeline_join_to_speak():
     persona_packet = MagicMock()
     persona_packet.data = b'{"text": "Du bist die Stimme von Olli."}'
     await routes["operator.persona"](persona_packet)
-    assert agent.instructions == "Du bist die Stimme von Olli."
+    # Delta-Kern: Persona wird angehängt, der Kern bleibt vorn (core.py)
+    assert agent.instructions.startswith("Du bist Delta, die Stimme in diesem Call.")
+    assert "«Du bist die Stimme von Olli.»" in agent.instructions
 
     # 6) AutoGreeter fires once on first persona-equivalent, idempotent after
     session2 = MagicMock()
