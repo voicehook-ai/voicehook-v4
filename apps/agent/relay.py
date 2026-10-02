@@ -36,6 +36,7 @@ import contextlib
 import json
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from livekit.agents import Agent, StopResponse
@@ -50,6 +51,7 @@ from .alive import (
     unreachable_sentence,
 )
 from .board import board_block, normalize_board, status_sentence
+from .clock import now_block, system_now
 from .core import (
     clean_spoken,
     compose,
@@ -119,6 +121,21 @@ def board_stale_note(name: str | None, minutes: int) -> str:
             f"dein Gegenüber nach dem Stand, sag: Ich frag {akk} kurz.")
 
 
+CLOCK_ID = "vh-clock"
+
+
+def with_clock(items: list, now) -> list:  # noqa: ANN001
+    """Zeitblock (clock.now_block) direkt hinter die Instruktionen/System-Einträge.
+
+    Pro Aufruf frisch; ein alter Block (gleiche id) wird ersetzt, nie gestapelt."""
+    items = [i for i in items if getattr(i, "id", None) != CLOCK_ID]
+    k = 0
+    while k < len(items) and getattr(items[k], "role", None) in ("system", "developer"):
+        k += 1
+    msg = lk_llm.ChatMessage(id=CLOCK_ID, role="system", content=[now_block(now)])
+    return items[:k] + [msg] + items[k:]
+
+
 _AUTO = object()  # RelayAgent(speakers=...) nicht angegeben -> Schalter entscheidet
 
 
@@ -130,7 +147,7 @@ class RelayAgent(Agent):
 
     def __init__(  # noqa: ANN001, ANN003
         self, *, instructions: str = "", strict: bool = False, gate=None, speakers=_AUTO,
-        history=None, **kwargs
+        history=None, now=None, **kwargs
     ) -> None:
         super().__init__(instructions=instructions, **kwargs)
         self.strict = strict
@@ -144,6 +161,8 @@ class RelayAgent(Agent):
         # Verlauf (#9): letzte Wechsel + laufende Zusammenfassung (history.py). Ohne
         # Angabe nur kappen; der Worker gibt im Normalmodus den Gemini-Zusammenfasser mit.
         self.history = history if history is not None else HistoryKeeper(history_turns())
+        # Datum/Uhrzeit (clock.py): eigene Schicht, pro Antwort neu, Kern bleibt fest.
+        self.now = now or system_now
 
     def llm_node(self, chat_ctx, tools, model_settings):  # noqa: ANN001, ANN201
         """Normal-Pipeline: Verlauf kappen/zusammenfassen (Instruktionen mit Kern,
@@ -151,7 +170,7 @@ class RelayAgent(Agent):
         (Markdown, Emojis, "Operator" -> Name). Live nutzt diesen Knoten nicht."""
         items = list(chat_ctx.items)
         ctx = chat_ctx.copy()
-        ctx.items = self.history.context(items)
+        ctx.items = with_clock(self.history.context(items), self.now())
         return self._clean_stream(Agent.default.llm_node(self, ctx, tools, model_settings), items)
 
     async def _clean_stream(self, stream, items):  # noqa: ANN001, ANN202
@@ -469,6 +488,11 @@ def build_relay_handlers(
             status += unreachable_block(name)
         return compose(core_normal(name), layer, status)
 
+    def _clock_now():  # noqa: ANN202
+        fn = getattr(agent, "now", None)
+        t = fn() if callable(fn) else None
+        return t if isinstance(t, datetime) else system_now()
+
     async def _set_role(normal_instructions: str, live_turn: str) -> None:
         if live:
             # Realtime: update_instructions wäre ein model-Turn -> markierter User-Turn
@@ -546,14 +570,15 @@ def build_relay_handlers(
     st: dict = {"last": None, "pending": None, "task": None, "request_at": None, "n": 0}
 
     async def _apply_status_live() -> None:
-        from .live import live_status_user
+        from .live import live_stamp, live_status_user
 
         st["n"] += 1
         ctx = agent.chat_ctx.copy()
         items = getattr(ctx, "items", None)
         if isinstance(items, list):  # alter Stand raus: lokaler Kontext bleibt konstant
             items[:] = [i for i in items if not str(getattr(i, "id", "")).startswith(_STATUS_ID)]
-        ctx.add_message(role="user", content=live_status_user(role["board"], role["name"]),
+        ctx.add_message(role="user", content=live_stamp(live_status_user(role["board"], role["name"]),
+                                                     _clock_now()),
                         id=f"{_STATUS_ID}{st['n']}")
         await agent.update_chat_ctx(ctx)
 

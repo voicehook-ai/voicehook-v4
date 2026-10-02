@@ -18,6 +18,7 @@ import os
 import re
 
 from .board import board_block
+from .clock import now_block
 from .core import CORE_ANCHOR, MARK_AGENT, MARK_SYSTEM, compose, core_live, persona_block
 from .guide import VOICEHOOK_GUIDE, agent_refs
 
@@ -42,6 +43,23 @@ def live_core_instructions(name: str | None = None) -> str:
 LIVE_CORE_INSTRUCTIONS = live_core_instructions()
 # Kern + Werksrolle + Anker: System-Instruktion beim Verbindungsaufbau.
 LIVE_BASE_INSTRUCTIONS = compose(LIVE_CORE_INSTRUCTIONS, VOICEHOOK_GUIDE)
+
+
+# Datum/Uhrzeit (clock.py, Oliver 02.10.2026). Die System-Instruktion geht nur beim
+# Verbindungsaufbau an Gemini, ein Zeit-Turn je Nutzer-Satz würde den ganzen Kontext
+# pro Turn neu abrechnen (Kosten, siehe oben) und Gemini könnte ihn kommentieren.
+# Deshalb: Zeit in der Start-Instruktion (eigene Schicht hinter Kern und Guide) und
+# huckepack im Status-Turn (operator.status), den es ohnehin gibt und der den alten
+# ersetzt. Laufende Calls mit Agent bekommen so mit jedem Board-Update (Rate-Limit
+# 5 s) die aktuelle Zeit, ohne einen einzigen zusätzlichen Turn.
+def live_base_instructions(now=None) -> str:  # noqa: ANN001
+    """System-Instruktion beim Sessionstart: Kern + Werksrolle + Zeitblock + Anker."""
+    return compose(LIVE_CORE_INSTRUCTIONS, VOICEHOOK_GUIDE, now_block(now))
+
+
+def live_stamp(turn: str, now=None) -> str:  # noqa: ANN001
+    """Zeitblock ans Ende eines [System]-Turns (Status-Turn; Turn bleibt sonst gleich)."""
+    return f"{turn.rstrip()}\n{now_block(now)}"
 _SILENT = " Nicht vorlesen, nicht darauf antworten."
 
 

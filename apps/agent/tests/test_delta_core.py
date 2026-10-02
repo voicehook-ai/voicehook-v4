@@ -477,7 +477,8 @@ async def test_llm_node_uses_keeper_context(monkeypatch):
     agent = RelayAgent(instructions="x", speakers=None, history=HistoryKeeper(3))
     out = [c async for c in agent.llm_node(_ctx(20), [], None)]
     assert out == ["ok"] and seen["items"][0].role == "system"
-    assert _texts(seen["items"])[1:] == ["u17", "a17", "u18", "a18", "u19", "a19"]
+    convo = [i for i in seen["items"] if i.id != "vh-clock"]  # Zeitblock: test_clock.py
+    assert _texts(convo)[1:] == ["u17", "a17", "u18", "a18", "u19", "a19"]
 
 
 # ===== #9b Denk-Budget =================================================================
