@@ -1,0 +1,13 @@
+#!/bin/sh
+# Launcher for all voicehook units. Resolves /opt/voicehook/current ONCE at start, so
+# this process and every job process it spawns later import exactly this release
+# (cwd + sys.path[0] + venv are real paths, not the symlink). A later symlink swap
+# by deploy.sh never changes a running process: no mixed versions per process.
+set -eu
+ROOT="${VOICEHOOK_ROOT:-/opt/voicehook}"
+REL="$(readlink -f "${ROOT}/current")"
+VENV="$(readlink -f "${REL}/venv")"
+[ -d "${REL}/apps/agent" ] && [ -x "${VENV}/bin/python" ] || { echo "voicehook-run: bad release ${REL}" >&2; exit 1; }
+cd "${REL}/apps"
+export VOICEHOOK_RELEASE="${REL##*/}"
+exec "${VENV}/bin/python" -m agent "$@"

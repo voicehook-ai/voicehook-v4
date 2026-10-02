@@ -1,0 +1,20 @@
+[Unit]
+Description=voicehook.ai HTTP (FastAPI :7400, /api/*); Worker laufen getrennt als voicehook-agent@<farbe>
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/voicehook
+EnvironmentFile=/opt/voicehook/.env
+ExecStart=/opt/voicehook/current/infra/systemd/voicehook-run http
+# Neustart dauert ~1-2 s; Caddy wiederholt den Upstream so lange (lb_try_duration).
+KillSignal=SIGTERM
+TimeoutStopSec=15
+Restart=on-failure
+RestartSec=2
+StandardOutput=append:/var/log/voicehook-http.log
+StandardError=append:/var/log/voicehook-http.log
+
+[Install]
+WantedBy=multi-user.target

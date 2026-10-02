@@ -9,7 +9,7 @@ Clean-slate rewrite of voicehook.ai. Only what was used. Plan: [voicehook-v3#64]
 ```
 Hetzner single box
 ├── docker   livekit-server                   :7880, :7881, :50000-60000/udp
-├── systemd  voicehook-agent  (apps/agent)    :7400  (FastAPI + LiveKit worker)
+├── systemd  voicehook-http + voicehook-agent@blue|green  (apps/agent)  :7400 / LiveKit worker, Blue/Green drain (docs/DEPLOY.md)
 └── systemd  caddy                            :80, :443
 ```
 

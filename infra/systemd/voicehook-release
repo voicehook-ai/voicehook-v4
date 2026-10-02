@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Box-side release steps, called by deploy/deploy.sh from the STAGED release dir.
+#   voicehook-release venv <rel>      build or reuse the venv for <rel>/pyproject.toml, link <rel>/venv
+#   voicehook-release activate <rel>  swap current -> <rel>, start the new color, wait until it is
+#                                     registered with LiveKit, restart HTTP, then drain the old color
+# Blue/Green: voicehook-agent@{blue,green} + voicehook-agent-live@{blue,green}; /opt/voicehook/.color
+# holds the active color. The old color gets SIGTERM (KillMode=mixed): it takes no new jobs and
+# lets running calls end (VH_DRAIN_TIMEOUT), then exits. Test overrides: VOICEHOOK_ROOT,
+# VOICEHOOK_DOCROOT, VOICEHOOK_UNITDIR, VOICEHOOK_SYSTEMCTL, VOICEHOOK_PYTHON.
+set -euo pipefail
+ROOT="${VOICEHOOK_ROOT:-/opt/voicehook}"
+DOCROOT="${VOICEHOOK_DOCROOT:-/var/www/voicehook}"
+UNITDIR="${VOICEHOOK_UNITDIR:-/etc/systemd/system}"
+PY="${VOICEHOOK_PYTHON:-python3.12}"
+KEEP=5
+sc() { ${VOICEHOOK_SYSTEMCTL:-systemctl} "$@"; }
+swap() { ln -sfn "$1" "${ROOT}/current.new" && mv -T "${ROOT}/current.new" "${ROOT}/current"; }
+
+venv() {  # one venv per dependency set (sha of pyproject.toml); a running color keeps its own
+  local rel="$1" h v
+  h="$(sha256sum "${rel}/pyproject.toml" | cut -c1-12)"; v="${ROOT}/venvs/${h}"
+  if [ -f "${v}/.complete" ]; then echo "   venv ${h}: reuse"; else
+    echo "   venv ${h}: build (new dependency set)"
+    rm -rf "${v}"; mkdir -p "${ROOT}/venvs"; "${PY}" -m venv "${v}"
+    "${v}/bin/python" -m pip install --quiet --upgrade pip wheel
+    "${PY}" -c 'import sys, tomllib; print("\n".join(tomllib.load(open(sys.argv[1], "rb"))["project"]["dependencies"]))' \
+      "${rel}/pyproject.toml" > "${v}/requirements.txt"
+    "${v}/bin/python" -m pip install --quiet -r "${v}/requirements.txt"
+    touch "${v}/.complete"
+  fi
+  ln -sfn "../../venvs/${h}" "${rel}/venv"
+}
+
+prune() {  # keep the newest KEEP releases (current + draining are among them) and their venvs
+  local r
+  # shellcheck disable=SC2012  # release names have no whitespace
+  ls -1dt "${ROOT}"/releases/*/ 2>/dev/null | tail -n +$((KEEP + 1)) | while read -r r; do
+    [ "$(readlink -f "${r}")" = "$(readlink -f "${ROOT}/current")" ] || rm -rf "${r}"
+  done
+  local used="" l
+  for l in "${ROOT}"/releases/*/venv; do [ -L "${l}" ] && used="${used} $(readlink -f "${l}")"; done
+  for r in "${ROOT}"/venvs/*/; do
+    [ -d "${r}" ] || continue
+    case " ${used} " in *" $(readlink -f "${r}") "*) ;; *) rm -rf "${r}" ;; esac
+  done
+}
+
+activate() {
+  local rel="$1" prev old new
+  prev="$(readlink -f "${ROOT}/current" 2>/dev/null || true)"
+  old="$(cat "${ROOT}/.color" 2>/dev/null || true)"
+  if [ "${old}" = blue ]; then new=green; else new=blue; fi
+  swap "${rel}"
+  echo "   current -> ${rel##*/} (was ${prev##*/})"
+  sc daemon-reload
+  # Type=notify: returns only after READY=1, i.e. the new worker is registered with LiveKit
+  if ! sc start "voicehook-agent@${new}" "voicehook-agent-live@${new}"; then
+    echo "!! ${new} did not register with LiveKit; rollback to ${prev##*/}, ${old:-legacy} keeps serving" >&2
+    sc stop "voicehook-agent@${new}" "voicehook-agent-live@${new}" || true
+    if [ -n "${prev}" ]; then swap "${prev}"; else rm -f "${ROOT}/current"; fi
+    return 1
+  fi
+  echo "   ${new} registered: new calls -> ${rel##*/}"
+  # one-time migration from the single-process dev-mode units (HTTP + worker, no drain)
+  local u
+  for u in voicehook-agent voicehook-agent-live; do
+    if [ -f "${UNITDIR}/${u}.service" ]; then
+      echo "   migrate: stop + remove legacy ${u}.service"
+      sc disable --now "${u}.service" || true; rm -f "${UNITDIR}/${u}.service"
+    fi
+  done
+  sc daemon-reload
+  sc enable voicehook-http.service >/dev/null 2>&1 || true
+  sc restart voicehook-http.service  # ~1-2 s; Caddy retries (lb_try_duration), no 502
+  [ -d "${rel}/web" ] && rsync -a --checksum "${rel}/web/" "${DOCROOT}/"  # no --delete: box-only files stay
+  sc enable "voicehook-agent@${new}" "voicehook-agent-live@${new}" >/dev/null 2>&1 || true
+  printf '%s\n' "${new}" > "${ROOT}/.color"
+  if [ -n "${old}" ]; then
+    sc disable "voicehook-agent@${old}" "voicehook-agent-live@${old}" >/dev/null 2>&1 || true
+    sc stop --no-block "voicehook-agent@${old}" "voicehook-agent-live@${old}"
+    echo "   ${old} draining: running calls end on ${prev##*/}, then it exits (max 60 min, Live 20 min)"
+  fi
+  prune
+}
+
+case "${1:-}" in
+  venv) venv "$2" ;;
+  activate) activate "$2" ;;
+  *) echo "usage: $0 venv|activate <release-dir>" >&2; exit 2 ;;
+esac

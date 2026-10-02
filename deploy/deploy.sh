@@ -1,32 +1,38 @@
 #!/usr/bin/env bash
-# v4 deploy. Single agent service + caddy + livekit (docker run).
+# v4 deploy. Blue/Green workers + separate HTTP unit + caddy + livekit (docker run).
 # Change-aware: the deployed commit is recorded on the box in
 # /var/www/voicehook/.deployed-sha. If only web/** changed since then, only
-# web/ is synced (no pip, no agent restart, no caddy reload). Anything else, or
-# an unknown/dirty deployed SHA, takes the full path, which ALWAYS restarts the
-# agent and reloads caddy. A 2nd run with no change is a no-op ("up to date").
-# Before the full path touches anything, a box-local LiveKit ListRooms preflight
-# aborts if any room still has a human participant (fails CLOSED on error).
+# web/ is synced (no preflight, no restart). Anything else, or an unknown/dirty
+# deployed SHA, takes the full path:
+#   1. preflight (LiveKit ListRooms, box-local) BEFORE anything is copied: a human in a
+#      room = nothing is copied, abort (or --wait[=MIN] polls every 30 s); errors fail closed
+#   2. stage a new release dir /opt/voicehook/releases/<sha>-<ts> (+ venv per pyproject hash)
+#   3. activate in one step: symlink swap current -> release, start the other color
+#      (voicehook-agent@blue|green, returns once registered with LiveKit), restart
+#      voicehook-http, then SIGTERM the old color: it takes no new jobs and drains its calls
+# A 2nd run with no change is a no-op ("up to date").
 #
-#   BOX_HOST=root@<ip>  ./deploy/deploy.sh [--web-only|--full] [--dry-run] [--force-restart]
+#   BOX_HOST=root@<ip>  ./deploy/deploy.sh [--web-only|--full] [--dry-run] [--wait[=MIN]] [--force-restart]
 #   BOX_HOST=local      ./deploy/deploy.sh   # cloud-init first-boot
 #
 # SSH auth: ssh-agent via SSH_AUTH_SOCK (key from orb, never on disk, see
 # docs/DEPLOY.md). SSH_KEY=<file> (-i) is only a fallback when no agent key is
 # loaded and the file exists. SSH_KNOWN_HOSTS=<file> overrides known_hosts.
-# DEPLOY_SSH=<cmd> replaces the ssh command (tests / stubs).
+# DEPLOY_SSH=<cmd> / DEPLOY_RSYNC=<cmd> replace ssh / rsync (tests / stubs).
 # CADDY_SITE_MAIN  (default voicehook.ai)        — public host for /, /api/*
 # CADDY_SITE_RTC   (default rtc.voicehook.ai)    — public host for LK WSS
 set -euo pipefail
 
-MODE=auto DRY=0 FORCE_RESTART=0
+MODE=auto DRY=0 FORCE_RESTART=0 WAIT_MIN=0
 for a in "$@"; do
   case "$a" in
+    --wait) WAIT_MIN=30 ;;
+    --wait=*) WAIT_MIN="${a#--wait=}"; [[ "${WAIT_MIN}" =~ ^[0-9]+$ ]] || { echo "bad --wait" >&2; exit 2; } ;;
     --web-only) MODE=web ;;
     --full) MODE=full ;;
     --dry-run) DRY=1 ;;
     --force-restart) FORCE_RESTART=1 ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
     *) echo "unknown arg: $a" >&2; exit 2 ;;
   esac
 done
@@ -36,7 +42,7 @@ SSH_KEY="${SSH_KEY:-${HOME:-/root}/.ssh/voicehook_v4}"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 SHA_FILE=/var/www/voicehook/.deployed-sha
 EXCL=(--exclude='.env*' --exclude='__pycache__' --exclude='.venv' --exclude='.git' --exclude='*.egg-info')
-RS=(rsync -az -i)
+RS=("${DEPLOY_RSYNC:-rsync}" -az -i)
 [ "${DRY}" -eq 1 ] && RS+=(-n)
 
 case "${BOX_HOST}" in
@@ -105,24 +111,32 @@ if [ "${MODE}" = web ]; then
   finish; exit 0
 fi
 
-# ---- full path: preflight BEFORE anything changes on the box -------------------
+# ---- full path: preflight BEFORE anything is copied to the box ------------------
 preflight() {
   # Box-local twirp ListRooms/ListParticipants; LiveKit keys never leave the box.
-  # rc 0 = no human in any room, rc 3 = human present, anything else = error.
+  # rc 0 = no human in any room (or no worker running), rc 3 = human present, else error.
   local st rc=0
-  st="$(remote "systemctl is-active voicehook-agent 2>/dev/null || true")" || st=""
+  st="$(remote "systemctl is-active voicehook-agent voicehook-agent@blue voicehook-agent@green 2>/dev/null || true")" || st=""
   if [ -z "${st}" ]; then echo "!! preflight: cannot query agent state (fail closed)" >&2; return 1; fi
-  if [ "${st}" != active ]; then echo "==> preflight: agent ${st}, no live session to interrupt"; return 0; fi
+  if ! printf '%s\n' "${st}" | grep -qx active; then echo "==> preflight: no agent active, no live session to interrupt"; return 0; fi
   # hard caps: outer 120s on the whole call, 90s on python, 80s internal deadline, 10s per request
   # shellcheck disable=SC2086  # SSH is a command string (word-split on purpose, as in remote())
   if [ "${LOCAL}" -eq 1 ]; then preflight_py | timeout 120 timeout 90 python3 - || rc=$?
   else preflight_py | timeout 120 ${SSH} "${BOX_HOST}" "timeout 90 python3 -" || rc=$?; fi
-  case "${rc}" in
-    0) return 0 ;;
-    3) if [ "${FORCE_RESTART}" -eq 1 ]; then echo "!! humans in call, --force-restart given: continuing"; return 0; fi
-       echo "!! preflight: human participant in a live room; abort (use --force-restart to override)" >&2; return 1 ;;
-    *) echo "!! preflight failed rc=${rc} (fail closed; --force-restart does not bypass errors)" >&2; return 1 ;;
-  esac
+  return "${rc}"
+}
+gate() {  # preflight until free, --wait deadline, or abort. Nothing has been copied yet.
+  local rc end=$(( $(date +%s) + WAIT_MIN * 60 ))
+  while :; do
+    rc=0; preflight || rc=$?
+    case "${rc}" in
+      0) return 0 ;;
+      3) if [ "${FORCE_RESTART}" -eq 1 ]; then echo "!! humans in call, --force-restart: continuing (their calls drain on the old color)"; return 0; fi
+         if [ "$(date +%s)" -lt "${end}" ]; then echo "==> call active: NOTHING copied yet, re-check in 30 s (waiting until $(date -d "@${end}" +%H:%M 2>/dev/null || echo "${end}"))"; sleep 30; continue; fi
+         echo "!! preflight: human participant in a live room. NOTHING was copied, box unchanged. Retry later, --wait[=MIN] or --force-restart" >&2; return 1 ;;
+      *) echo "!! preflight failed rc=${rc} (fail closed, nothing copied; --force-restart does not bypass errors)" >&2; return 1 ;;
+    esac
+  done
 }
 preflight_py() { cat <<'PY'
 import base64, hashlib, hmac, json, sys, time, urllib.request
@@ -159,17 +173,26 @@ sys.exit(3 if humans else 0)
 PY
 }
 
+VH=/opt/voicehook
 if [ "${DRY}" -eq 1 ]; then echo "   [dry-run] would run: LiveKit ListRooms preflight (abort on human participant)"
-else preflight || exit 1; fi
+else gate || exit 1; fi
 
-echo "==> sync code → /opt/voicehook  (apps/ layout preserved so pip install -e . works)"
-run "mkdir -p /opt/voicehook/apps /var/www/voicehook"
-# agent code is a repo mirror: --delete, but box-only .env*/.venv/caches/egg-info are excluded (= protected)
-rs --delete "${EXCL[@]}" "${REPO}/apps/agent/" "$(dst /opt/voicehook/apps/agent)/"
-# docroot: no --delete, box-only files (.deployed-sha, verification files) are never removed
-rs "${EXCL[@]}" "${REPO}/web/" "$(dst /var/www/voicehook)/"
-rs "${REPO}/pyproject.toml" "$(dst /opt/voicehook/pyproject.toml)"
-rs "${REPO}/README.md"      "$(dst /opt/voicehook/README.md)"
+# The color to start next must be fully stopped (a previous deploy may still drain on it).
+NEWC="$(remote "[ \"\$(cat ${VH}/.color 2>/dev/null)\" = blue ] && echo green || echo blue")"
+BUSY="$(remote "systemctl is-active voicehook-agent@${NEWC} voicehook-agent-live@${NEWC} 2>/dev/null || true" | grep -vx -e inactive -e failed -e unknown || true)"
+if [ -n "${BUSY}" ]; then
+  echo "!! ${NEWC} is still ${BUSY//$'\n'/,} (previous release draining its calls). NOTHING copied. Retry when" >&2
+  echo "   'systemctl is-active voicehook-agent@${NEWC} voicehook-agent-live@${NEWC}' says inactive" >&2; exit 1
+fi
+
+REL="${VH}/releases/${HEAD:0:12}-$(date -u +%Y%m%d%H%M%S)"
+echo "==> stage release ${REL} (running services unchanged)"
+run "mkdir -p ${REL}/apps ${REL}/infra /var/www/voicehook"
+rs "${EXCL[@]}" "${REPO}/apps/agent/" "$(dst "${REL}/apps/agent")/"
+rs "${REPO}/infra/systemd/" "$(dst "${REL}/infra/systemd")/"
+rs "${EXCL[@]}" "${REPO}/web/" "$(dst "${REL}/web")/"
+rs "${REPO}/pyproject.toml" "${REPO}/README.md" "$(dst "${REL}")/"
+run "bash ${REL}/infra/systemd/voicehook-release venv ${REL}"
 
 # USE_SSLIP=true (cloud-init first-boot, DNS-less box): self-derive <ip>.sslip.io from the box's own IPv4 so a fresh box gets HTTPS in one apply, no IP injection.
 if [ "${USE_SSLIP:-}" = "true" ] && [ -z "${CADDY_SITE_MAIN:-}" ]; then
@@ -182,22 +205,12 @@ fi
 DOMAIN="${CADDY_SITE_MAIN:-voicehook.ai}"
 RTC="${CADDY_SITE_RTC:-rtc.voicehook.ai}"
 
-echo "==> venv + pip install -e ."
-run "set -e
-  cd /opt/voicehook
-  [ -x .venv/bin/python ] || python3.12 -m venv .venv
-  .venv/bin/pip install --quiet --upgrade pip wheel
-  .venv/bin/pip install --quiet -e ."
-
-echo "==> .env LIVEKIT_URL sync (#68)"
-CUR="$(remote "sed -n 's/^LIVEKIT_URL=//p' /opt/voicehook/.env 2>/dev/null || true")"
+echo "==> .env LIVEKIT_URL sync (#68; read by the new color at start, running processes keep theirs)"
+CUR="$(remote "sed -n 's/^LIVEKIT_URL=//p' ${VH}/.env 2>/dev/null || true")"
 echo "   LIVEKIT_URL: ${CUR:-<unset>} -> wss://${RTC}"
-run "[ -f /opt/voicehook/.env ] && sed -i 's|^LIVEKIT_URL=.*|LIVEKIT_URL=wss://${RTC}|' /opt/voicehook/.env || true"
+run "[ -f ${VH}/.env ] && sed -i 's|^LIVEKIT_URL=.*|LIVEKIT_URL=wss://${RTC}|' ${VH}/.env || true"
 
-echo "==> systemd units + restart (voicehook-agent + Gemini-Live-Testworker voicehook-agent-live)"
-for u in voicehook-agent voicehook-agent-live; do rs "${REPO}/infra/systemd/$u.service" "$(dst /etc/systemd/system/$u.service)"; done
-run "systemctl daemon-reload && for u in voicehook-agent voicehook-agent-live; do systemctl enable --now \$u.service && systemctl restart \$u.service; done"
-
+# Caddy first: the HTTP restart during activation relies on lb_try_duration (no 502 gap).
 echo "==> Caddyfile (rendered from ${DOMAIN} + ${RTC})"
 TMP=$(mktemp)
 sed -e "s|__SITE_MAIN__|${DOMAIN}|" -e "s|__SITE_RTC__|${RTC}|" "${REPO}/infra/caddy/Caddyfile.tmpl" > "${TMP}"
@@ -206,6 +219,7 @@ rm -f "${TMP}"
 run "chgrp caddy /etc/caddy/Caddyfile 2>/dev/null || true; chmod 0640 /etc/caddy/Caddyfile
   caddy validate --config /etc/caddy/Caddyfile && (systemctl reload caddy || systemctl restart caddy)"
 
+# LiveKit before activation: the new color only reports READY once registered (first boot!).
 echo "==> livekit-server (docker run, host network)"
 rs "${REPO}/infra/livekit/docker-compose.yml" "$(dst /etc/livekit/docker-compose.yml)"
 run "docker pull -q livekit/livekit-server:latest >/dev/null
@@ -215,5 +229,10 @@ run "docker pull -q livekit/livekit-server:latest >/dev/null
       -v /etc/livekit/livekit.yaml:/etc/livekit/livekit.yaml:ro \
       livekit/livekit-server:latest --config /etc/livekit/livekit.yaml
   fi"
+
+echo "==> activate: units, symlink swap, start ${NEWC}, HTTP restart, drain old color"
+for u in voicehook-http.service voicehook-agent@.service voicehook-agent-live@.service; do
+  rs "${REPO}/infra/systemd/${u}" "$(dst "/etc/systemd/system/${u}")"; done
+run "bash ${REL}/infra/systemd/voicehook-release activate ${REL}"
 
 finish

@@ -1,38 +1,52 @@
-"""Single-process entrypoint — runs the FastAPI surface + LiveKit worker.
+"""Entrypoint: FastAPI surface and/or LiveKit worker.
 
-`python -m agent` starts uvicorn (HTTP :7400) in a background thread, then the
-livekit-agents worker registers + blocks. One systemd unit, two responsibilities.
+- `python -m agent http`: nur HTTP (:7400), eigener Dienst `voicehook-http` auf der Box.
+  uvicorn läuft im Hauptthread und beendet sich bei SIGTERM sauber (offene Requests
+  bekommen 5 s).
+- `python -m agent start|dev`: LiveKit-Worker. Ohne VOICEHOOK_HTTP_DISABLED=1 startet
+  zusätzlich uvicorn in einem Hintergrund-Thread (lokale Entwicklung, ein Prozess).
+  Auf der Box laufen die Worker als voicehook-agent@blue/green mit HTTP_DISABLED=1,
+  damit zwei Farben gleichzeitig laufen können (Blue/Green-Deploy, docs/DEPLOY.md).
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
 
 import uvicorn
 
-from .server import app
-from .worker import main as run_worker
-
 
 def _serve_http() -> None:
+    from .server import app
+
     port = int(os.environ.get("VOICEHOOK_HTTP_PORT", "7400"))
     host = os.environ.get("VOICEHOOK_HTTP_HOST", "127.0.0.1")
-    uvicorn.run(app, host=host, port=port, log_config=None)
+    uvicorn.run(app, host=host, port=port, log_config=None, timeout_graceful_shutdown=5)
+
+
+def _start_redispatch() -> None:
+    from .redispatch import start_background
+
+    start_background()
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    # Der Live-Testworker (voice-ai-live) läuft als zweiter Dienst ohne HTTP;
-    # Web/API + Raum->Worker-Zuordnung bleiben beim Hauptdienst auf :7400.
+    if sys.argv[1:2] == ["http"]:
+        # Box: Wächter läuft im HTTP-Dienst (überlebt Worker-Wechsel blue/green)
+        _start_redispatch()
+        _serve_http()
+        return
+    from .worker import main as run_worker
+
     if os.environ.get("VOICEHOOK_HTTP_DISABLED", "") != "1":
         threading.Thread(target=_serve_http, daemon=True, name="vh-http").start()
-        # Delta nach Neustart zurück in laufende Räume (redispatch.py), nur im Hauptdienst
-        from .redispatch import start_background
-
-        start_background()
-    run_worker()  # blocks until worker exits / SIGTERM
+        # Delta nach Neustart zurück in laufende Räume (redispatch.py), nur wo HTTP läuft
+        _start_redispatch()
+    run_worker()  # blocks until worker exits; `start` drains on SIGTERM
 
 
 if __name__ == "__main__":
