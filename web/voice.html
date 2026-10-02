@@ -164,6 +164,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'topup.done': 'Guthaben aufgeladen: {v}',
       'low.notice': 'Noch etwa {n} min, dann endet der Call',
       'pay.ended': 'Call beendet: Gratis-Verbrauch und Guthaben aufgebraucht',
+      'call.endedSrv': 'Call beendet',
       'price.approx': 'ca. {p} pro Stunde inkl. MwSt',
       'adv.live1': 'natürlichere Stimme', 'adv.live2': 'schneller', 'adv.live3': 'hört den Tonfall',
       'adv.normal1': 'günstiger', 'adv.normal2': 'kostet nichts bei Stille',
@@ -301,6 +302,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'topup.done': 'Credit topped up: {v}',
       'low.notice': 'About {n} min left, then the call ends',
       'pay.ended': 'Call ended: free allowance and credit used up',
+      'call.endedSrv': 'Call ended',
       'price.approx': 'approx. {p} per hour incl. VAT',
       'adv.live1': 'more natural voice', 'adv.live2': 'faster', 'adv.live3': 'hears your tone of voice',
       'adv.normal1': 'cheaper', 'adv.normal2': 'costs nothing during silence',
@@ -5460,6 +5462,7 @@ async function vhStartCall() {
     // "ready"-message comes from TrackSubscribed once voice-ai's audio-track
     // arrives — at this point the user cannot actually talk yet.
     lkConnected = true; try { vhHideJoinGate(); } catch (_) {}
+    if (!VH_INVITE && !vhAgentPresent(lkRoom)) vhAgentWatchArm(lkRoom, VH_AGENT_NEVER_MS);
     try { vhMarkSeen(); } catch (_) {}
     btnCall.innerHTML = ICON_CALL_STOP; btnCall.classList.add('on'); btnCall.title = vhT('call.end');
     try { vhMuteBtnVisibility(true); } catch (_) {}  // show mic-mute toggle next to btn-call
@@ -5481,7 +5484,37 @@ async function vhStartCall() {
   } finally { btnCall.disabled = false; }
 }
 
+// Server beendet den Call (Oliver 02.10.: "jetzt bin ich alleine da und warte. Das
+// Frontend muss mich dann auch rauswerfen"). Signale: Topic call_end vom Worker (Grund),
+// Raum gelöscht (Disconnected), oder voice-ai weg und nicht binnen VH_AGENT_GONE_MS zurück.
+const VH_AGENT_GONE_MS = 8000;    // kurzer Agent-Reconnect bleibt unbemerkt
+const VH_AGENT_NEVER_MS = 30000;  // nach Verbindungsaufbau: Agent kommt gar nicht
+let vhAgentGoneTimer = null;
+function vhAgentWatchClear() { if (vhAgentGoneTimer) { clearTimeout(vhAgentGoneTimer); vhAgentGoneTimer = null; } }
+function vhAgentPresent(room) {
+  try { for (const p of room.remoteParticipants.values()) if (vhPresenceSlotFor(p.identity) === 'voice-ai') return true; } catch (_) {}
+  return false;
+}
+function vhAgentWatchArm(room, ms) {
+  vhAgentWatchClear();
+  vhAgentGoneTimer = setTimeout(() => {
+    vhAgentGoneTimer = null;
+    if (lkRoom === room && !vhAgentPresent(room)) vhServerEnd('agent_gone');
+  }, ms);
+}
+function vhServerEnd(reason) {
+  if (!lkRoom && !lkConnected) return;
+  vhAgentWatchClear();
+  const pay = (reason === 'free_limit' || reason === 'wallet_empty') && !vhIsExempt();
+  if (reason === 'free_limit' && vhFree) { vhFree = Object.assign({}, vhFree, { eur_left: 0 }); }
+  vhEndCall(false);
+  if (pay) vhPayShow(vhT(reason === 'free_limit' ? 'pay.free' : 'pay.empty'));
+  else vhLiveErrShow(vhT('call.endedSrv'));  // sichtbarer Hinweis (Banner)
+  err.dataset.sticky = '1';  // das Disconnected-Echo von lkRoom.disconnect() löscht die Meldung nicht
+  try { vhModeInfoRender(); } catch (_) {}
+}
 function vhEndCall(fromEvent) {
+  try { vhAgentWatchClear(); } catch (_) {}
   try { vhLowBalEnd(lkConnected && !VH_INVITE); } catch (_) {}
   try { vhHideSoundGate(); } catch (_) {}
   try { vhCostStop(); } catch (_) {}
@@ -6188,6 +6221,7 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
   } catch (_) {}
   room.on(RoomEvent.ParticipantConnected, (p) => {
     const id = p.identity || '?';
+    if (vhPresenceSlotFor(p.identity) === 'voice-ai') vhAgentWatchClear();
     const slot = vhPresenceSlotForP(p);
     if (slot === 'agent') vhRememberAgentLabel(p);
     // For voice-ai: hold the chip + greeting until the audio-track actually
@@ -6215,13 +6249,20 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
   room.on(RoomEvent.ParticipantDisconnected, (p) => {
     vhTrLog('system', vhT('sys.peerLeft', { id: p.identity }));
     const slot = vhPresenceSlotForP(p);
+    // voice-ai weg: kommt er nicht binnen VH_AGENT_GONE_MS zurück, Call beenden.
+    if (vhPresenceSlotFor(p.identity) === 'voice-ai' && !vhAgentPresent(room)) vhAgentWatchArm(room, VH_AGENT_GONE_MS);
     // Issue #3: pass identity so vhPresenceSet can ignore stale events for an
     // identity that has already been replaced by a fresh peer in the same slot.
     if (slot) vhPresenceSet(slot, 'out', p.identity);
     // Last peer left → show invite button again (still waiting)
     if (vhInvitePrepared && room.numParticipants <= 1) vhInviteBtnShow();
   });
-  room.on(RoomEvent.Disconnected, () => { vhTrLog('system', vhT('sys.disconnected')); vhPresenceReset(); vhEndCall(true); });
+  room.on(RoomEvent.Disconnected, () => {
+    // Vom Server getrennt (z. B. Raum gelöscht), nicht selbst aufgelegt: Meldung zeigen.
+    const byServer = lkConnected && lkRoom === room;
+    vhTrLog('system', vhT('sys.disconnected')); vhPresenceReset(); vhEndCall(true);
+    if (byServer && !err.dataset.sticky) { vhLiveErrShow(vhT('call.endedSrv')); err.dataset.sticky = '1'; }
+  });
   // Self-report may also arrive/change at runtime (name/attributes update) →
   // refresh the agent chip label if that identity currently owns the slot.
   const vhRefreshAgentLabel = (p) => {
@@ -6281,6 +6322,27 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
     vhBumpActivity();
     const from = participant?.identity || '?';
     // Kostenanzeige (wieder an, Olli 30.09.): nur Untertitel, nie ins Transkript.
+    // Gratis-Stand im Call kommt vom Worker selbst (freetier.free_state), nicht von
+    // /api/me: Anzeige und Worker-Entscheidung können so nicht auseinanderlaufen.
+    if (topic === 'free.state') {
+      try {
+        const s = JSON.parse(new TextDecoder().decode(payload));
+        if (typeof s.eur_left === 'number' && isFinite(s.eur_left)) {
+          const per = Number(s.eur_per_day);
+          vhFree = { eur_left: Math.max(0, s.eur_left), eur_per_day: isFinite(per) ? per : ((vhFree && vhFree.eur_per_day) || 0) };
+          if (s.exempt === true) vhFree.exempt = true;
+          vhModeInfoRender();
+        }
+      } catch (_) {}
+      return;
+    }
+    if (topic === 'call_end') {
+      if (vhPresenceSlotFor(from) !== 'voice-ai') return;  // nur der Worker darf beenden
+      let reason = '';
+      try { reason = String(JSON.parse(new TextDecoder().decode(payload)).reason || ''); } catch (_) {}
+      vhServerEnd(reason || 'ended');
+      return;
+    }
     if (topic === 'cost') {
       try {
         const c = JSON.parse(new TextDecoder().decode(payload));
