@@ -109,7 +109,8 @@ def test_core_lengths_under_budget():
     for name in (None, "Claude"):
         # 1600: Regel 3 neu, Status vorlesen, Regel 8 (Oliver 02.10.) + [Name] + Nutzername
         # 1660: Regel 1 "Zahlen nur wörtlich" + Regel 7 "stopp" ohne Selbst-Stopp (Call 02.10.)
-        assert len(core_normal(name, "Oliver")) <= 1660 and len(core_live(name, "Oliver")) <= 1660
+        # 1800: Regel 1/3 nennen Claudes bisherige Aussagen als dritte Quelle (Oliver 02.10.)
+        assert len(core_normal(name, "Oliver")) <= 1800 and len(core_live(name, "Oliver")) <= 1800
 
 
 def test_compose_order_core_role_status_anchor():

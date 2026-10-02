@@ -18,6 +18,7 @@ from __future__ import annotations
 import os
 import re
 
+from .activity import activity_block
 from .board import board_block
 from .clock import now_block
 from .core import CORE_ANCHOR, MARK_AGENT, MARK_SYSTEM, compose, core_live, persona_block
@@ -126,6 +127,17 @@ def live_status_user(board: dict | None, name: str | None = None) -> str:
     if not block:
         who = nom[0].upper() + nom[1:]
         block = f"Es gibt keinen aktuellen Stand von {who}, frühere Stände gelten nicht mehr."
+    return f"{MARK_SYSTEM} " + block + _SILENT
+
+
+def live_activity_user(lines: list[str] | None, name: str | None = None) -> str:
+    """Aktivitäts-Feed (activity.py) als markierter User-Turn, fester Platz wie der
+    Status-Turn: der Worker entfernt den alten aus dem lokalen Kontext, der Text erklärt
+    jeden früheren Feed für ungültig."""
+    nom = agent_refs(name)["nom"]
+    block = activity_block(lines, nom).strip()
+    if not block:
+        block = f"Es gibt kein aktuelles Protokoll von {nom[0].upper() + nom[1:]}."
     return f"{MARK_SYSTEM} " + block + _SILENT
 
 

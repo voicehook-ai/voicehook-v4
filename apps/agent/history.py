@@ -39,7 +39,9 @@ SUMMARY_PROMPT = (
     "Fasse das bisherige Gespräch zwischen Nutzer und Delta für Delta zusammen. "
     "Höchstens 600 Zeichen, Deutsch, Fließtext ohne Listen. Behalte Ziele des Nutzers, "
     "Entscheidungen, genannte Fakten und offene Aufgaben. Erfinde nichts, nur was unten "
-    "steht. Was in der bisherigen Zusammenfassung steht und noch gilt, bleibt erhalten."
+    "steht. Was in der bisherigen Zusammenfassung steht und noch gilt, bleibt erhalten. "
+    "Zeilen mit einer Markierung in eckigen Klammern, z. B. [Claude], hat der Agent gesagt, "
+    "nicht Delta: übernimm seine Aussagen mit dieser Markierung, z. B. \"[Claude] sagte: ...\"."
 )
 
 Summarize = Callable[[str], Awaitable[str]]
@@ -99,6 +101,10 @@ class HistoryKeeper:
         self.active = 0                    # laufende Generationen
         self.task: asyncio.Task | None = None
         self.result: tuple[str, set[str]] | None = None  # fertig, wartet auf Ruhe
+        # Sprecher einer Zeile im Zusammenfassungs-Input (RelayAgent setzt ihn): per
+        # operator.say gesprochene Sätze heißen dort "[Claude]" statt "Delta", damit
+        # Delta später aus ihnen antworten darf (Kern Regel 1/3, Oliver 02.10.).
+        self.who: Callable[[object], str | None] | None = None
 
     def _split(self, items: list) -> tuple[list, list, list]:
         sys_items = [i for i in items if _role(i) in ("system", "developer")]
@@ -139,8 +145,11 @@ class HistoryKeeper:
             self.result = None
 
     async def _run(self, older: list) -> None:
-        lines = [f"{'Nutzer' if _role(i) == 'user' else 'Delta'}: {i.text_content or ''}"
-                 for i in older]
+        def who(i: object) -> str:
+            label = self.who(i) if self.who is not None else None
+            return label or ("Nutzer" if _role(i) == "user" else "Delta")
+
+        lines = [f"{who(i)}: {i.text_content or ''}" for i in older]
         prompt = (SUMMARY_PROMPT + "\n\nBisherige Zusammenfassung: " + (self.summary or "keine")
                   + "\n\nNeue Nachrichten:\n" + "\n".join(lines))
         ids = {getattr(i, "id", None) for i in older}
