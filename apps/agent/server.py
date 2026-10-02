@@ -419,14 +419,14 @@ def free_remaining(request: Request) -> dict:
 
 
 def _free_info(request: Request) -> dict:
-    """{eur_left, eur_per_day} für /api/me und /api/free/remaining (Euro, 2 Stellen)."""
-    if not freetier.enabled():
-        return {"eur_left": 0.0, "eur_per_day": 0.0}
+    """{eur_left, eur_per_day[, exempt]} für /api/me und /api/free/remaining, aus
+    freetier.free_state: dieselbe Rechnung wie Raumanlage (402) und Worker."""
     keys = freetier.identity_keys(request.headers.get(freetier.ANON_HEADER), _client_ip(request))
-    per_day = round(freetier.limit_eur(), 2)
-    if freetier.is_exempt(keys):  # VH_FREE_EXEMPT_KEYS (Owner-Test): unbegrenzt
-        return {"eur_left": per_day, "eur_per_day": per_day, "exempt": True}
-    return {"eur_left": freetier.remaining_eur(keys), "eur_per_day": per_day}
+    st = freetier.free_state(keys)
+    out = {"eur_left": st["eur_left"], "eur_per_day": st["eur_per_day"]}
+    if st["exempt"]:  # VH_FREE_EXEMPT_KEYS (Owner-Test): unbegrenzt
+        out["exempt"] = True
+    return out
 
 
 def _host_rate_ok(ip: str) -> bool:
