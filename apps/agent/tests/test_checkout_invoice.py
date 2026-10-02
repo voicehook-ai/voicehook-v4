@@ -1,6 +1,8 @@
 """Checkout: Rechnung (invoice_creation) + USt-ID-Erfassung (tax_id_collection).
 
-Geprüft wird der echte Formular-Body, den create_checkout_session an Stripe
+Nur auf Wunsch (invoice=true, Checkbox auf /aufladen), weil Stripe jede Rechnung
+extra berechnet. Ohne invoice bzw. invoice=false enthält der Body keinen der beiden
+Parameter. Geprüft wird der echte Formular-Body, den create_checkout_session an Stripe
 schicken würde (urlopen gemockt, Stripe wird nie erreicht). Positivkontrolle:
 derselbe Body ohne die neuen Parameter fällt durch dieselbe Prüfung.
 """
@@ -57,13 +59,13 @@ def _has_invoice_params(body: bytes) -> bool:
     return all(pairs.get(k) == v for k, v in WANTED.items())
 
 
-def test_checkout_body_enables_invoice_and_tax_id(sent):
-    r = TestClient(app).post("/api/checkout", json={"amount_eur": 20})
-    assert r.status_code == 200
-    assert sent["url"] == "https://api.stripe.com/v1/checkout/sessions"
-    assert _has_invoice_params(sent["body"])
+def _pairs(body: bytes) -> dict:
+    return dict(urllib.parse.parse_qsl(body.decode()))
+
+
+def _assert_flow_unchanged(body: bytes) -> None:
     # Bestehender Fluss unverändert: Betrag, Modus, Metadaten für die Webhook-Gutschrift
-    pairs = dict(urllib.parse.parse_qsl(sent["body"].decode()))
+    pairs = _pairs(body)
     assert pairs["mode"] == "payment"
     assert pairs["line_items[0][price_data][unit_amount]"] == "2000"
     assert pairs["metadata[vh_amount_eur]"] == "20"
@@ -71,12 +73,40 @@ def test_checkout_body_enables_invoice_and_tax_id(sent):
     assert not any(k.startswith(("customer_creation", "billing_address_collection")) for k in pairs)
 
 
-def test_positive_control_body_without_change_fails_check(sent):
-    TestClient(app).post("/api/checkout", json={"amount_eur": 20})
-    pairs = urllib.parse.parse_qsl(sent["body"].decode())
-    old = urllib.parse.urlencode(
-        [(k, v) for k, v in pairs if not k.startswith(("invoice_creation", "tax_id_collection"))]
+def _has_no_invoice_params(body: bytes) -> bool:
+    return not any(k.startswith(("invoice_creation", "tax_id_collection")) for k in _pairs(body))
+
+
+def test_checkout_invoice_true_enables_invoice_and_tax_id(sent):
+    r = TestClient(app).post("/api/checkout", json={"amount_eur": 20, "invoice": True})
+    assert r.status_code == 200
+    assert sent["url"] == "https://api.stripe.com/v1/checkout/sessions"
+    assert _has_invoice_params(sent["body"])
+    _assert_flow_unchanged(sent["body"])
+
+
+@pytest.mark.parametrize("payload", [{"amount_eur": 20}, {"amount_eur": 20, "invoice": False}])
+def test_checkout_without_invoice_sends_neither_param(sent, payload):
+    r = TestClient(app).post("/api/checkout", json=payload)
+    assert r.status_code == 200
+    assert _has_no_invoice_params(sent["body"])
+    assert b"invoice_creation" not in sent["body"] and b"tax_id_collection" not in sent["body"]
+    _assert_flow_unchanged(sent["body"])
+
+
+def test_positive_control_checks_tell_bodies_apart(sent):
+    """Beide Prüfungen schlagen auf dem jeweils anderen Body an (nicht immer grün)."""
+    client = TestClient(app)
+    client.post("/api/checkout", json={"amount_eur": 20, "invoice": True})
+    with_inv = sent["body"]
+    client.post("/api/checkout", json={"amount_eur": 20})
+    without = sent["body"]
+    assert with_inv != without
+    assert _has_invoice_params(with_inv) and not _has_no_invoice_params(with_inv)
+    assert _has_no_invoice_params(without) and not _has_invoice_params(without)
+    # Gefilterter invoice-Body == Body ohne invoice: sonst unterscheidet sich nichts.
+    stripped = urllib.parse.urlencode(
+        [(k, v) for k, v in urllib.parse.parse_qsl(with_inv.decode())
+         if not k.startswith(("invoice_creation", "tax_id_collection"))]
     ).encode()
-    assert old != sent["body"]
-    assert not _has_invoice_params(old)          # Prüfung erkennt das Fehlen
-    assert b"invoice_creation" not in old and b"tax_id_collection" not in old
+    assert stripped == without

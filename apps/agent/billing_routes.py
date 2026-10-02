@@ -168,6 +168,9 @@ def billing_config() -> dict:
 class CheckoutRequest(BaseModel):
     # float, damit 4,99 als 400 (unter Minimum) ankommt statt als 422; nur ganze Euro.
     amount_eur: float = Field(..., gt=0, le=100_000)
+    # Rechnung mit USt-ID nur auf Wunsch (Checkbox auf /aufladen): Stripe berechnet
+    # jede erzeugte Rechnung extra, deshalb Standard aus.
+    invoice: bool = False
 
 
 @router.post("/api/checkout")
@@ -194,8 +197,9 @@ def api_checkout(req: CheckoutRequest, request: Request) -> dict:
         }],
         "success_url": f"{base}{TOPUP_PATH}?session_id={{CHECKOUT_SESSION_ID}}",
         "cancel_url": f"{base}{TOPUP_PATH}?topup=cancel",
-        **stripe_api.INVOICE_PARAMS,
     }
+    if req.invoice:
+        params.update(stripe_api.INVOICE_PARAMS)
     acc = db.account_for_token(wallet_token(request))
     if acc is not None:  # Aufladen aus bestehendem Wallet -> dasselbe Konto
         metadata["vh_account"] = acc

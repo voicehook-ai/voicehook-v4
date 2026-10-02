@@ -94,6 +94,12 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
 .cta:active{ transform:translateY(1px); }
 .cta:disabled{ opacity:.45; cursor:not-allowed; filter:none; transform:none; }
 .cta.ghost{ background:transparent; color:var(--vh-fg-0); border:1px solid var(--vh-btn-border-hov); }
+/* Rechnung mit USt-ID nur auf Wunsch (Stripe berechnet jede Rechnung extra) */
+.opt{ display:flex; align-items:center; gap:10px; min-height:36px; cursor:pointer; font-size:12px; color:var(--vh-fg-2); letter-spacing:.02em; user-select:none; }
+.opt:hover{ color:var(--vh-fg-0); }
+.opt input{ width:16px; height:16px; margin:0; flex:0 0 auto; accent-color:var(--vh-teal); cursor:pointer; color-scheme:dark; }
+body.theme-light .opt input{ color-scheme:light; }
+.opt input:focus-visible{ outline:2px solid var(--vh-teal); outline-offset:2px; }
 .msg{ font-size:12px; line-height:1.5; text-align:center; max-width:340px; color:var(--vh-fg-2); }
 .msg.warn{ color:var(--vh-warm); }
 .fineprint{ font-size:10.5px; color:var(--vh-fg-3); text-align:center; line-height:1.55; max-width:320px; }
@@ -170,6 +176,8 @@ body.embed{ padding-bottom:calc(24px + env(safe-area-inset-bottom,0px)); }
 
   <div class="chips" id="chips"></div>
 
+  <label class="opt" for="invoice"><input type="checkbox" id="invoice"><span id="t-invoice">Rechnung mit USt-ID (für Unternehmen)</span></label>
+
   <button class="cta" id="cta" type="button"></button>
   <div class="msg" id="msg" hidden></div>
 
@@ -244,7 +252,8 @@ const T = {
         recTxt:'Speichere diesen Link. Damit holst du dein Guthaben auf ein anderes Gerät oder nach dem Löschen der Browserdaten zurück. Wer den Link hat, kann dein Guthaben nutzen.',
         copy:'Link kopieren', copied:'Kopiert', call:'Zum Call', more:'Weiter aufladen', amount:'Betrag', theme:'Hell oder dunkel',
         acctAs:'Angemeldet als', logout:'Abmelden', loggedOut:'Abgemeldet. Dieses Gerät nutzt wieder das Gratis-Kontingent.',
-        opened:'Stripe ist in einem neuen Tab offen. Nach der Zahlung wird dein Guthaben hier automatisch aktualisiert.' },
+        opened:'Stripe ist in einem neuen Tab offen. Nach der Zahlung wird dein Guthaben hier automatisch aktualisiert.',
+        invoice:'Rechnung mit USt-ID (für Unternehmen)' },
   en: { brand:'Top up', h1:'Top up credit', sub:'credit incl. VAT', rate:'You pay for actual usage',
         cta:a=>'Top up · '+a, busy:'Connecting to Stripe …', soon:'Top-up coming soon',
         soonMsg:'Payments are not enabled yet.', err:'That did not work. Please try again.',
@@ -266,7 +275,8 @@ const T = {
         recTxt:'Keep this link safe. It restores your credit on another device or after clearing browser data. Anyone with the link can use your credit.',
         copy:'Copy link', copied:'Copied', call:'Start a call', more:'Top up more', amount:'Amount', theme:'Light or dark',
         acctAs:'Logged in as', logout:'Log out', loggedOut:'Logged out. This device uses the free allowance again.',
-        opened:'Stripe is open in a new tab. After paying, your credit updates here automatically.' },
+        opened:'Stripe is open in a new tab. After paying, your credit updates here automatically.',
+        invoice:'Invoice with VAT ID (for businesses)' },
 }[LANG];
 const $ = id => document.getElementById(id);
 const TOKEN_KEY = 'vh-wallet-v1';
@@ -296,7 +306,7 @@ $('t-rate').textContent = T.rate; $('t-fine').innerHTML = T.fine; $('t-done-h1')
 $('t-done-bal').textContent = T.doneBal; $('t-rec-h').textContent = T.recH; $('t-rec-txt').textContent = T.recTxt;
 $('rec-copy').textContent = T.copy; $('go-call').textContent = T.call; $('more').textContent = T.more;
 $('dial').setAttribute('aria-label', T.amount); document.title = 'voicehook · ' + T.brand;
-$('login-open').textContent = T.login;
+$('login-open').textContent = T.login; $('t-invoice').textContent = T.invoice;
 $('confirm-open').textContent = T.confirmMail; $('confirm-email').placeholder = T.loginPh;
 $('confirm-email').setAttribute('aria-label', T.loginPh); $('confirm-go').textContent = T.loginSend;
 $('ask-yes').textContent = T.askYes; $('ask-no').textContent = T.askNo;
@@ -399,7 +409,7 @@ cta.addEventListener('click', async () => {
   if (FRAMED) { try { w = window.open('', '_blank'); } catch {} }
   cta.dataset.busy = '1'; cta.disabled = true; cta.textContent = T.busy; showMsg('');
   try {
-    const r = await fetch('/api/checkout', { method:'POST', headers:headers(), body:JSON.stringify({ amount_eur:amount }) });
+    const r = await fetch('/api/checkout', { method:'POST', headers:headers(), body:JSON.stringify({ amount_eur:amount, invoice:$('invoice').checked }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok || !d.url || !/^https:\/\//.test(d.url)) throw new Error('checkout ' + r.status);
     if (!FRAMED) { location.href = d.url; return; }

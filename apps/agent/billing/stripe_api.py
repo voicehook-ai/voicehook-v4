@@ -23,7 +23,9 @@ STRIPE_API = "https://api.stripe.com/v1"
 DEFAULT_TOLERANCE_S = 300
 
 
-# Rechnung + USt-ID für jede Aufladung (Checkout, mode=payment). Laut Stripe-Doku
+# Rechnung + USt-ID für eine Aufladung (Checkout, mode=payment), nur wenn der Kunde
+# sie auf /aufladen anhakt (CheckoutRequest.invoice): Stripe berechnet jede
+# Rechnung extra. Laut Stripe-Doku
 # genügen diese beiden Schalter; customer_creation und billing_address_collection
 # sind dafür nicht nötig (ohne Customer legt Checkout einen Gastkunden an).
 INVOICE_PARAMS: dict = {
