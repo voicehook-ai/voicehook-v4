@@ -92,7 +92,8 @@ async def test_say_does_not_publish_transcript_itself():
     h = build_relay_handlers(session, agent, room=room)
     await h.on_say(_pkt(TOPIC_SAY, {"text": "Hallo Olli"}))
     await asyncio.sleep(0)
-    room.local_participant.publish_data.assert_not_called()
+    topics = [c.kwargs.get("topic") for c in room.local_participant.publish_data.await_args_list]
+    assert "transcript" not in topics          # nur operator.say_status (Rückmeldung)
     session.say.assert_called_once_with("Hallo Olli", allow_interruptions=True)
 
 
@@ -285,13 +286,17 @@ async def test_finished_says_are_not_reported_as_unspoken():
 
 @pytest.mark.asyncio
 async def test_append_mode_keeps_queue():
+    # Operator-Queue: immer nur eine Ausgabe bei livekit; Teil 2 startet, wenn Teil 1 fertig
     first, second = _handle(), _handle()
     session = _session_with_handles(first, second)
     h = build_relay_handlers(session, _fake_agent(), room=_room())
     await h.on_say(_pkt(TOPIC_SAY, {"text": "Teil 1", "mode": "append"}))
     await h.on_say(_pkt(TOPIC_SAY, {"text": "Teil 2", "mode": "append"}))
     first.interrupt.assert_not_called()
-    assert session.say.call_count == 2
+    assert session.say.call_count == 1
+    first.done.return_value = True
+    first.add_done_callback.call_args.args[0](first)
+    assert [c.args[0] for c in session.say.call_args_list] == ["Teil 1", "Teil 2"]
 
 
 @pytest.mark.asyncio

@@ -10,7 +10,11 @@ Design (mode B, voicehook-v3#28 + Wissenstransfer):
   LLM never produces a turn on its own (pure mouthpiece).
 
 Topics handled here:
-- operator.say        — TTS the text. Ist nichts Ungesprochenes offen: sofort.
+- operator.say        — TTS the text über die Operator-Queue (nie verloren): gesprochen
+                        wird nur, wenn der Nutzer nicht spricht (SAY_QUIET_S Stille);
+                        unterbricht er, kommt der ungesprochene Rest vorne wieder in die
+                        Queue; liegt etwas in der Queue, antwortet Delta nicht selbst.
+                        Ist nichts Ungesprochenes offen: einreihen.
                         Sonst: Ausgabe stoppen, ungesprochene Aussagen per
                         operator.revise ans Brain zurück, neue Aussage halten, bis
                         das Brain mit mode "overwrite" die Zusammenfassung schickt
@@ -21,6 +25,8 @@ Topics handled here:
 - operator.mode       — switch strict/auto generation ({"mode":"strict"|"auto"})
 - operator.interrupt  — alles stoppen, ungesprochene Aussagen per operator.revise melden
 - operator.inject     — synthetic user-turn (test harness; operator reads transcript)
+- operator.say_status (Agent -> Operator) {seq, state, spoken_chars} je Aussage:
+                        queued|spoken|interrupted|requeued|replaced
 - operator.notice     (Agent -> alle) Hinweis des Servers, z. B. {kind:"low_balance",
                         minutes_left,...}: Gratis+Guthaben reichen noch ~5 min. Der
                         Worker sendet ihn einmal pro Call und sagt LOW_BALANCE_ANNOUNCEMENT.
@@ -35,6 +41,7 @@ import asyncio
 import contextlib
 import json
 import logging
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -80,6 +87,7 @@ TOPIC_MODE = "operator.mode"
 TOPIC_INTERRUPT = "operator.interrupt"
 TOPIC_INJECT = "operator.inject"
 TOPIC_REVISE = "operator.revise"   # agent -> operator: ungesprochene Aussagen zurück
+TOPIC_SAY_STATUS = "operator.say_status"  # agent -> operator: Verbleib jeder Aussage
 TOPIC_NOTICE = "operator.notice"   # agent -> alle: Hinweis (low_balance), Browser + Operator
 TOPIC_STATUS = "operator.status"   # operator -> agent: Board {doing, open[], done[]} (board.py)
 TOPIC_STATUS_REQUEST = "operator.status_request"  # agent -> operator: Nutzer fragt nach dem Stand
@@ -92,6 +100,38 @@ LOW_BALANCE_ANNOUNCEMENT = "Hey, Achtung, das Guthaben ist in wenigen Minuten le
 
 HOLD_S = 8.0  # Olli-Regel "Stille ist der Killer, ab 8s ansagen": so lange wartet ein
              # zurückgehaltenes say auf das zusammengefasste overwrite des Brains
+
+# Operator-Queue (Oliver 02.10.2026: "Claudes Sätze dürfen nie verloren gehen"). Prod
+# lucid-lucid-flux-NPRT: 10 von 16 says nie hörbar, weil livekit jede say abbricht,
+# sobald ein Nutzer-Turn endet (agent_activity.py _user_turn_completed_task), und ein
+# abgebrochener Handle als erledigt galt.
+SAY_QUIET_S_DEFAULT = 0.6   # so lange muss der Nutzer still sein, bevor eine say startet
+SHORT_REST_CHARS = 15       # kürzerer Rest nach Abbruch: ganzen Satz neu (verständlich)
+
+
+def say_quiet_s() -> float:
+    """VOICEHOOK_SAY_QUIET_MS (Default 600): Stille vor einer Operator-Ausgabe."""
+    import os
+
+    raw = os.environ.get("VOICEHOOK_SAY_QUIET_MS", "")
+    try:
+        ms = float(raw)
+    except ValueError:
+        return SAY_QUIET_S_DEFAULT
+    return ms / 1000.0 if ms >= 0 else SAY_QUIET_S_DEFAULT
+
+
+def sentence_restart(full: str, rest: str) -> str:
+    """Kurzer Rest nach Abbruch: ab dem Anfang des Satzes, in dem abgebrochen wurde."""
+    full = (full or "").strip()
+    cut = full.rfind(rest) if rest else -1
+    if cut < 0:
+        cut = max(0, len(full) - len(rest))
+    head = full[:cut]
+    ends = [i for i, ch in enumerate(head) if ch in ".!?" and (i + 1 == len(head) or head[i + 1].isspace())]
+    if not ends:
+        return full
+    return full[ends[-1] + 1:].strip() or full
 
 # Neutrale Sprachrohr-Rolle ohne Werksrolle: gilt, sobald ein externer Agent
 # (vh.role=agent) im Raum ist und noch keine eigene Persona geschickt hat. Kern
@@ -221,6 +261,17 @@ class RelayAgent(Agent):
     async def on_user_turn_completed(self, *args, **kwargs) -> None:  # noqa: D401, ANN001
         if self.strict:
             raise StopResponse()
+        # Vorrang vor Delta: liegt eine Operator-Aussage in der Queue (z. B. der Rest, den
+        # dieser Nutzer-Turn gerade abgebrochen hat), keine eigene Antwort, die Queue
+        # spielt. Die Nutzeräußerung bleibt im Verlauf (StopResponse verwirft sie sonst).
+        pending = getattr(self, "operator_say_pending", None)
+        if callable(pending) and pending():
+            msg = kwargs.get("new_message", args[1] if len(args) > 1 else None)
+            if msg is not None:
+                with contextlib.suppress(Exception):
+                    self._chat_ctx.items.append(msg)
+            logger.info("[operator.say] Queue hat Vorrang, keine eigene Antwort")
+            raise StopResponse()
         # auto mode: fall through → the LLM answers from its persona (knowledge transfer).
 
 
@@ -240,6 +291,7 @@ class RelayHandlers:
     on_user_text: callable = None        # async (text): Nachfrage nach dem Stand -> status_request
     on_alive: callable = None            # operator.alive: Lebenszeichen des Agenten
     check_reach: callable = None         # async (): erreichbar/unerreichbar neu bewerten (Takt)
+    on_user_state: callable = None       # (ev|state): Operator-Queue wartet, solange er spricht
 
 
 def _decode(payload: bytes) -> dict:
@@ -335,6 +387,7 @@ def build_relay_handlers(
     live: bool = False,
     status_interval_s: float = STATUS_MIN_INTERVAL_S,
     clock=None,  # noqa: ANN001  Tests: monotone Uhr injizieren
+    say_quiet: float | None = None,  # Tests: Stille vor einer say (sonst Env/Default)
 ) -> RelayHandlers:
     """Build per-topic handler closures bound to a session + agent.
 
@@ -351,9 +404,10 @@ def build_relay_handlers(
     # Zuletzt ausgegebene Operator-Ausgaben (Handle-ids + Texte) -> Transkript rot/blau
     operator_handles: set[int] = set()
     operator_texts: list[str] = []
-    held: dict = {"text": None, "task": None}
+    held: dict = {"text": None, "task": None, "seq": None}
+    spoke: dict = {"handle": None}  # Handle der letzten _speak-Ausgabe
 
-    def _speak(text: str, seq: object = None) -> None:
+    def _speak(text: str, seq: object = None, *, live_input: str | None = None) -> None:
         logger.info("[operator.say]%s %s", " (live)" if live else "", text[:200])
         if live:
             # Realtime-Modell spricht selbst: Operator-Text wird Anweisung (Inhalt
@@ -364,7 +418,7 @@ def build_relay_handlers(
             from .live import live_say_user_input
 
             handle = session.generate_reply(
-                user_input=live_say_user_input(text), allow_interruptions=True
+                user_input=live_input or live_say_user_input(text), allow_interruptions=True
             )
         else:
             # Transkript kommt vom Worker (conversation_item_added) mit dem tatsächlich
@@ -374,6 +428,7 @@ def build_relay_handlers(
             handle = session.say(text, allow_interruptions=True)
         pending[:] = [p for p in pending if not _is_done(p[2])]
         if handle is not None:
+            spoke["handle"] = handle  # Operator-Queue: done-Callback (Nachsprechen)
             pending.append((seq, text, handle))
             operator_handles.add(id(handle))
         operator_texts.append(text)
@@ -383,11 +438,167 @@ def build_relay_handlers(
             said.append(text)
             del said[:-50]
 
+    # ----- Operator-Queue: nichts geht verloren ---------------------------------------
+    # Immer nur EINE Operator-Ausgabe bei livekit: Bricht ein Nutzer-Turn sie ab, muss
+    # der Rest VOR später eingereihten Aussagen kommen (livekits eigene Queue spielte die
+    # nächste sonst sofort). Gesprochen wird erst, wenn der Nutzer quiet_s still ist.
+    quiet_s = say_quiet_s() if say_quiet is None else say_quiet
+    queue: deque[dict] = deque()     # {seq, text, full, spoken}
+    cur: dict = {"item": None, "handle": None}
+    cancelled: set[int] = set()      # id(handle), die wir selbst abgebrochen haben
+    user = {"speaking": False, "quiet_since": None, "timer": None}
+    seq_n = [0]
+
+    def _seq(seq: object) -> object:
+        if seq is not None:
+            return seq
+        seq_n[0] += 1
+        return f"vh-{seq_n[0]}"  # say ohne seq (alte Clients): eigene Kennung
+
+    def _say_status(seq: object, state: str, spoken_chars: int = 0) -> None:
+        logger.info("[operator.say_status] seq=%s state=%s spoken_chars=%d", seq, state, spoken_chars)
+        if room is None:
+            return
+        payload = json.dumps({"seq": seq, "state": state, "spoken_chars": spoken_chars}).encode()
+
+        async def _send() -> None:
+            try:
+                await room.local_participant.publish_data(payload=payload, topic=TOPIC_SAY_STATUS,
+                                                          reliable=True)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("[operator.say_status publish] %s", e)
+        with contextlib.suppress(RuntimeError):  # kein laufender Loop (sync Tests)
+            asyncio.get_running_loop().create_task(_send())
+
+    def _cur_open() -> bool:
+        h = cur["handle"]
+        return h is not None and not _is_done(h)
+
+    def _user_wait() -> float | None:
+        """None: Nutzer spricht (auf Event warten); sonst Sekunden bis Sprechen erlaubt."""
+        state = getattr(session, "user_state", None)
+        if user["speaking"] or state == "speaking":
+            return None
+        qs = user["quiet_since"]
+        return 0.0 if qs is None else max(0.0, qs + quiet_s - _now())
+
+    def _arm(delay: float) -> None:
+        if user["timer"] is not None:
+            return
+        def _fire() -> None:
+            user["timer"] = None
+            _pump()
+        user["timer"] = asyncio.get_running_loop().call_later(delay, _fire)
+
+    def _disarm() -> None:
+        if user["timer"] is not None:
+            user["timer"].cancel()
+            user["timer"] = None
+
+    def _pump() -> None:
+        """Nächste Aussage an livekit, wenn nichts Eigenes läuft und der Nutzer still ist."""
+        if not queue or _cur_open():
+            return
+        wait = _user_wait()
+        if wait is None:
+            return  # on_user_state ruft _pump, sobald er aufhört
+        if wait > 0:
+            _arm(wait)
+            return
+        item = queue.popleft()
+        live_input = None
+        if live and item["spoken"]:
+            from .live import live_say_rest_user_input
+
+            live_input = live_say_rest_user_input(item["full"], item["spoken"])
+        spoke["handle"] = None
+        try:
+            _speak(item["text"], item["seq"], live_input=live_input)
+        except Exception as e:  # noqa: BLE001 — Session weg: Aussage bleibt in der Queue
+            logger.warning("[operator.say] say fehlgeschlagen, bleibt in der Queue: %s", e)
+            queue.appendleft(item)
+            return
+        handle = spoke["handle"]
+        cur["item"], cur["handle"] = item, handle
+        if handle is None:
+            return
+        add = getattr(handle, "add_done_callback", None)
+        if callable(add):
+            with contextlib.suppress(Exception):
+                add(_on_done)
+
+    def _on_done(handle: object) -> None:
+        """say fertig: gesprochen, oder unterbrochen -> Rest vorne wieder in die Queue."""
+        if cur["handle"] is not handle:
+            cancelled.discard(id(handle))
+            return
+        item = cur["item"]
+        cur["item"], cur["handle"] = None, None
+        if id(handle) in cancelled:  # overwrite/revise/interrupt: Status kam dort
+            cancelled.discard(id(handle))
+            _pump()
+            return
+        spoken = _spoken_text(handle)
+        if getattr(handle, "interrupted", False) is True:
+            _say_status(item["seq"], "interrupted", len(spoken))
+            if live:
+                # Gemini formuliert um: ganze Aussage + bisher Gesagtes (live_say_rest_user_input)
+                said = " ".join(x for x in (item["spoken"], spoken) if x).strip()
+                rest = item["full"]
+                nxt = {**item, "text": rest, "spoken": said}
+            else:
+                rest = unspoken_rest(item["text"], spoken)
+                if rest and len(rest) < SHORT_REST_CHARS:
+                    rest = sentence_restart(item["text"], rest)
+                nxt = {**item, "text": rest}
+            if rest:
+                queue.appendleft(nxt)
+                _say_status(item["seq"], "requeued", len(spoken))
+        else:
+            _say_status(item["seq"], "spoken", len(spoken) or len(item["text"]))
+        _pump()
+
+    def _enqueue(text: str, seq: object, *, front: bool = False) -> None:
+        item = {"seq": seq, "text": text, "full": text, "spoken": ""}
+        if front:
+            queue.appendleft(item)
+        else:
+            queue.append(item)
+        _say_status(seq, "queued")
+        _pump()
+
+    def has_pending() -> bool:
+        """Operator-Aussage offen (Queue, laufend oder gehalten)? -> Delta schweigt."""
+        busy = bool(queue) or _cur_open() or held["text"] is not None
+        if busy:
+            with contextlib.suppress(RuntimeError):
+                asyncio.get_running_loop().call_soon(_pump)
+        return busy
+
+    agent.operator_say_pending = has_pending
+
+    def on_user_state(ev: object) -> None:
+        new = getattr(ev, "new_state", ev)
+        if new == "speaking":
+            user["speaking"], user["quiet_since"] = True, None
+            _disarm()
+            return
+        if user["speaking"]:
+            user["speaking"], user["quiet_since"] = False, _now()
+        _pump()
+
+    _on = getattr(session, "on", None)
+    if callable(_on):
+        with contextlib.suppress(Exception):
+            _on("user_state_changed", on_user_state)
+
     def _drop_hold() -> None:
         task = held["task"]
         if task is not None and not task.done():
             task.cancel()
-        held["text"], held["task"] = None, None
+        if held["text"] is not None:
+            _say_status(held["seq"], "replaced")
+        held["text"], held["task"], held["seq"] = None, None, None
 
     def _stop_session() -> None:
         # force=True: livekit wirft sonst RuntimeError statt zu stoppen, sobald die
@@ -397,11 +608,20 @@ def build_relay_handlers(
         except Exception as e:  # noqa: BLE001 — nichts läuft / Session gestoppt
             logger.debug("[operator.say] session.interrupt: %s", e)
 
-    async def _cancel_open() -> list[str]:
-        """Stoppt alle offenen Ausgaben, liefert die ungesprochenen Reste."""
+    def _has_open() -> bool:
+        return bool(queue) or any(not _is_done(p[2]) for p in pending)
+
+    async def _cancel_open(state: str = "replaced") -> list[str]:
+        """Stoppt alle offenen Ausgaben und leert die Queue, liefert die ungesprochenen
+        Reste (für operator.revise). Jede betroffene seq bekommt `state`."""
         open_ = [p for p in pending if not _is_done(p[2])]
         pending.clear()
-        for _seq, _text, handle in open_:
+        queued = list(queue)
+        queue.clear()
+        _disarm()
+        cur["item"], cur["handle"] = None, None
+        for _s, _text, handle in open_:
+            cancelled.add(id(handle))
             try:
                 handle.interrupt(force=True)
             except Exception as e:  # noqa: BLE001
@@ -413,7 +633,14 @@ def build_relay_handlers(
             # Timeout: dann gilt der gesprochene Stand bis hier
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(asyncio.gather(*waits, return_exceptions=True), timeout=2.0)
-        rest = [unspoken_rest(text, _spoken_text(h)) for _s, text, h in open_]
+        rest = []
+        for seq_, text, h in open_:
+            said = _spoken_text(h)
+            _say_status(seq_, state, len(said))
+            rest.append(unspoken_rest(text, said))
+        for item in queued:
+            _say_status(item["seq"], state)
+            rest.append(item["text"])
         return [r for r in rest if r]
 
     async def _ask_revise(unspoken: list[str], new: str) -> None:
@@ -439,45 +666,46 @@ def build_relay_handlers(
         except Exception as e:  # noqa: BLE001
             logger.warning("[operator.revise publish] %s", e)
 
-    async def _speak_after_hold(text: str) -> None:
+    async def _speak_after_hold(text: str, seq: object) -> None:
         await asyncio.sleep(hold_s)
         if held["text"] == text:
-            held["text"], held["task"] = None, None
+            held["text"], held["task"], held["seq"] = None, None, None
             logger.info("[operator.say] kein overwrite in %.1fs, spreche gehaltene Aussage", hold_s)
-            _speak(text)
+            _enqueue(text, seq)
 
     async def on_say(packet: DataPacket) -> None:
         data = _decode(packet.data)
         text = (data.get("text") or "").strip()
         if not text:
             return
-        seq = data.get("seq", data.get("_seq"))  # CLI taggt _seq
+        seq = _seq(data.get("seq", data.get("_seq")))  # CLI taggt _seq
         mode = (data.get("mode") or "revise").strip().lower()
         if mode == "append":
-            _speak(text, seq)
+            _enqueue(text, seq)
             return
         if mode == "overwrite":
-            # Zusammenfassung vom Brain: ersetzt alles Offene und Gehaltene
+            # Zusammenfassung vom Brain: ersetzt alles Offene, Gehaltene und Eingereihte
             _drop_hold()
-            await _cancel_open()
-            _speak(text, seq)
+            await _cancel_open("replaced")
+            _enqueue(text, seq)
             return
         # Default revise
         _drop_hold()
         if data.get("priority") == "interrupt":
             _stop_session()          # nur ausdrücklich: laufende Ausgabe abbrechen
-        if not any(not _is_done(p[2]) for p in pending):
+        if not _has_open():
             # Nichts Eigenes offen: einreihen. Eine laufende Eigenantwort des Agents
             # (auto mode) spricht zu Ende, der Operator fällt ihm nicht ins Wort
             # (Olli 30.09.: "Operator say fällt ihm ins Wort").
-            _speak(text, seq)
+            _enqueue(text, seq)
             return
-        unspoken = await _cancel_open()
+        unspoken = await _cancel_open("replaced")
         if not unspoken:
-            _speak(text, seq)
+            _enqueue(text, seq)
             return
-        held["text"] = text
-        held["task"] = asyncio.create_task(_speak_after_hold(text))
+        held["text"], held["seq"] = text, seq
+        held["task"] = asyncio.create_task(_speak_after_hold(text, seq))
+        _say_status(seq, "queued")
         await _ask_revise(unspoken, text)
 
     # Werksrolle (voicehook-Guide) vs. Agent im Raum. Lock: Join/Leave/Persona dürfen
@@ -710,7 +938,7 @@ def build_relay_handlers(
 
     async def on_interrupt(_packet: DataPacket) -> None:
         _drop_hold()
-        unspoken = await _cancel_open()
+        unspoken = await _cancel_open("interrupted")
         logger.info("[operator.interrupt] %d ungesprochen", len(unspoken))
         if unspoken:
             await _ask_revise(unspoken, "")
@@ -755,6 +983,7 @@ def build_relay_handlers(
         on_agent_presence=on_agent_presence,
         on_status=on_status, on_user_text=on_user_text,
         on_alive=on_alive, check_reach=check_reach,
+        on_user_state=on_user_state,
     )
 
 

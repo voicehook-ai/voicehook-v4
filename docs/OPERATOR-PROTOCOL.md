@@ -104,6 +104,7 @@ All payloads are JSON on the LiveKit data channel. The CLI maps stdin lines
 |---|---|---|---|
 | `operator.say` | operator to agent | `{text, mode?, priority?}` | speak `text`, see modes below |
 | `operator.revise` | agent to operator | `{unspoken[], new, text}` | what was NOT spoken yet, plus an instruction |
+| `operator.say_status` | agent to operator | `{seq, state, spoken_chars}` | what happened to each `operator.say`, see below; sent reliable |
 | `operator.persona` | operator to agent | `{text}` | knowledge of the agent, appended after Delta's fixed core (`apps/agent/core.py`), never replaces it; sanitized (max 1500 chars, override lines dropped, `operator.notice` `persona_sanitized`); first push triggers the auto-greet |
 | `operator.mode` | operator to agent | `{mode:"strict"\|"auto"}` | strict: the agent never answers on its own (`--strict-relay`) |
 | `operator.interrupt` | operator to agent | `{}` | stop everything; unspoken rest comes back as `operator.revise` |
@@ -143,9 +144,46 @@ leaving `next` to your next `say`; over 8 s the following `next` carries
 
 | mode | behaviour |
 |---|---|
-| `revise` (default) | Nothing unspoken pending: queued and spoken. A running answer of the agent itself finishes first, the operator does not cut in. Something of yours still unspoken: output stops, the new text is held, and you get `operator.revise` with the unspoken parts. Send one merged statement with `mode:"overwrite"`; without it the held text is spoken after 8 s (`HOLD_S`). |
-| `overwrite` | Your merged statement. Cancels everything open and held, then speaks. |
-| `append` | Queued behind what is running. Use for multi-part statements and status heartbeats. |
+| `revise` (default) | Nothing unspoken pending: queued and spoken (operator queue, below). A running answer of the agent itself finishes first, the operator does not cut in. Something of yours still unspoken: output stops, the new text is held, and you get `operator.revise` with the unspoken parts. Send one merged statement with `mode:"overwrite"`; without it the held text is spoken after 8 s (`HOLD_S`). |
+| `overwrite` | Your merged statement. Cancels everything open, held and queued (including a requeued rest), then speaks. |
+| `append` | Queued behind what is running and queued. Use for multi-part statements and status heartbeats. |
+
+### Operator queue: a say never gets lost
+
+The voice pipeline (livekit-agents 1.8.3) cuts the running output whenever the user starts
+talking or a user turn ends. Users speak in fragments, so before this queue most says were
+cut or never heard (prod 02.10.2026: 3 of 16 fully spoken). Now:
+
+1. Every `operator.say` goes into the operator queue. Only one say is handed to the voice
+   pipeline at a time. It starts when the user is silent: `user_state` is `listening` for
+   at least 600 ms (`VOICEHOOK_SAY_QUIET_MS`).
+2. If the user cuts a say off, the unspoken rest goes back to the FRONT of the queue and is
+   spoken once the user is silent again. A rest under 15 characters restarts the whole
+   sentence it belongs to, so it stays understandable. `operator.interrupt`, `overwrite` and
+   a `revise` that holds your new text cancel on purpose: no replay, you get
+   `operator.revise` (as before).
+3. While anything of yours is queued, playing or held, a finished user turn gets NO answer
+   of the voicebot's own (pipeline mode); the queue plays instead. The user's words stay in
+   its context and reach you as usual.
+
+### operator.say_status
+
+One packet per state change of a say, keyed by its `seq` (the CLI's `_seq`, the bridge's
+`seq`; a say without one gets `vh-<n>`):
+
+```json
+{"seq": 12, "state": "requeued", "spoken_chars": 31}
+```
+
+| state | meaning |
+|---|---|
+| `queued` | accepted, waiting for silence (or held for your `overwrite`) |
+| `spoken` | played to the end; `spoken_chars` = length of the spoken text |
+| `interrupted` | the user cut it off after `spoken_chars` characters (or `operator.interrupt`) |
+| `requeued` | the unspoken rest is queued again and will be spoken (follows `interrupted`) |
+| `replaced` | dropped on purpose: an `overwrite`, or a `revise` that sent you `operator.revise` |
+
+Every state is also logged by the voicebot (`[operator.say_status] seq=… state=…`).
 
 `priority:"interrupt"` on a `revise` say stops the current output explicitly.
 
@@ -234,6 +272,11 @@ Call." and ends it.
 In live mode `operator.say` is not verbatim: it reaches the model as a marked user turn
 ("[Agent] Sprich jetzt diese Aussage. Übernimm ihren Inhalt vollständig ..."; "wörtlich:" =
 word for word), and `operator.persona` is added as a "[System]" turn framed as knowledge.
+The operator queue works the same (wait for silence, replay after a cut, `say_status`), but
+the model rephrases, so a cut-off say is replayed as the whole statement plus what was
+already said, with the instruction to speak only the missing rest. Gemini Live answers user
+turns itself (server-side turn detection), so the "no own answer while queued" rule does not
+apply in live mode: your queued say plays right after its answer.
 The fixed Delta core sits in the system instruction set at connect time.
 
 ## Server-side filters (pipeline mode)
