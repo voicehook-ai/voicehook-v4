@@ -400,16 +400,42 @@ async def test_operator_interrupt_is_not_requeued():
     assert (1, "interrupted") in _status(room)
 
 
-# ── 5. Live-Modus: gleiche Queue, Rest über die ganze Aussage + Gesagtes ────────────
+# ── 5. Live-Modus: kein Nachsprechen nach Nutzer-Abbruch (Raum vivid-orbit-fresh-V32N) ─
 @pytest.mark.asyncio
-async def test_live_interrupted_say_is_requeued_with_context():
-    session, _agent, _room_, h = _build(live=True)
+async def test_live_interrupted_say_is_not_repeated():
+    session, _agent, room, h = _build(live=True)
     await h.on_say(_pkt({"text": LONG, "seq": 1}))
-    session.handles[0].finish("Der Fix ist fertig.", interrupted=True)  # Gemini formuliert um
+    session.handles[0].finish("Der Fix", interrupted=True)  # Transkript hinkt dem Audio nach
     await asyncio.sleep(QUIET * 3)
-    assert len(session.said) == 2
-    again = session.said[-1]
-    assert LONG in again and "Der Fix ist fertig." in again and "Rest" in again
+    # nichts doppelt (Live verpackt die Aussage in LIVE_SAY_USER, daher "in")
+    assert len(session.said) == 1 and LONG in session.said[0]
+    assert _status(room) == [(1, "queued"), (1, "interrupted")]
+
+
+@pytest.mark.asyncio
+async def test_live_next_say_plays_after_interrupt():
+    # Positivkontrolle: die Queue läuft in Live weiter, nur der abgebrochene Satz nicht
+    session, _agent, room, h = _build(live=True)
+    await h.on_say(_pkt({"text": LONG, "seq": 1}))
+    session.handles[0].finish("Der Fix", interrupted=True)
+    await asyncio.sleep(QUIET * 3)
+    # zweite Aussage erst nach dem Abbruch: kommt sie während seq 1 läuft, hält die
+    # Revise-Logik sie zurück (hold_s=30), das ist ein anderer Pfad
+    await h.on_say(_pkt({"text": "Zweite Aussage.", "seq": 2}))
+    await asyncio.sleep(QUIET * 3)
+    assert len(session.said) == 2 and "Zweite Aussage." in session.said[-1]
+    assert LONG not in session.said[-1]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_interrupted_say_still_requeued():
+    # Positivkontrolle: Pipeline-Modus spricht den Rest weiter nach (unverändert)
+    session, _agent, room, h = _build(live=False)
+    await h.on_say(_pkt({"text": LONG, "seq": 1}))
+    session.handles[0].finish("Der Fix ist gebaut und getestet.", interrupted=True)
+    await asyncio.sleep(QUIET * 3)
+    assert session.said[-1] == "Der Pull Request wartet auf deine Freigabe."
+    assert (1, "requeued") in _status(room)
 
 
 @pytest.mark.asyncio

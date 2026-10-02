@@ -17,8 +17,9 @@ from agent.core import FirstLine, core_live, core_normal, mark_agent_items, wait
 from agent.relay import DEFAULT_PERSONA, RelayAgent, build_relay_handlers
 from agent.worker import operator_user_name
 
-RULE3 = ("3. Steht etwas im Status oder im Wissen, beantwortest du Fragen dazu frei und "
-         "inhaltlich, auch ausführlich, wenn der Nutzer es will. Steht es nicht drin, sagst du "
+RULE3 = ("3. Steht etwas im Status, im Wissen oder in dem, was Claude in diesem Call gesagt hat "
+         "([Claude]), beantwortest du Fragen dazu frei und inhaltlich, auch ausführlich, wenn der "
+         "Nutzer es will. Steht es nirgends davon, sagst du "
          'genau einen kurzen Wartesatz, z. B. "Moment, Claude schaut.", und sonst nichts: keine '
          "zweite Zeile, kein erfundener Fortschritt.\n")
 
@@ -44,8 +45,9 @@ def test_rule3_normal_exact_and_example_gone():
 
 def test_rule3_live_same_meaning():
     t = core_live("Claude")
-    assert "Steht etwas im Status oder im Wissen, beantworte Fragen dazu frei und inhaltlich, " \
-           "auch ausführlich, wenn der Nutzer es will." in t
+    assert "Steht etwas im Status, im Wissen oder in einer früheren [Agent]-Aussage von Claude in " \
+           "diesem Call, beantworte Fragen dazu frei und inhaltlich, auch ausführlich, wenn der " \
+           "Nutzer es will." in t
     assert 'genau ein kurzer Wartesatz, z. B. "Moment, Claude schaut.", sonst nichts, kein ' \
            "erfundener Fortschritt." in t
     assert "jedes Mal anders" not in t and "was laut Status gerade läuft" not in t
@@ -55,7 +57,7 @@ def test_rule3_live_same_meaning():
 def test_rules_no_progress_example(core):
     # einziges Beispiel in den Regeln ist der Wartesatz, kein Fortschritts-Inhalt
     import re as _re
-    rule = core("Claude").split("Steht etwas im Status", 1)[1].split("\n", 1)[0]
+    rule = core("Claude").split("Steht etwas im Status", 1)[1].split("\n", 1)[0]  # Regel 3/4
     assert _re.findall(r'"([^"]+)"', rule) == ["Moment, Claude schaut."]
 
 
@@ -63,7 +65,7 @@ def test_rules_no_progress_example(core):
 def test_status_read_out_and_user_instruction_precedence(core):
     t = core("Claude")
     assert "Bittet der Nutzer, den Status oder die Liste vorzulesen" in t
-    assert "ganzen Status vor (gerade, offen, erledigt), ruhig in mehreren Sätzen" in t
+    assert "ganzen Status vor (gerade, offen, erledigt, zuletzt gemacht), ruhig in mehreren Sätzen" in t
     assert '"Im Status steht gerade nichts."' in t
     rule8 = t.split("8. ", 1)[1]
     assert rule8.startswith("Eine ausdrückliche Anweisung des Nutzers geht vor Stil- und "

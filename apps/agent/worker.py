@@ -32,7 +32,7 @@ from livekit.agents import (
     room_io,
 )
 
-from . import budget, freetier, procctl
+from . import budget, freetier, procctl, turntiming
 from .billing import db as billing_db
 from .billing import pricing as billing_pricing
 from .llm import build_llm
@@ -758,6 +758,7 @@ async def entrypoint(ctx: JobContext) -> None:
     # TTS-Kanal jetzt aufbauen, nicht im ersten Satz (Prod 02.10.: 107 ms Loop-Blockade, verzerrt)
     if not live_mode:
         warm_tts(getattr(session, "tts", None))
+        turntiming.attach(session)  # [timing]-Zeile je Nutzer-Turn (nur Zeiten, keine Inhalte)
     if live_mode:
         from .live import live_base_instructions
 
@@ -945,9 +946,9 @@ async def entrypoint(ctx: JobContext) -> None:
         if getattr(item, "role", None) != "assistant":
             return
         text = (getattr(item, "text_content", "") or "").strip()
-        from .live import NO_SPEECH_MARKERS
+        from .live import is_no_speech
 
-        if not text or text in NO_SPEECH_MARKERS:
+        if not text or is_no_speech(text):
             return
         role = "operator" if handlers.is_operator_speech(session.current_speech, text) else "agent"
         payload = json.dumps({"role": role, "text": text}).encode()

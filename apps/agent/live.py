@@ -18,6 +18,7 @@ from __future__ import annotations
 import os
 import re
 
+from .activity import activity_block
 from .board import board_block
 from .clock import now_block
 from .core import CORE_ANCHOR, MARK_AGENT, MARK_SYSTEM, compose, core_live, persona_block
@@ -129,6 +130,17 @@ def live_status_user(board: dict | None, name: str | None = None) -> str:
     return f"{MARK_SYSTEM} " + block + _SILENT
 
 
+def live_activity_user(lines: list[str] | None, name: str | None = None) -> str:
+    """Aktivitäts-Feed (activity.py) als markierter User-Turn, fester Platz wie der
+    Status-Turn: der Worker entfernt den alten aus dem lokalen Kontext, der Text erklärt
+    jeden früheren Feed für ungültig."""
+    nom = agent_refs(name)["nom"]
+    block = activity_block(lines, nom).strip()
+    if not block:
+        block = f"Es gibt kein aktuelles Protokoll von {nom[0].upper() + nom[1:]}."
+    return f"{MARK_SYSTEM} " + block + _SILENT
+
+
 LIVE_AGENT_LEFT_USER = (
     f"{MARK_SYSTEM} Der Agent hat den Raum verlassen. Ab sofort gilt wieder deine Werksrolle "
     "als voicehook-Experte statt des Wissens, das dir der Agent gegeben hat. Die Regeln ganz "
@@ -191,6 +203,18 @@ LIVE_PERSONA_USER = live_persona_user("{text}")
 
 # Platzhalter, die Gemini statt echter Sprache als Transkript liefert
 NO_SPEECH_MARKERS = ("<no speech detected>", "&lt;no speech detected&gt;")
+# Varianten: "<no speech>{pause}" (Live 02.10.2026, Raum vivid-orbit-fresh-V32N),
+# "<no speech detected>", HTML-escaped, "{pause}" allein. Nur Platzhalter, keine Wörter.
+_NO_SPEECH_RE = re.compile(
+    r"^(?:\s|<[^<>]*\bno\s*speech\b[^<>]*>|&lt;[^&]*\bno\s*speech\b[^&]*&gt;|\{[a-z_ ]*\})+$",
+    re.IGNORECASE,
+)
+
+
+def is_no_speech(text: str) -> bool:
+    """True, wenn das Transkript nur aus Gemini-Platzhaltern besteht (kein echtes Wort)."""
+    t = (text or "").strip()
+    return bool(t) and (t in NO_SPEECH_MARKERS or bool(_NO_SPEECH_RE.match(t)))
 
 # Stand aller Preise in dieser Datei (live auf den offiziellen Preisseiten geprüft)
 PRICES_AS_OF = "2026-09-30"

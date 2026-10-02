@@ -68,7 +68,7 @@ in the header `Authorization: Bearer <session>`, never in a URL.
 | `POST /api/bridge/leave` | `{say?}` (optional) | `{ok, type: "leaving"}`; `say` is spoken with `mode:"append"` first |
 | `GET /api/bridge/status` | | `{connected, pending, idle_s, peers[], sse_clients, ...}` |
 | `GET /api/bridge/events` | | Server-Sent Events, see below |
-| `POST /api/bridge/send` | `{topic, payload, force?}` | raw publish; topics: `operator.say`, `operator.persona`, `operator.mode`, `operator.interrupt`, `operator.inject`, `operator.backchannel`, `operator.status` (else 400) |
+| `POST /api/bridge/send` | `{topic, payload, force?}` | raw publish; topics: `operator.say`, `operator.persona`, `operator.mode`, `operator.interrupt`, `operator.inject`, `operator.backchannel`, `operator.status`, `operator.alive`, `operator.activity` (else 400) |
 
 SSE events (`event: <type>` + `data: <json>`; comment `: ping` every 15 s): `hello`
 `{room, identity, expires_in, peers}`, `room-state` `{peers}`, `data` `{topic, payload,
@@ -109,7 +109,8 @@ All payloads are JSON on the LiveKit data channel. The CLI maps stdin lines
 | `operator.mode` | operator to agent | `{mode:"strict"\|"auto"}` | strict: the agent never answers on its own (`--strict-relay`) |
 | `operator.interrupt` | operator to agent | `{}` | stop everything; unspoken rest comes back as `operator.revise` |
 | `operator.inject` | operator to agent | `{text, role?}` | synthetic chat-context entry, not spoken |
-| `operator.status` | operator to agent | `{doing, open[], done[]}` (or `{text}` = doing) | status board, see below; replaces the previous one, never spoken |
+| `operator.status` | operator to agent | `{doing, open[], done[], faq?[{q,a}]}` (or `{text}` = doing) | status board, see below; replaces the previous one, never spoken |
+| `operator.activity` | operator to agent | `{lines[], ts}` | activity feed: last tool steps of the agent, see below; replaces the previous one, never spoken |
 | `operator.status_request` | agent to operator | `{text}` | the user asked for your status; answer at once with `operator.status` |
 | `operator.notice` | agent to everyone | `{kind, minutes_left, seconds_left, free_s, free_eur, balance_eur, topup_url, text}` | server notice, see below; sent reliable |
 | `cost` | agent to everyone | `{eur, mode}` (admin rooms also `usd, basis, prices_as_of`) | running customer price of the call, see below; only sent when the sum changed |
@@ -122,10 +123,17 @@ All payloads are JSON on the LiveKit data channel. The CLI maps stdin lines
 The voicebot never says "Operator" to the user; it names you by your `vh.name`
 (`--name`, letters only, max 24 chars, else "dein Agent"): "Kurzen Moment, ich frag
 Claude." Your status board sits at a fixed place in its instructions:
-`{doing: "baut gerade den Fix", open: ["Tests"], done: ["Analyse"]}`. Every send
-REPLACES the whole board (context never grows). Budget 600 chars in total (each item
-max 120, 10 per list): `done` is cut first (oldest), then `open` (last). Empty or
-`doing:"fertig"` with no lists clears it. At most one update per 5 s per room is applied,
+`{doing: "baut gerade den Fix", open: ["Tests"], done: ["Analyse"], faq: [{q: "Wann ist
+das live?", a: "Nach dem Review, heute Abend."}]}`. Every send REPLACES the whole board
+(context never grows). Budget 2000 chars in total (`VOICEHOOK_BOARD_BUDGET`; `doing` max
+400, each item max 200, 10 per list): `faq` is cut first (last pair), then `done`
+(oldest), then `open` (last). Empty or `doing:"fertig"` with no lists and no `faq` clears it.
+
+`faq` (CLI `vh status --faq "Frage::Antwort"`, repeatable): up to 6 pairs, question and
+answer max 200 chars each. Fill it on EVERY board update with the questions the user most
+likely asks next, answered in advance; Delta answers them directly ("Wahrscheinliche Fragen
+und Antworten von Claude"), in the third person. Delta also answers from what you already
+said in this call (`[Claude]` lines in its context and summary), still never from nowhere. At most one update per 5 s per room is applied,
 the last one wins. Nothing is spoken; asked for the status, the voicebot answers from the
 board ("Kurz Moment, Claude baut gerade den Fix").
 
@@ -139,6 +147,33 @@ Keep the main loop free: answer a `user` turn within ~3 s and hand slow work (sh
 edits, builds) to a background agent. CLI 0.7.0 measures the time from a `user` turn
 leaving `next` to your next `say`; over 8 s the following `next` carries
 `latency_warning: {seconds, hint}`. Nothing is spoken automatically.
+
+## operator.activity (activity feed)
+
+What you are doing right now, without you having to `say` it. CLI 0.10.0:
+`voicehook-agent hook install` adds a Claude Code PostToolUse hook (`~/.claude/settings.json`)
+that appends ONE line per tool call to `activity.log` in the session dir of the running
+join: `HH:MM:SS Tool: description`, e.g. `17:12:03 Bash: Tests laufen lassen` (the
+`description` you gave the tool call; tool name only when there is none). It never writes
+commands, arguments, paths, file contents or output, and scrubs secret-looking tokens
+(`sk_`, `rk_`, `re_`, `whsec_`, `vhw_`, `ghp_`, `Bearer`, JWTs, long base64). The join reads
+the file and sends the last 15 lines as `operator.activity` `{lines, ts}`, only on change and
+at most every 5 s (the newest state wins). With several joins on one machine the hook writes
+nothing unless `VOICEHOOK_SESSION=<slug>/<identity>` names the target.
+
+The voicebot puts it in its own block "Zuletzt hat Claude gemacht: ..." next to the board
+(budget 800 chars, `VOICEHOOK_ACTIVITY_BUDGET`, oldest lines dropped first; scrubbed
+again), replaced on every update, cleared when you leave. Delta may tell the user from it,
+in the third person and without exaggerating ("Claude hat gerade die Tests laufen lassen").
+The board field `doing` is not needed for "was macht Claude gerade": Delta answers from the
+newest feed line, and a `status_request` answered with a board without `doing` is spoken
+from the feed ("Zuletzt bei Claude: Tests laufen lassen."). The voicebot applies at most one
+feed update per 5 s in Normal (`VOICEHOOK_ACTIVITY_INTERVAL_S`) and per 20 s in Live
+(`VOICEHOOK_ACTIVITY_INTERVAL_LIVE_S`), because in Live every update is a turn that costs
+the whole context; the newest state in the window wins.
+Own topic instead of a board field: the board is your curated state per task change, the
+feed is mechanical and frequent; mixing them would overwrite the board or compete for its
+rate limit. Live mode: one `[System]` turn at a fixed place, like the board.
 
 ## operator.say modes
 
@@ -180,7 +215,7 @@ One packet per state change of a say, keyed by its `seq` (the CLI's `_seq`, the 
 | `queued` | accepted, waiting for silence (or held for your `overwrite`) |
 | `spoken` | played to the end; `spoken_chars` = length of the spoken text (also right after `interrupted` when the cut came after the last word) |
 | `interrupted` | the user cut it off after `spoken_chars` characters (or `operator.interrupt`) |
-| `requeued` | the unspoken rest is queued again and will be spoken (follows `interrupted`) |
+| `requeued` | the unspoken rest is queued again and will be spoken (follows `interrupted`). Pipeline mode only: in live mode a say the user cut off is not repeated, `interrupted` is final and you decide what to say next |
 | `replaced` | dropped on purpose: an `overwrite`, or a `revise` that sent you `operator.revise` |
 
 Every state is also logged by the voicebot (`[operator.say_status] seq=… state=…`).

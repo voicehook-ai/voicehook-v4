@@ -49,6 +49,13 @@ from typing import TYPE_CHECKING
 from livekit.agents import Agent, StopResponse
 from livekit.agents import llm as lk_llm
 
+from .activity import (
+    TOPIC_ACTIVITY,
+    activity_block,
+    activity_interval_s,
+    activity_sentence,
+    normalize_activity,
+)
 from .alive import (
     TOPIC_ALIVE,
     OperatorAlive,
@@ -66,6 +73,7 @@ from .core import (
     compose,
     core_normal,
     history_turns,
+    is_agent_item,
     mark_agent_items,
     persona_block,
     sanitize_persona,
@@ -95,6 +103,7 @@ TOPIC_STATUS_REQUEST = "operator.status_request"  # agent -> operator: Nutzer fr
 STATUS_MIN_INTERVAL_S = 5.0  # höchstens 1 Board-Update je 5 s und Raum, das letzte gewinnt
 STATUS_ANSWER_WINDOW_S = 8.0  # kommt das Board so schnell nach einer Nachfrage, sagt Delta es an
 _STATUS_ID = "vh-status-"     # Live: fester Platz im Chat-Kontext (alte Status-Turns raus)
+_ACTIVITY_ID = "vh-activity-"  # Live: fester Platz für den Aktivitäts-Feed
 
 LOW_BALANCE_ANNOUNCEMENT = "Hey, Achtung, das Guthaben ist in wenigen Minuten leer."
 
@@ -208,6 +217,9 @@ class RelayAgent(Agent):
         # Verlauf (#9): letzte Wechsel + laufende Zusammenfassung (history.py). Ohne
         # Angabe nur kappen; der Worker gibt im Normalmodus den Gemini-Zusammenfasser mit.
         self.history = history if history is not None else HistoryKeeper(history_turns())
+        # Zusammenfassung: Agentensätze behalten ihre Markierung ("[Claude] sagte: ...")
+        self.history.who = lambda item: (agent_mark(self.agent_name)
+                                         if is_agent_item(item, self.operator_said) else None)
         # Datum/Uhrzeit (clock.py): eigene Schicht, pro Antwort neu, Kern bleibt fest.
         self.now = now or system_now
 
@@ -292,6 +304,7 @@ class RelayHandlers:
     on_alive: callable = None            # operator.alive: Lebenszeichen des Agenten
     check_reach: callable = None         # async (): erreichbar/unerreichbar neu bewerten (Takt)
     on_user_state: callable = None       # (ev|state): Operator-Queue wartet, solange er spricht
+    on_activity: callable = None         # operator.activity: Feed ersetzen (rate-limited)
 
 
 def _decode(payload: bytes) -> dict:
@@ -386,6 +399,7 @@ def build_relay_handlers(
     hold_s: float = HOLD_S,
     live: bool = False,
     status_interval_s: float = STATUS_MIN_INTERVAL_S,
+    activity_interval: float | None = None,  # None: activity_interval_s(live) (Env/Default)
     clock=None,  # noqa: ANN001  Tests: monotone Uhr injizieren
     say_quiet: float | None = None,  # Tests: Stille vor einer say (sonst Env/Default)
 ) -> RelayHandlers:
@@ -546,10 +560,13 @@ def build_relay_handlers(
         if getattr(handle, "interrupted", False) is True:
             _say_status(item["seq"], "interrupted", len(spoken))
             if live:
-                # Gemini formuliert um: ganze Aussage + bisher Gesagtes (live_say_rest_user_input)
-                said = " ".join(x for x in (item["spoken"], spoken) if x).strip()
-                rest = item["full"]
-                nxt = {**item, "text": rest, "spoken": said}
+                # Live: kein Nachsprechen (Oliver 02.10.2026, Raum vivid-orbit-fresh-V32N).
+                # Gemini formuliert um und das Ausgabe-Transkript hinkt dem Audio nach:
+                # spoken_chars=8, gehört hatte der Nutzer deutlich mehr, der "Rest" kam
+                # als ganze Aussage nochmal. Wer unterbricht, will selbst reden.
+                # `interrupted` ist der Endzustand, der Agent entscheidet über Neues.
+                _pump()
+                return
             else:
                 rest = unspoken_rest(item["text"], spoken)
                 if rest and len(rest) < SHORT_REST_CHARS:
@@ -735,7 +752,7 @@ def build_relay_handlers(
     # sich beim Umschalten nicht überholen (jedes Umschalten awaitet das Modell).
     role = {"agent": False, "persona": None, "name": None, "user": None, "board": None,
             "unreachable": False,
-            "board_at": None, "board_stale": False}
+            "board_at": None, "board_stale": False, "activity": None}
     role_lock = asyncio.Lock()
     _now = clock or (lambda: asyncio.get_running_loop().time())
     alive = OperatorAlive()  # operator.alive (alive.py): hört der Agent noch zu?
@@ -763,6 +780,7 @@ def build_relay_handlers(
         mins = _board_minutes()
         if status and mins is not None:
             status += board_stale_note(name, mins)
+        status += activity_block(role["activity"], agent_refs(name)["nom"])
         if role["unreachable"]:
             status += unreachable_block(name)
         return compose(core_normal(name, role["user"]), layer, status)
@@ -820,6 +838,7 @@ def build_relay_handlers(
                 role["persona"] = None
                 role["board"] = None
                 role["board_at"] = None
+                role["activity"] = None
                 await _set_role(DEFAULT_PERSONA, LIVE_AGENT_LEFT_USER)
                 logger.info("[role] agent left, Werksrolle an%s", " (live)" if live else "")
 
@@ -883,7 +902,9 @@ def build_relay_handlers(
         req = st["request_at"]
         if req is not None and _now() - req <= STATUS_ANSWER_WINDOW_S:
             st["request_at"] = None
-            line = status_sentence(board, agent_refs(role["name"])["nom"])
+            refs = agent_refs(role["name"])
+            # doing ist nicht nötig: ohne doing antwortet der Aktivitäts-Feed (Oliver 02.10.)
+            line = status_sentence(board, refs["nom"]) or activity_sentence(role["activity"], refs["dat"])
             if line:
                 speak_notice(session, line, live=live)
 
@@ -903,6 +924,51 @@ def build_relay_handlers(
             await _apply_status()
         elif st["task"] is None:
             st["task"] = asyncio.create_task(_apply_later(wait))
+
+    # ----- Aktivitäts-Feed (operator.activity, activity.py) --------------------------
+    act: dict = {"last": None, "pending": None, "task": None, "n": 0}
+    act_interval = activity_interval_s(live) if activity_interval is None else activity_interval
+
+    async def _apply_activity() -> None:
+        lines, act["pending"] = act["pending"], None
+        act["last"] = _now()
+        async with role_lock:
+            if lines == role["activity"]:
+                return
+            role["activity"] = lines
+            if live:
+                from .live import live_activity_user, live_stamp
+
+                act["n"] += 1
+                ctx = agent.chat_ctx.copy()
+                items = getattr(ctx, "items", None)
+                if isinstance(items, list):  # alter Feed raus: lokaler Kontext bleibt konstant
+                    items[:] = [i for i in items if not str(getattr(i, "id", "")).startswith(_ACTIVITY_ID)]
+                ctx.add_message(role="user", id=f"{_ACTIVITY_ID}{act['n']}",
+                                content=live_stamp(live_activity_user(lines, role["name"]), _clock_now()))
+                await agent.update_chat_ctx(ctx)
+            else:
+                await agent.update_instructions(_normal_instructions())
+        logger.info("[operator.activity]%s %s", " (live)" if live else "",
+                    "cleared" if lines is None else f"{len(lines)} Zeilen")
+
+    async def _apply_activity_later(delay: float) -> None:
+        try:
+            await asyncio.sleep(delay)
+            await _apply_activity()
+        finally:
+            act["task"] = None
+
+    async def on_activity(packet: DataPacket) -> None:
+        """Feed ersetzen (nie anhängen). Rate-Limit: höchstens 1 Update je act_interval
+        (Normal 5 s, Live 20 s: dort kostet jedes Update einen Turn mit ganzem Kontext),
+        das letzte im Fenster gewinnt. Kommt er vor der Presence, gilt er ab dem Join."""
+        act["pending"] = normalize_activity(_decode(packet.data))
+        wait = 0.0 if act["last"] is None else act["last"] + act_interval - _now()
+        if wait <= 0 and act["task"] is None:
+            await _apply_activity()
+        elif act["task"] is None:
+            act["task"] = asyncio.create_task(_apply_activity_later(wait))
 
     async def on_user_text(text: str) -> None:
         """Fragt der Nutzer nach dem Stand des Agenten: operator.status_request an ihn
@@ -1006,7 +1072,7 @@ def build_relay_handlers(
         on_agent_presence=on_agent_presence,
         on_status=on_status, on_user_text=on_user_text,
         on_alive=on_alive, check_reach=check_reach,
-        on_user_state=on_user_state,
+        on_user_state=on_user_state, on_activity=on_activity,
     )
 
 
@@ -1020,4 +1086,5 @@ def topic_dispatch(handlers: RelayHandlers) -> dict[str, callable]:
         TOPIC_INJECT: handlers.on_inject,
         TOPIC_STATUS: handlers.on_status,
         TOPIC_ALIVE: handlers.on_alive,
+        TOPIC_ACTIVITY: handlers.on_activity,
     }
