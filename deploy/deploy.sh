@@ -217,6 +217,7 @@ sed -e "s|__SITE_MAIN__|${DOMAIN}|" -e "s|__SITE_RTC__|${RTC}|" "${REPO}/infra/c
 rs "${TMP}" "$(dst /etc/caddy/Caddyfile)"
 rm -f "${TMP}"
 run "chgrp caddy /etc/caddy/Caddyfile 2>/dev/null || true; chmod 0640 /etc/caddy/Caddyfile
+  chmod 0640 /var/log/caddy/access.log 2>/dev/null || true  # Caddy 2.6 kennt kein output-mode
   caddy validate --config /etc/caddy/Caddyfile && (systemctl reload caddy || systemctl restart caddy)"
 
 # LiveKit before activation: the new color only reports READY once registered (first boot!).

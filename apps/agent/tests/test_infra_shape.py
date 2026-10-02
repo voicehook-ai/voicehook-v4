@@ -31,7 +31,8 @@ def test_caddyfile_template_is_lean():
     # 30 -> 33 (01.10.2026): 3 Zeilen für die Footer-Seiten (PR #83), Platz für /login (PR #95).
     # 33 -> 34 (01.10.2026): SSE der HTTPS-Brücke nicht komprimieren (PR #99).
     # 34 -> 36 (02.10.2026): lb_try_duration überbrückt den HTTP-Neustart beim Deploy.
-    assert _loc(ROOT / "infra" / "caddy" / "Caddyfile.tmpl") <= 36
+    # 36 -> 55 (02.10.2026): format filter schwärzt Geheimnisse im Access-Log (Sicherheitsbefund).
+    assert _loc(ROOT / "infra" / "caddy" / "Caddyfile.tmpl") <= 55
 
 
 def test_systemd_units_are_http_plus_bluegreen_workers():
@@ -108,3 +109,26 @@ def test_footer_pages_exist_and_are_routed():
     assert "rewrite @footer {path}.html" in cf
     assert "rewrite /security /.well-known/security.txt" in cf
     assert "try_files {path} /voice.html" in cf  # SPA-Fallback bleibt
+
+
+def test_caddy_access_log_redacts_secrets():
+    """Access-Log schwärzt Wallet-Token, Auth/Cookies und Login/Invite/OAuth-Query (02.10.2026).
+
+    Syntax Caddy 2.6.2 (Box): format filter { wrap console; fields { <feld> <filter> } }.
+    """
+    cf = (ROOT / "infra" / "caddy" / "Caddyfile.tmpl").read_text()
+    assert "format filter {" in cf and "wrap console" in cf and "fields {" in cf
+    for h in ("X-Wallet-Token", "Authorization", "Cookie"):
+        assert f"request>headers>{h} replace REDACTED" in cf, h
+    assert "resp_headers>Set-Cookie replace REDACTED" in cf
+    assert "request>headers>Referer regexp" in cf and "resp_headers>Location regexp" in cf
+    assert "request>uri query {" in cf
+    for p in ("token", "nonce", "invite", "session_id", "r", "code", "state"):
+        assert f"replace {p} REDACTED" in cf, p
+    assert "format console" not in cf  # ungefiltertes Format wäre wieder Klartext
+
+
+def test_caddy_access_log_not_world_readable():
+    # Caddy 2.6.2 kennt `mode` unter `output file` nicht (wird still ignoriert), daher chmod im Deploy.
+    d = (ROOT / "deploy" / "deploy.sh").read_text()
+    assert "chmod 0640 /var/log/caddy/access.log" in d
