@@ -194,6 +194,7 @@ def api_checkout(req: CheckoutRequest, request: Request) -> dict:
         }],
         "success_url": f"{base}{TOPUP_PATH}?session_id={{CHECKOUT_SESSION_ID}}",
         "cancel_url": f"{base}{TOPUP_PATH}?topup=cancel",
+        **stripe_api.INVOICE_PARAMS,
     }
     acc = db.account_for_token(wallet_token(request))
     if acc is not None:  # Aufladen aus bestehendem Wallet -> dasselbe Konto
