@@ -422,9 +422,9 @@ def _free_info(request: Request) -> dict:
     """{eur_left, eur_per_day[, exempt]} für /api/me und /api/free/remaining, aus
     freetier.free_state: dieselbe Rechnung wie Raumanlage (402) und Worker."""
     keys = freetier.identity_keys(request.headers.get(freetier.ANON_HEADER), _client_ip(request))
-    st = freetier.free_state(keys)
+    st = freetier.free_state(keys, account=billing_routes.request_account(request))
     out = {"eur_left": st["eur_left"], "eur_per_day": st["eur_per_day"]}
-    if st["exempt"]:  # VH_FREE_EXEMPT_KEYS (Owner-Test): unbegrenzt
+    if st["exempt"]:  # VH_FREE_EXEMPT_ACCOUNTS / _KEYS (Owner): unbegrenzt
         out["exempt"] = True
     return out
 
@@ -454,7 +454,8 @@ def host_call(req: HostCallRequest, request: Request) -> TokenResponse:
     if not _host_rate_ok(ip):
         raise HTTPException(status_code=429, detail="rate limited — try again later")
     room = gen_slug()
-    billing_routes.register_new_room(room, "normal", wallet, free_keys, req.ttl_seconds)
+    billing_routes.register_new_room(room, "normal", wallet, free_keys, req.ttl_seconds,
+                                    account=billing_routes.request_account(request))
     return _issue(room, req.identity, req.ttl_seconds)
 
 
@@ -484,7 +485,8 @@ def invite_room(req: HostCallRequest, request: Request) -> InviteRoomResponse:
     if not api_key or not api_secret:
         raise HTTPException(status_code=503, detail="server missing LiveKit credentials")
     room = gen_slug()
-    billing_routes.register_new_room(room, "normal", wallet, free_keys, req.ttl_seconds)
+    billing_routes.register_new_room(room, "normal", wallet, free_keys, req.ttl_seconds,
+                                    account=billing_routes.request_account(request))
     token = mint_livekit_token(
         api_key=api_key, api_secret=api_secret,
         room=room, identity=req.identity, ttl_seconds=req.ttl_seconds, agent_name=None,
@@ -645,7 +647,8 @@ def public_live_room(req: HostCallRequest, request: Request) -> PublicLiveRoomRe
         raise HTTPException(status_code=429, detail="rate limited, try again later")
     room = gen_slug()
     _set_room_agent(room, LIVE_AGENT_NAME, req.ttl_seconds)
-    billing_routes.register_new_room(room, "live", wallet, free_keys, req.ttl_seconds)
+    billing_routes.register_new_room(room, "live", wallet, free_keys, req.ttl_seconds,
+                                    account=billing_routes.request_account(request))
     tok = _issue(room, req.identity, req.ttl_seconds)  # _agent_for -> Live-Worker
     invite = mint_invite(room, req.ttl_seconds)
     base = os.environ.get("VOICEHOOK_PUBLIC_URL", "https://voicehook.ai").rstrip("/")

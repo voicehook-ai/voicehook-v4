@@ -46,6 +46,18 @@ unbegrenzt: kein 402 free_limit, kein Call-Ende wegen free_limit, nichts wird ge
 /api/me zeigt eur_left = eur_per_day plus exempt=true. Wallet und die Live-Monatssperre
 (budget.py) bleiben unverändert. Leer/fehlend: keine Ausnahme; kaputte Einträge werden
 ignoriert. Keys erzeugen (lokal auf der Box): python -m agent.freetier keys --ip <ip> --anon <id>
+Bleibt aus Abwärtskompatibilität; der Owner hängt seit 02.10. am Konto (nächster Absatz).
+
+Env VH_FREE_EXEMPT_ACCOUNTS (Oliver 02.10.: Ausnahme am angemeldeten Konto statt an
+IP-/Browser-Hashes): kommagetrennte Liste "github:<id>" / "google:<sub>", die STABILEN
+Anbieter-IDs aus billing.sqlite oauth_identities.subject (GitHub: numerische User-ID,
+nicht der umbenennbare Login; Google: OpenID sub, nicht die Mail). Gilt nur für einen
+ANGEMELDETEN Anfragenden: X-Wallet-Token -> Konto mit bestätigter Mail
+(accounts.email_verified_at), und diese Mail ist die, mit der der gelistete Anbieter-
+Zugang zuletzt kam (oauth_identities.email). Ohne Login nie (IP/anon-id spielen keine
+Rolle). Der Server merkt sich beim Raumanlegen das Konto in free_rooms.account; der
+Worker prüft damit über dieselbe Funktion (account_exempt in free_state/consume_ueur).
+Lesefehler -> keine Ausnahme (normal gezählt).
 
 Globaler Gratis-Deckel (Oliver 02.10., INTERN, nirgends nach außen erwähnen): fester
 Monatstopf in ECHTEN Kosten (cost_usd x USD_EUR, Olivers Geld, nicht Kundenpreis),
@@ -82,6 +94,8 @@ ENV_EUR_PER_DAY = "VH_FREE_EUR_PER_DAY"
 DEFAULT_POT_EUR_MONTH = 60.0
 ENV_POT_EUR_MONTH = "VH_FREE_POT_EUR_MONTH"
 ENV_EXEMPT_KEYS = "VH_FREE_EXEMPT_KEYS"
+ENV_EXEMPT_ACCOUNTS = "VH_FREE_EXEMPT_ACCOUNTS"
+_ACCOUNT_RE = re.compile(r"^(github|google):([A-Za-z0-9_.@+-]{1,128})$")
 _KEY_RE = re.compile(r"^(anon|ip):[0-9a-f]{64}$")
 UEUR_PER_EUR = 1_000_000
 ANON_HEADER = "x-anon-id"
@@ -117,7 +131,8 @@ CREATE TABLE IF NOT EXISTS free_rooms (
     mode TEXT NOT NULL,
     keys TEXT NOT NULL,
     created_at REAL NOT NULL,
-    exempt INTEGER NOT NULL DEFAULT 0
+    exempt INTEGER NOT NULL DEFAULT 0,
+    account TEXT
 );
 """
 
@@ -277,10 +292,51 @@ def exempt_keys() -> frozenset[str]:
     return frozenset(k for k in (p.strip().lower() for p in raw.split(",")) if _KEY_RE.match(k))
 
 
-def is_exempt(keys: Iterable[str] | None) -> bool:
-    """Trifft eines der Merkmale die Ausnahmeliste? Leere Liste/Env -> False."""
+def exempt_accounts() -> frozenset[tuple[str, str]]:
+    """(Anbieter, Subject) ohne Gratis-Limit (VH_FREE_EXEMPT_ACCOUNTS). Kaputte Einträge fallen weg."""
+    out = set()
+    for part in os.environ.get(ENV_EXEMPT_ACCOUNTS, "").split(","):
+        m = _ACCOUNT_RE.match(part.strip())
+        if m:
+            out.add((m.group(1), m.group(2)))
+    return frozenset(out)
+
+
+def account_exempt(account_id: str | None) -> bool:
+    """Angemeldetes Konto in VH_FREE_EXEMPT_ACCOUNTS? Nur Konten mit bestätigter Mail
+    (= angemeldet); deren Mail muss die sein, mit der ein gelisteter Anbieter-Zugang
+    kam (oauth_identities). Kein Konto/leere Env -> False ohne DB-Zugriff.
+    Lesefehler -> False (dann gilt das normale Limit)."""
+    if not account_id:
+        return False
+    allowed = exempt_accounts()
+    if not allowed:
+        return False
+    from .billing import db as billing_db  # spät: freetier bleibt ohne Billing importierbar
+
+    try:
+        conn = billing_db.connect()
+        try:
+            rows = conn.execute(
+                "SELECT o.provider, o.subject FROM accounts a"
+                " JOIN oauth_identities o ON o.email = a.email"
+                " WHERE a.id = ? AND a.email_verified_at IS NOT NULL",
+                (account_id,),
+            ).fetchall()
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001
+        return False
+    return any((r[0], str(r[1])) in allowed for r in rows)
+
+
+def is_exempt(keys: Iterable[str] | None, account: str | None = None) -> bool:
+    """Ausnahme? Merkmal in VH_FREE_EXEMPT_KEYS ODER angemeldetes Konto in
+    VH_FREE_EXEMPT_ACCOUNTS. Leere Listen/Env -> False."""
     allowed = exempt_keys()
-    return bool(allowed) and any(k in allowed for k in (keys or ()))
+    if allowed and any(k in allowed for k in (keys or ())):
+        return True
+    return account_exempt(account)
 
 
 def db_path() -> Path:
@@ -302,6 +358,8 @@ def connect() -> sqlite3.Connection:
                 cols = {r[1] for r in conn.execute("PRAGMA table_info(free_rooms)").fetchall()}
                 if "exempt" not in cols:
                     conn.execute("ALTER TABLE free_rooms ADD COLUMN exempt INTEGER NOT NULL DEFAULT 0")
+                if "account" not in cols:
+                    conn.execute("ALTER TABLE free_rooms ADD COLUMN account TEXT")
                 _INITIALIZED.add(key)
     return conn
 
@@ -323,7 +381,9 @@ def used_ueur(keys: Iterable[str], now: float | None = None) -> int:
     return int(row[0] or 0)
 
 
-def free_state(keys: Iterable[str] | None, now: float | None = None) -> dict:
+def free_state(
+    keys: Iterable[str] | None, now: float | None = None, *, account: str | None = None
+) -> dict:
     """DIE eine Gratis-Rechnung (Oliver 02.10.: "Frontend und Agenten brauchen die GLEICHEN
     Werte"). /api/me, /api/free/remaining, die 402-Entscheidung beim Raumanlegen und der
     Worker (Start-Prüfung, nach jeder Buchung, Topic free.state) lesen NUR hier.
@@ -331,7 +391,8 @@ def free_state(keys: Iterable[str] | None, now: float | None = None) -> dict:
     Liefert {left_ueur, eur_left, eur_per_day, exempt, pot_empty, reason}:
       reason None              Rest > 0, Gratis läuft
              "disabled"        Gratis aus (VH_FREE_EUR_PER_DAY=0): eur_left 0
-             "exempt"          Merkmal in VH_FREE_EXEMPT_KEYS: voller Tageswert, nie leer
+             "exempt"          Merkmal in VH_FREE_EXEMPT_KEYS oder angemeldetes Konto in
+                               VH_FREE_EXEMPT_ACCOUNTS (`account`): voller Tageswert, nie leer
              "personal_limit"  eigener Tageswert verbraucht
              "pot_empty"       globaler Topf heute leer (oder unlesbar, fail-closed)
     Lesefehler der persönlichen Zählung werfen (Aufrufer entscheiden fail-closed)."""
@@ -341,7 +402,7 @@ def free_state(keys: Iterable[str] | None, now: float | None = None) -> dict:
                 "pot_empty": False, "reason": "disabled"}
     limit = limit_ueur()
     per_day = round(limit_eur(), 2)
-    if is_exempt(keys):
+    if is_exempt(keys, account):
         return {"left_ueur": limit, "eur_left": _floor_eur(limit), "eur_per_day": per_day,
                 "exempt": True, "pot_empty": False, "reason": "exempt"}
     personal = max(0, limit - used_ueur(keys, now))
@@ -395,7 +456,8 @@ def add_ueur(keys: Iterable[str], ueur: int, now: float | None = None) -> None:
 
 
 def consume_ueur(
-    keys: Iterable[str], ueur: int, now: float | None = None, *, real_ueur: int | None = None
+    keys: Iterable[str], ueur: int, now: float | None = None, *, real_ueur: int | None = None,
+    account: str | None = None,
 ) -> tuple[int, int]:
     """Kostenereignis aus dem Gratis-Topf nehmen, atomar (parallele Räume derselben
     Identität teilen den Topf). Liefert (aus dem Topf genommen, Rest danach).
@@ -405,11 +467,12 @@ def consume_ueur(
     desselben Ereignisses (globaler Monatstopf). Ohne `real_ueur` wird konservativ
     der Kundenpreis in den Monatstopf gebucht (nie zu wenig). Reicht der globale Topf
     nur teilweise, wird anteilig genommen; danach ist der Rest 0 (für alle leer).
-    Ausnahme-Merkmal (VH_FREE_EXEMPT_KEYS): alles gilt als gedeckt, nichts wird gebucht."""
+    Ausnahme (VH_FREE_EXEMPT_KEYS / VH_FREE_EXEMPT_ACCOUNTS): alles gilt als gedeckt,
+    nichts wird gebucht."""
     keys = list(keys)
     if not keys:
         return 0, 0
-    if is_exempt(keys):
+    if is_exempt(keys, account):
         return max(0, int(ueur)), limit_ueur()
     now = time.time() if now is None else now
     ueur = int(ueur)
@@ -449,18 +512,21 @@ def consume_ueur(
 
 
 def register_room(
-    room: str, mode: str, keys: Iterable[str], now: float | None = None, *, exempt: bool = False
+    room: str, mode: str, keys: Iterable[str], now: float | None = None, *, exempt: bool = False,
+    account: str | None = None,
 ) -> None:
     """Gratis-Raum merken (Raum -> Merkmale des Erstellers), alte Einträge aufräumen.
-    exempt=True: Raum ist bekannt, wird aber nicht gezählt (Admin-Testraum)."""
+    exempt=True: Raum ist bekannt, wird aber nicht gezählt (Admin-Testraum).
+    account: Konto des angemeldeten Erstellers (für VH_FREE_EXEMPT_ACCOUNTS im Worker)."""
     now = time.time() if now is None else now
     conn = connect()
     try:
         conn.execute("BEGIN IMMEDIATE")
         try:
             conn.execute(
-                "INSERT OR REPLACE INTO free_rooms (room, mode, keys, created_at, exempt) VALUES (?, ?, ?, ?, ?)",
-                (room, mode, ",".join(keys), now, 1 if exempt else 0),
+                "INSERT OR REPLACE INTO free_rooms (room, mode, keys, created_at, exempt, account)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (room, mode, ",".join(keys), now, 1 if exempt else 0, account or None),
             )
             # Länger halten als jede Raumzuordnung (Token-TTL <= 1 Tag), sonst fiele ein
             # alter Raum aus der Zählung (Review 01.10. #2).
@@ -510,6 +576,16 @@ def room_keys(room: str) -> tuple[str, list[str]] | None:
     if row[2]:
         return row[0], []
     return row[0], [k for k in row[1].split(",") if k]
+
+
+def room_account(room: str) -> str | None:
+    """Konto des angemeldeten Raum-Erstellers (free_rooms.account) oder None."""
+    conn = connect()
+    try:
+        row = conn.execute("SELECT account FROM free_rooms WHERE room = ?", (room,)).fetchone()
+    finally:
+        conn.close()
+    return row[0] if row and row[0] else None
 
 
 def _main(argv: list[str] | None = None) -> int:

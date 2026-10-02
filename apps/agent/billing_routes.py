@@ -84,6 +84,12 @@ def wallet_token(request: Request) -> str:
     return request.headers.get(WALLET_HEADER, "").strip()
 
 
+def request_account(request: Request) -> str | None:
+    """Konto zum X-Wallet-Token des Browsers (oder None). Ob es als angemeldet zählt,
+    entscheidet freetier.account_exempt (nur bestätigte Mail)."""
+    return db.account_for_token(wallet_token(request))
+
+
 def payer_for_call(request: Request, mode: str, ip: str) -> tuple[str | None, list[str] | None]:
     """Wer zahlt einen NEUEN Raum: (Wallet-Konto | None, Gratis-Merkmale | None).
 
@@ -101,7 +107,7 @@ def payer_for_call(request: Request, mode: str, ip: str) -> tuple[str | None, li
     wallet = acc if acc is not None and db.balance_ueur(acc) > 0 else None
     if freetier.enabled(mode):
         keys = freetier.identity_keys(request.headers.get(freetier.ANON_HEADER), ip)
-        st = freetier.free_state(keys)  # dieselbe Rechnung wie /api/me und Worker
+        st = freetier.free_state(keys, account=acc)  # dieselbe Rechnung wie /api/me und Worker
         if st["exempt"] or st["left_ueur"] > 0:
             return wallet, keys
         if wallet:
@@ -123,12 +129,14 @@ def payer_for_call(request: Request, mode: str, ip: str) -> tuple[str | None, li
 
 
 def register_new_room(room: str, mode: str, wallet: str | None, free_keys: list[str] | None,
-                      ttl_seconds: int) -> None:
-    """Zuordnungen für den Worker anlegen, VOR dem Dispatch (er liest sie beim Start)."""
+                      ttl_seconds: int, *, account: str | None = None) -> None:
+    """Zuordnungen für den Worker anlegen, VOR dem Dispatch (er liest sie beim Start).
+    `account` = Konto des Anfragenden (X-Wallet-Token), damit der Worker die Konto-
+    Ausnahme (VH_FREE_EXEMPT_ACCOUNTS) mit derselben Funktion prüft wie der Server."""
     if wallet:
         db.bind_room(room, wallet, mode, ttl_seconds)
     if free_keys is not None:
-        freetier.register_room(room, mode, free_keys)
+        freetier.register_room(room, mode, free_keys, account=account)
 
 
 # ----- Konfiguration für die Seite -------------------------------------------

@@ -237,7 +237,8 @@ dasselbe Konto zuerst verrechnet. Der Wiederherstellungs-Link gilt genau einmal 
 | `VOICEHOOK_TOPUP_AMOUNTS_EUR` | `5,10,20,50` | Vorschlagsbeträge (nur Werte im erlaubten Bereich) |
 | `VOICEHOOK_TOPUP_MIN_EUR` / `_MAX_EUR` | `5` / `200` | Spanne des Drehreglers und der Checkout-Prüfung (Minimum nie unter 5; `/api/checkout` < Minimum -> 400) |
 | `VH_FREE_EUR_PER_DAY` | `0.30` | Gratis-Verbrauch in Euro (Kundenpreis inkl. Faktor und MwSt, 0,30 € ≈ 10 min Normal oder ≈ 2 min Live) pro UTC-Tag und Identität, Normal und Live gemeinsam; `0` = aus; kaputter Wert (kein Zahlwert, negativ, inf/nan) = 0 € Gratis bei weiter aktiver Prüfung (ohne Wallet 402), nie unbegrenzt |
-| `VH_FREE_EXEMPT_KEYS` | leer | Merkmale ohne Gratis-Limit (Owner-Test), kommagetrennt, nur gehashte Keys im Format `anon:<sha256>` / `ip:<sha256>` (siehe unten); leer = keine Ausnahme, kaputte Einträge werden ignoriert |
+| `VH_FREE_EXEMPT_ACCOUNTS` | leer | Angemeldete Konten ohne Gratis-Limit (Owner), kommagetrennt `github:<id>` / `google:<sub>` = stabile Anbieter-ID aus `oauth_identities.subject` (siehe unten); gilt nur mit Login (X-Wallet-Token, bestätigte Mail), nie per IP/Browser; leer = keine Ausnahme |
+| `VH_FREE_EXEMPT_KEYS` | leer | ALT, nur noch Abwärtskompatibilität (Nachfolger `VH_FREE_EXEMPT_ACCOUNTS`): Merkmale ohne Gratis-Limit, kommagetrennt, nur gehashte Keys im Format `anon:<sha256>` / `ip:<sha256>` (siehe unten); leer = keine Ausnahme, kaputte Einträge werden ignoriert |
 | `VH_FREE_POT_EUR_MONTH` | `60` | INTERN, nirgends nach außen nennen: globaler Gratis-Deckel in ECHTEN Kosten (cost_usd × `VOICEHOOK_USD_EUR`) pro UTC-Monat für alle Gratis-Nutzer zusammen, siehe unten; kaputter/negativer Wert = 0 = Gratis gesperrt |
 | `VH_FREE_TICK_SECONDS` | `5` | Prüftakt der Restzeit-Warnung im Worker (bucht nichts) |
 | `VH_REQUIRE_OPERATOR_INVITE` | `0` | Operator-Join `GET /api/token?invite=1` und `/api/bridge/join` ohne HMAC-Einladung (`op_invite` bzw. `?invite=` in der URL): `0` = Übergangsfrist, erlaubt, aber laut geloggt (`legacy operator join without invite`); `1` = 403. Ungültige Signatur ist immer 403. Umschalten auf `1`, sobald die neue voicehook-agent CLI 1 bis 2 Tage draußen ist und das Log keine Legacy-Joins mehr zeigt |
@@ -306,7 +307,24 @@ curl -s -H "Authorization: Bearer $VOICEHOOK_LIVE_KEY" https://voicehook.ai/api/
 # {month, day, days_left, month_budget_eur, month_used_eur, budget_today_eur, today_used_eur, left_today_eur}
 ```
 
-**Gratis-Ausnahme für den Owner (`VH_FREE_EXEMPT_KEYS`).** Trifft eines der Merkmale eines
+**Gratis-Ausnahme am Konto (`VH_FREE_EXEMPT_ACCOUNTS`, bevorzugt).** Eintrag je Konto
+`github:<id>` oder `google:<sub>`: die STABILE Anbieter-ID (GitHub: numerische User-ID, nicht
+der umbenennbare Login; Google: OpenID `sub`, nicht die Mail). Ausnahme gilt, wenn der Browser
+angemeldet ist (X-Wallet-Token eines Kontos mit bestätigter Mail) und diese Mail die ist, mit
+der der gelistete Anbieter-Zugang zuletzt kam. Ohne Login nie, egal welche IP/Anon-ID. Beim
+Raumanlegen merkt sich der Server das Konto (`free_rooms.account`), der Worker prüft mit
+derselben Funktion (`freetier.free_state`). Wirkung wie unten (kein 402, nichts gebucht,
+`exempt: true`). ID read-only auf der Box nachschlagen (gibt nur Anbieter und ID aus):
+
+```sh
+sqlite3 -readonly /opt/voicehook/state/billing.sqlite \
+  "SELECT provider, subject FROM oauth_identities WHERE email = lower('<mail>')"
+# -> VH_FREE_EXEMPT_ACCOUNTS=github:<subject>  (bzw. google:<subject>)
+```
+
+Danach wie unten `voicehook-http` und die Worker-Farbe neu starten (Env wird beim Start gelesen).
+
+**Gratis-Ausnahme für den Owner per Hash (`VH_FREE_EXEMPT_KEYS`, alt).** Trifft eines der Merkmale eines
 Anfragenden bzw. Raums die Liste, ist Gratis unbegrenzt: kein 402 `free_limit`, kein Call-Ende
 wegen `free_limit`, in `free_usage_eur` wird nichts gebucht. `/api/me` und `/api/free/remaining`
 liefern dann `free: {eur_left: eur_per_day, eur_per_day, exempt: true}`, die Seite zeigt
