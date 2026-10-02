@@ -3,6 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+/* Handy-Layout (Variante A, Oliver 02.10.): gleiche Handy-Erkennung wie VH_PHONE
+   (grober Zeiger UND kurze Bildschirmseite <= 500 CSS-px). Nur dann Klasse
+   vh-phone und viewport-fit=cover (Safe Areas); Tablet und Desktop unverändert. */
+(function () {
+  try {
+    if (matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 500) {
+      document.documentElement.classList.add('vh-phone');
+      var m = document.querySelector('meta[name="viewport"]');
+      if (m) m.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover');
+    }
+  } catch (_) {}
+})();
+</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22%3E%3Cpath d=%22M20 4.5 37 35.5H3Z%22 fill=%22none%22 stroke=%22%236dc9d9%22 stroke-width=%223.5%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E">
 
 <title>voicehook — Talk with your agents</title>
@@ -3185,6 +3199,7 @@ function vhTranscriptCycle() {
 if (btnTranscript) btnTranscript.addEventListener('click', () => vhTranscriptCycle());
 if (btnTrMode) btnTrMode.addEventListener('click', (e) => { e.stopPropagation(); vhTranscriptCycle(); });
 vhTranscriptSet((() => { try { return localStorage.getItem(VH_TR_KEY) || 'bottom'; } catch (_) { return 'bottom'; } })());
+window.vhTranscriptSet = vhTranscriptSet;   // Handy-Layout: Vollbild gibt es dort nicht
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   // Don't fight the info-popover or call-modal Esc handlers.
@@ -3291,6 +3306,24 @@ function vhRingLayout(force) {
   }
 }
 vhRingLayout(true);
+// Handy-Layout (Variante A): Ringbox in Bildschirm-px (ohne CSS-Transform) für die
+// Handy-Schale, die den Ring per transform in die freie Bühne setzt.
+// Projektion mit der echten Kamera (inkl. Blickversatz), also direkt Fenster-px.
+window.vhRingScreen = () => {
+  camera.updateMatrixWorld();
+  const v = new THREE.Vector3();
+  let minX = 1, maxX = -1, minY = 1, maxY = -1;
+  for (let a = 0; a < 48; a++) {
+    const ang = a / 48 * Math.PI * 2;
+    for (let t = 0; t < 8; t++) {
+      const ph = t / 8 * Math.PI * 2, r = R_MAJOR + R_MINOR * Math.cos(ph);
+      v.set(r * Math.cos(ang), r * Math.sin(ang), R_MINOR * Math.sin(ph)).project(camera);
+      if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
+      if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
+    }
+  }
+  return { top: (1 - maxY) / 2 * innerHeight, bottom: (1 - minY) / 2 * innerHeight, left: (1 + minX) / 2 * innerWidth, right: (1 + maxX) / 2 * innerWidth };
+};
 
 // Info-popover: click 'i' button → show/hide explanation. Outside-click / Esc closes.
 const btnInfo  = document.getElementById('btn-info');
@@ -6534,6 +6567,7 @@ async function vhMicRender() {
   labeled.forEach(d => add(d.deviceId, d.label));
 }
 if (vhBurger) vhBurger.addEventListener('click', () => { if (vhFootMenu && !vhFootMenu.hasAttribute('hidden')) vhMicRender(); });
+window.vhMicRender = vhMicRender;   // Handy-Layout: Mikrofon-Liste im Mehr-Sheet
 if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', () => { if (vhFootMenu && !vhFootMenu.hasAttribute('hidden')) vhMicRender(); });
 
 // Persistent invite-button: shown whenever an invite snippet has been
@@ -7558,6 +7592,565 @@ body.settings-collapsed #vh-build{display:none !important;}
       });
     } catch(_) {}
   });
+})();
+</script>
+<!-- ── Handy-Layout Variante A (Oliver 02.10.) ─────────────────────────────────
+     Gilt NUR mit html.vh-phone (Erkennung im Kopf, wie VH_PHONE). Alle Regeln
+     hängen an dieser Klasse, alle Knoten unten entstehen nur auf dem Handy:
+     Desktop und Tablet bleiben unverändert. Bestehende Knöpfe und Handler werden
+     wiederverwendet (umgestylt, umgehängt oder per click() angesteuert). -->
+<style>
+html.vh-phone{--vhm-sat:env(safe-area-inset-top,0px);--vhm-sab:env(safe-area-inset-bottom,0px);--vhm-sal:env(safe-area-inset-left,0px);--vhm-sar:env(safe-area-inset-right,0px);
+  --vhm-card:rgba(18,20,24,0.92);--vhm-sheet:#111317;--vhm-line:rgba(255,255,255,0.12);--vhm-line2:rgba(255,255,255,0.06);--vhm-mut:rgba(244,244,247,0.55);--vhm-fg:#f4f4f7;
+  --vhm-btn:rgba(255,255,255,0.08);--vhm-acc:#6dc9d9;--vhm-acc-ink:#001317;--vhm-red:#e5484d;--vhm-cb:64px;--vhm-th:108px;}
+html.vh-phone body.theme-light{--vhm-card:rgba(250,250,252,0.94);--vhm-sheet:#fafafc;--vhm-line:rgba(0,0,0,0.10);--vhm-line2:rgba(0,0,0,0.06);--vhm-mut:rgba(20,21,26,0.58);--vhm-fg:#0b0b0f;--vhm-btn:rgba(0,0,0,0.05);--vhm-acc:#1f8fa3;--vhm-acc-ink:#fff;}
+/* Kopf: nur Logo links, rechts Teilnehmer-Stapel + Mehr */
+html.vh-phone #btn-info,html.vh-phone #btn-vh-design,html.vh-phone #btn-vh-account,html.vh-phone #btn-theme,html.vh-phone #vh-foot,
+html.vh-phone #vh-presence,html.vh-phone #vh-acct-pop,html.vh-phone #vh-tr-ticker,html.vh-phone #vh-mrestore{display:none !important;}
+html.vh-phone #label{top:calc(var(--vhm-sat) + 8px) !important;left:calc(var(--vhm-sal) + 12px) !important;transform:none !important;margin:0 !important;
+  height:40px;box-sizing:border-box;padding:0 14px 0 12px !important;border-radius:20px;font-size:13px !important;max-width:calc(100vw - 160px) !important;}
+html.vh-phone #label .dlt{font-size:16px !important;}
+#vhm-head{position:fixed;z-index:25;top:calc(var(--vhm-sat) + 6px);right:calc(var(--vhm-sar) + 12px);display:flex;align-items:center;gap:8px;}
+#vhm-head button,#vhm-ui button{font-family:var(--vh-mono);letter-spacing:0;}
+#vhm-stack{display:flex;align-items:center;justify-content:center;height:44px;min-width:44px;padding:0 4px;border:0;background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;border-radius:22px;}
+#vhm-stack:hover{background:transparent;}
+.vhm-av{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:600;color:#000;box-sizing:border-box;
+  border:2px solid var(--vh-bg-0);margin-left:-10px;position:relative;flex:none;line-height:1;}
+body.theme-light .vhm-av{border-color:#f4f4f7;}
+.vhm-av:first-child{margin-left:0;}
+.vhm-av[data-slot="user"]{background:var(--vh-user-color);} .vhm-av[data-slot="voice-ai"]{background:var(--vh-delta-color);} .vhm-av[data-slot="agent"]{background:var(--vh-senior-color);}
+#vhm-head .vhm-av .vh-dlt,#vhm-ui .vhm-av .vh-dlt{width:13px;height:13px;stroke-width:3.5;fill:none;}
+.vhm-av.speak{box-shadow:0 0 0 2px var(--vh-teal-glow);}
+.vhm-av.joining{opacity:.55;}
+#vhm-morebtn,.vhm-round{width:44px;height:44px;padding:0;border-radius:50%;display:grid;place-items:center;background:var(--vh-btn-bg);border:1px solid var(--vh-btn-border);color:var(--vh-btn-fg);}
+#vhm-ui svg,#vhm-head svg,.vhm-ico{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none;display:block;}
+/* Dock unten: Transkript-Panel ohne Glas, Inhalte gestapelt über der Kontrollleiste */
+html.vh-phone #vh-transcript-wrap{left:calc(var(--vhm-sal) + 12px) !important;right:calc(var(--vhm-sar) + 12px) !important;top:auto !important;bottom:var(--vhm-wrap-b,120px) !important;
+  width:auto !important;max-width:none !important;transform:none !important;height:auto !important;min-height:0 !important;max-height:calc(100dvh - var(--vhm-wrap-b,120px) - 70px - var(--vhm-sat)) !important;
+  padding:0 !important;background:transparent !important;border:0 !important;border-radius:0 !important;box-shadow:none !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
+  display:flex !important;flex-direction:column !important;align-items:stretch !important;gap:10px;z-index:15 !important;transition:transform .32s cubic-bezier(.3,.7,.3,1),opacity .25s ease;}
+html.vh-phone body.vh-music-on.vh-music-min #vh-transcript-wrap{transform:translateY(calc(100% + 240px)) !important;opacity:0;visibility:hidden;pointer-events:none;}
+html.vh-phone #vh-transcript-wrap > *{margin:0 !important;}
+html.vh-phone #vh-mode-row{order:10;width:100%;max-width:none;display:flex;padding:3px;border-radius:24px;}
+html.vh-phone #vh-mode-row .vh-seg{flex:1 1 0;height:44px;font-size:13px;padding:0 6px;}
+html.vh-phone body.vh-music-on #vh-mode-row{display:none !important;}
+html.vh-phone #vh-music-src{order:20;background:var(--vhm-card);border:1px solid var(--vhm-line);border-radius:20px;padding:6px;font-size:12px;}
+html.vh-phone #vh-music-src .vh-msrc-row{flex-wrap:nowrap;gap:4px;}
+html.vh-phone #vh-music-src .vh-msrc-opts{flex:1 1 auto;flex-wrap:nowrap;gap:4px;min-width:0;}
+html.vh-phone #vh-music-src .vh-msrc{flex:1 1 0;min-height:44px;padding:0 6px;min-width:0;}
+html.vh-phone #vh-music-src .vh-i,html.vh-phone #vh-music-src .vh-mmin{width:44px;height:44px;}
+html.vh-phone #vh-music-src .vh-msrc-hint button{display:inline-flex;align-items:center;min-height:44px;padding:0 6px;}
+html.vh-phone #vh-mode-info{order:30;min-height:44px;display:flex;flex-direction:column;justify-content:center;font-size:12px;}
+html.vh-phone #vh-mode-info[hidden],html.vh-phone #vh-presence.vh-in-call ~ #vh-mode-info{display:none !important;}
+html.vh-phone #vh-mode-info .vh-login-wrap{display:inline !important;}
+html.vh-phone #vh-transcript-wrap .vh-linkbtn,html.vh-phone #vh-mode-info a{display:inline-flex;align-items:center;min-height:44px;padding:0 6px;vertical-align:middle;}
+html.vh-phone #vh-invite-banner{order:40;max-width:none;background:var(--vhm-card);border:1px solid var(--vhm-line);border-radius:16px;padding:10px 12px;box-sizing:border-box;}
+html.vh-phone #vh-invite-banner[hidden],html.vh-phone #vh-transcript-wrap.vh-agent-in #vh-invite-banner{display:none !important;}
+html.vh-phone .vh-invite-hint .vh-invite-actions .vh-copy-btn{min-height:44px;}
+html.vh-phone #vh-topup{order:45;}
+html.vh-phone #vh-low-bal{order:60;display:flex;align-items:center;justify-content:center;gap:4px;min-height:44px;padding:0 8px;border-radius:14px;font-size:12px;
+  background:rgba(242,166,90,0.10);border-color:rgba(242,166,90,0.35);box-sizing:border-box;}
+html.vh-phone #vh-low-bal[hidden]{display:none !important;}
+html.vh-phone #vh-low-bal .vh-linkbtn{color:inherit;font-weight:600;}
+/* Transkript als Bottom-Sheet mit Ziehgriff (Peek = letzte 2 Zeilen, Detent ca. 60 %) */
+#vhm-ts{order:50;display:none;flex-direction:column;flex:none;height:var(--vhm-th);overflow:hidden;box-sizing:border-box;
+  background:var(--vhm-card);border:1px solid var(--vhm-line);border-radius:20px;transition:height .28s cubic-bezier(.2,.8,.2,1);
+  backdrop-filter:var(--vh-btn-blur);-webkit-backdrop-filter:var(--vh-btn-blur);}
+html.vh-phone.vhm-call #vhm-ts,html.vh-phone.vhm-has-tr #vhm-ts{display:flex;}
+html.vh-phone body.vh-music-on #vhm-ts{display:none !important;}
+#vhm-ts.vhm-drag{transition:none;}
+.vhm-grab{flex:none;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 0 0 14px;touch-action:none;cursor:grab;position:relative;user-select:none;-webkit-user-select:none;}
+.vhm-grab::before{content:"";position:absolute;left:50%;top:7px;width:36px;height:4px;border-radius:2px;background:var(--vhm-mut);opacity:.6;transform:translateX(-50%);}
+.vhm-grab .vhm-t{font-size:11px;color:var(--vhm-mut);letter-spacing:.08em;text-transform:uppercase;padding-top:6px;}
+.vhm-tog{width:44px;height:44px;padding:0;display:grid;place-items:center;border:0;background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;color:var(--vhm-mut);border-radius:50%;}
+.vhm-tog:hover{background:transparent;}
+#vhm-tog svg{transition:transform .25s;}
+#vhm-ts.vhm-open #vhm-tog svg{transform:rotate(180deg);}
+html.vh-phone #vh-transcript{flex:1 1 auto;min-height:0;max-height:none !important;width:auto !important;margin:0 !important;background:transparent !important;border:0 !important;border-radius:0 !important;
+  backdrop-filter:none !important;-webkit-backdrop-filter:none !important;padding:0 14px 10px !important;font-size:12.5px !important;line-height:1.45;gap:6px;overscroll-behavior:contain;display:flex !important;}
+html.vh-phone #vh-transcript .vh-tr-ts{font-size:10px;}
+#vhm-ts:not(.vhm-full) #vh-transcript{overflow:hidden;justify-content:flex-end;}
+#vhm-ts:not(.vhm-full) #vh-transcript > :not(:nth-last-child(-n+2)){display:none !important;}
+#vhm-ts:not(.vhm-full) #vh-transcript .vh-tr-row{flex:none;max-width:100%;}
+#vhm-ts:not(.vhm-full) #vh-transcript .vh-tr-txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#vhm-ts:not(.vhm-full) #vh-transcript .vh-tr-row.senior,#vhm-ts:not(.vhm-full) #vh-transcript .vh-tr-row.operator{padding:1px 8px;margin:0;}
+/* Kontrollleiste: vor dem Call Hauptknopf + Agent einladen, im Call 4 runde Knöpfe */
+html.vh-phone #vh-bottom-bar{left:calc(var(--vhm-sal) + 12px) !important;right:calc(var(--vhm-sar) + 12px) !important;bottom:calc(var(--vhm-sab) + 10px) !important;transform:none !important;
+  display:flex !important;flex-direction:column;align-items:stretch;gap:10px;}
+html.vh-phone #btn-vh-delta,html.vh-phone #btn-vh-call{justify-content:center;width:100%;box-sizing:border-box;font-size:13px !important;letter-spacing:.02em !important;padding:0 16px !important;border-radius:28px;}
+html.vh-phone #btn-vh-delta svg,html.vh-phone #btn-vh-call svg{display:block !important;}
+html.vh-phone #btn-vh-delta{order:1;height:56px;background:var(--vhm-acc);border-color:var(--vhm-acc);color:var(--vhm-acc-ink);font-weight:600;font-size:15px !important;box-shadow:0 0 24px rgba(109,201,217,.35);}
+html.vh-phone #btn-vh-delta[hidden]{display:none !important;}
+html.vh-phone #btn-vh-call{order:2;height:44px;border-radius:22px;color:var(--vh-btn-fg);border-color:var(--vh-btn-border-hov);}
+html.vh-phone body:not(.vh-first-visit) #btn-vh-call:not(.on){height:56px;border-radius:28px;background:var(--vhm-acc);border-color:var(--vhm-acc);color:var(--vhm-acc-ink);font-weight:600;font-size:15px !important;box-shadow:0 0 24px rgba(109,201,217,.35);}
+html.vh-phone .vh-bottom-icon,#vhm-text,#vhm-music,#vhm-mend{display:none;}
+html.vh-phone.vhm-call #vh-bottom-bar,html.vh-phone body.vh-music-on #vh-bottom-bar{display:flex !important;flex-direction:row;justify-content:space-between;align-items:flex-start;padding:0 4px 20px;}
+html.vh-phone body.vh-music-on #vh-bottom-bar{justify-content:center;gap:28px;}
+html.vh-phone.vhm-call #btn-vh-delta,html.vh-phone body.vh-music-on #btn-vh-delta,html.vh-phone body.vh-music-on #btn-vh-call{display:none !important;}
+html.vh-phone.vhm-call .vh-bottom-icon:not([hidden]),html.vh-phone.vhm-call #vhm-text,html.vh-phone body.vh-music-on #vhm-music,html.vh-phone body.vh-music-on #vhm-mend,html.vh-phone.vhm-call #btn-vh-call{
+  display:grid !important;place-items:center;position:relative;width:var(--vhm-cb) !important;height:var(--vhm-cb) !important;min-width:0;padding:0 !important;border-radius:50% !important;
+  background:var(--vhm-btn);border:1px solid var(--vhm-line);color:var(--vhm-fg);box-shadow:none;font-size:0 !important;flex:none;}
+html.vh-phone.vhm-call .vh-bottom-icon svg,html.vh-phone.vhm-call #btn-vh-call svg,#vhm-text svg,#vhm-music svg,#vhm-mend svg{width:26px !important;height:26px !important;}
+html.vh-phone.vhm-call #btn-vh-call .lbl{display:none;}
+html.vh-phone #vh-bottom-bar [data-vhm-lbl]::after{content:attr(data-vhm-lbl);position:absolute;top:calc(100% + 5px);left:50%;transform:translateX(-50%);white-space:nowrap;
+  font-size:10.5px;line-height:14px;letter-spacing:0;color:var(--vhm-mut);font-family:var(--vh-mono);pointer-events:none;}
+html.vh-phone:not(.vhm-call) #btn-vh-call::after{content:none;}
+html.vh-phone #btn-mute{order:1;} html.vh-phone #btn-speaker{order:2;} html.vh-phone #vhm-text,html.vh-phone #vhm-music{order:3;} html.vh-phone.vhm-call #btn-vh-call,html.vh-phone #vhm-mend{order:4;}
+html.vh-phone.vhm-call .vh-bottom-icon.muted{background:#f4f4f7;border-color:#f4f4f7;color:#000;}
+html.vh-phone.vhm-call #btn-vh-call,html.vh-phone #vhm-mend{background:var(--vhm-red) !important;border-color:var(--vhm-red) !important;color:#fff !important;}
+#vhm-text.on,#vhm-music.on{background:rgba(109,201,217,.18) !important;border-color:rgba(109,201,217,.6) !important;color:var(--vh-teal-glow) !important;}
+body.theme-light #vhm-text.on,body.theme-light #vhm-music.on{color:#1f7f90 !important;}
+/* Kostenzeile klein über der Leiste, vor dem Call kein Claim (Mockup A) */
+html.vh-phone #tagline{display:none;}
+html.vh-phone.vhm-call #tagline.vh-cost-on{display:block;bottom:var(--vhm-cost-b,110px) !important;margin:0 !important;font-size:11px;padding:2px 10px;line-height:14px;}
+/* Sheets (Mehr, Teilnehmer) und Hintergrund */
+#vhm-scrim{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .25s;}
+#vhm-scrim.on{opacity:1;pointer-events:auto;}
+#vhm-scrim.light{background:rgba(0,0,0,.12);}
+body.theme-light #vhm-scrim{background:rgba(0,0,0,.30);} body.theme-light #vhm-scrim.light{background:rgba(0,0,0,.08);}
+.vhm-sheet{position:fixed;left:0;right:0;bottom:0;z-index:61;background:var(--vhm-sheet);color:var(--vhm-fg);border:1px solid var(--vhm-line);border-bottom:0;border-radius:24px 24px 0 0;
+  max-height:calc(100% - var(--vhm-sat) - 56px);display:flex;flex-direction:column;transform:translateY(105%);visibility:hidden;transition:transform .3s cubic-bezier(.2,.8,.2,1),visibility 0s linear .3s;
+  padding:0 calc(var(--vhm-sar) + 16px) calc(var(--vhm-sab) + 12px) calc(var(--vhm-sal) + 16px);box-sizing:border-box;font-family:var(--vh-mono);font-size:13px;}
+.vhm-sheet.on{transform:none;visibility:visible;transition:transform .3s cubic-bezier(.2,.8,.2,1),visibility 0s;}
+.vhm-sheet.vhm-drag{transition:none;}
+.vhm-sheet .vhm-grab{padding:0 0 0 2px;}
+.vhm-body{overflow-y:auto;min-height:0;padding-bottom:4px;overscroll-behavior:contain;}
+.vhm-sec{font-size:11px;color:var(--vhm-mut);letter-spacing:.08em;text-transform:uppercase;margin:14px 2px 6px;}
+.vhm-q{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;}
+#vhm-ui .vhm-qb{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:72px;padding:6px 2px;border-radius:16px;background:var(--vhm-btn);border:1px solid var(--vhm-line);
+  font-size:11px;color:var(--vhm-mut);min-width:0;backdrop-filter:none;-webkit-backdrop-filter:none;}
+#vhm-ui .vhm-qb span:last-child{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#vhm-ui .vhm-qb.acc{color:var(--vh-teal-glow);} body.theme-light #vhm-ui .vhm-qb.acc{color:#1f7f90;}
+.vhm-ini{width:26px;height:26px;border-radius:50%;background:var(--vhm-acc);color:var(--vhm-acc-ink);display:grid;place-items:center;font-weight:600;font-size:13px;}
+.vhm-list{display:flex;flex-direction:column;border-radius:16px;overflow:hidden;border:1px solid var(--vhm-line);}
+#vhm-ui .vhm-li,#vhm-more .vh-foot-mic{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px;padding:0 14px;width:100%;box-sizing:border-box;
+  background:var(--vhm-btn);border:0;border-bottom:1px solid var(--vhm-line2);border-radius:0;font-size:13px;color:var(--vhm-fg);text-align:left;text-decoration:none;
+  letter-spacing:0;font-family:var(--vh-mono);backdrop-filter:none;-webkit-backdrop-filter:none;margin:0;}
+#vhm-ui .vhm-li:last-child,#vhm-more .vh-foot-mic:last-child{border-bottom:0;}
+#vhm-ui .vhm-li svg{width:18px;height:18px;color:var(--vhm-mut);}
+#vhm-more #vh-foot-mics{display:flex;flex-direction:column;gap:0;padding:0;width:auto;min-width:0;border-radius:16px;overflow:hidden;border:1px solid var(--vhm-line);}
+#vhm-more .vh-foot-mic{display:block;line-height:48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#vhm-more .vh-foot-mic.on{color:var(--vhm-acc);box-shadow:inset 3px 0 0 var(--vhm-acc);}
+.vhm-acct{display:flex;flex-direction:column;gap:4px;margin-top:10px;padding:12px 14px;border-radius:16px;border:1px solid var(--vhm-line);background:var(--vhm-btn);line-height:1.45;}
+.vhm-acct[hidden]{display:none;}
+.vhm-acct small{color:var(--vhm-mut);font-size:11px;}
+.vhm-acct .vhm-mail{overflow-wrap:anywhere;}
+.vhm-row{display:flex;gap:8px;margin-top:6px;}
+#vhm-ui .vhm-pill{flex:1 1 0;min-height:44px;border-radius:22px;border:1px solid var(--vhm-line);background:transparent;color:var(--vhm-fg);font-size:13px;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0 12px;backdrop-filter:none;-webkit-backdrop-filter:none;}
+#vhm-ui .vhm-pill.acc{border-color:var(--vhm-acc);color:var(--vhm-acc);}
+.vhm-part{display:flex;align-items:center;gap:12px;min-height:56px;padding:0 4px;border-bottom:1px solid var(--vhm-line2);width:100%;box-sizing:border-box;text-align:left;cursor:pointer;}
+#vhm-ui button.vhm-part{background:transparent;border:0;border-bottom:1px solid var(--vhm-line2);border-radius:0;color:var(--vhm-fg);font-size:13px;backdrop-filter:none;-webkit-backdrop-filter:none;}
+.vhm-part.selected .vhm-av{outline:2px solid var(--vhm-acc);outline-offset:2px;}
+.vhm-part .vhm-av{margin:0;width:36px;height:36px;}
+.vhm-part > span:nth-child(2){flex:1;min-width:0;}
+.vhm-part small{display:block;color:var(--vhm-mut);font-size:11px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.vhm-live{font-size:11px;color:var(--vhm-mut);display:flex;align-items:center;gap:6px;white-space:nowrap;}
+.vhm-live.on{color:var(--vhm-acc);}
+.vhm-dot{width:8px;height:8px;border-radius:50%;background:currentColor;}
+#vhm-partbtn{width:100%;margin-top:12px;flex:none;}
+/* Design-Panel als halbhohes Sheet, Ring bleibt darüber sichtbar */
+html.vh-phone #vh-design-panel{top:auto !important;left:0 !important;right:0 !important;bottom:0 !important;width:auto !important;max-height:52vh !important;max-height:52dvh !important;
+  border-radius:24px 24px 0 0 !important;border-bottom:0 !important;padding:0 calc(var(--vhm-sar) + 16px) calc(var(--vhm-sab) + 12px) calc(var(--vhm-sal) + 16px) !important;z-index:62 !important;font-size:12px;}
+html.vh-phone #vh-design-panel .vh-dp-head{position:sticky;top:0;z-index:2;height:44px;margin:0 -16px 2px;padding:0 4px 0 18px;background:inherit;touch-action:none;cursor:grab;position:sticky;
+  background:rgba(14,16,22,0.98);font-size:11px;text-transform:uppercase;letter-spacing:.08em;}
+html.vh-phone body.theme-light #vh-design-panel .vh-dp-head{background:rgba(250,250,252,0.99);}
+html.vh-phone #vh-design-panel .vh-dp-head::before{content:"";position:absolute;left:50%;top:7px;width:36px;height:4px;border-radius:2px;background:var(--vhm-mut);opacity:.6;transform:translateX(-50%);}
+html.vh-phone #vh-design-panel .vh-dp-x{width:44px;height:44px;padding:0;font-size:22px;}
+html.vh-phone #vh-design-panel .vh-i{width:44px;height:44px;}
+html.vh-phone #vh-design-panel .vh-dp-lbl{min-height:44px;}
+html.vh-phone #vh-design-panel .vh-dp-row input[type="range"]{height:44px;}
+html.vh-phone #vh-design-panel .vh-dp-mini,html.vh-phone #vh-design-panel .vh-dp-akku button,html.vh-phone #vh-design-panel #btn-hd,html.vh-phone #vh-design-panel .vh-dp-reset,html.vh-phone #vh-design-panel .vh-dp-edit input{min-height:44px;}
+html.vh-phone #vh-design-panel .vh-dp-sw{min-height:44px;}
+html.vh-phone #vh-design-panel .vh-dp-sw-name{font-size:10px;}
+/* Info als Karte unter dem Kopf */
+html.vh-phone #vh-info-pop{top:calc(var(--vhm-sat) + 60px) !important;left:calc(var(--vhm-sal) + 12px) !important;right:calc(var(--vhm-sar) + 12px) !important;width:auto !important;
+  max-height:calc(100dvh - var(--vhm-sat) - 80px);overflow-y:auto;box-sizing:border-box;z-index:62;}
+/* Ring: per transform in die freie Bühne zwischen Kopf und Dock (verkleinert, nie verdeckt) */
+html.vh-phone body > canvas{transition:transform .28s cubic-bezier(.2,.8,.2,1);will-change:transform;}
+html.vh-phone body > canvas.vhm-notr{transition:none;}
+@media (max-width:359px){html.vh-phone #label .by{display:none;}}
+@media (max-height:700px){html.vh-phone{--vhm-cb:58px;} html.vh-phone #btn-vh-delta,html.vh-phone body:not(.vh-first-visit) #btn-vh-call:not(.on){height:52px;}}
+@media (prefers-reduced-motion: reduce){#vhm-ts,.vhm-sheet,html.vh-phone body > canvas,#vhm-scrim{transition:none;}}
+</style>
+<script>
+(function () {
+  var H = document.documentElement;
+  if (!H.classList.contains('vh-phone')) return;
+  var D = window.VH_I18N;
+  if (D) {
+    Object.assign(D.de, {
+      'vhm.more': 'Mehr', 'vhm.parts': 'Teilnehmer anzeigen', 'vhm.room': 'Im Raum', 'vhm.close': 'Schließen',
+      'vhm.design': 'Design', 'vhm.info': 'Info', 'vhm.dark': 'Dunkel', 'vhm.light': 'Hell',
+      'vhm.mic': 'Mikro', 'vhm.muted': 'Stumm', 'vhm.sound': 'Ton', 'vhm.soundOff': 'Aus', 'vhm.text': 'Text',
+      'vhm.music': 'Musik', 'vhm.stop': 'Beenden', 'vhm.musicHide': 'Musikleiste ein- oder ausblenden', 'vhm.musicStop': 'Musik beenden',
+      'vhm.tr': 'Transkript', 'vhm.trOpen': 'Transkript vergrößern', 'vhm.trClose': 'Transkript verkleinern',
+      'vhm.speaking': 'spricht', 'vhm.here': 'im Raum', 'vhm.joining': 'kommt gleich', 'vhm.away': 'nicht im Raum',
+      'vhm.partsOf': 'Teilnehmer: {list}'
+    });
+    Object.assign(D.en, {
+      'vhm.more': 'More', 'vhm.parts': 'Show participants', 'vhm.room': 'In the room', 'vhm.close': 'Close',
+      'vhm.design': 'Design', 'vhm.info': 'Info', 'vhm.dark': 'Dark', 'vhm.light': 'Light',
+      'vhm.mic': 'Mic', 'vhm.muted': 'Muted', 'vhm.sound': 'Sound', 'vhm.soundOff': 'Off', 'vhm.text': 'Text',
+      'vhm.music': 'Music', 'vhm.stop': 'Stop', 'vhm.musicHide': 'Show or hide the music panel', 'vhm.musicStop': 'Stop music',
+      'vhm.tr': 'Transcript', 'vhm.trOpen': 'Expand transcript', 'vhm.trClose': 'Collapse transcript',
+      'vhm.speaking': 'speaking', 'vhm.here': 'in the room', 'vhm.joining': 'joining', 'vhm.away': 'not in the room',
+      'vhm.partsOf': 'Participants: {list}'
+    });
+  }
+  var T = function (k, v) { return window.vhT ? window.vhT(k, v) : k; };
+  var $ = function (id) { return document.getElementById(id); };
+  var IC = {
+    more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+    up: '<path d="m6 15 6-6 6 6"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>',
+    text: '<path d="M4 5h16v11H9l-5 4Z"/><path d="M8 9h8M8 12h5"/>',
+    note: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
+    stop: '<rect x="7" y="7" width="10" height="10" rx="1.5"/>',
+    sl: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
+    moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 3v1.5M12 19.5V21M3 12h1.5M19.5 12H21M5.64 5.64l1.06 1.06M17.3 17.3l1.06 1.06M5.64 18.36l1.06-1.06M17.3 6.7l1.06-1.06"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    chev: '<path d="m9 6 6 6-6 6"/>', ext: '<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>', copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'
+  };
+  var ic = function (n) { return '<svg class="vhm-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + IC[n] + '</svg>'; };
+  var DLT = '<svg class="vh-dlt" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path d="M20 4.5 37 35.5H3Z"/></svg>';
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var S = { open: false, th: 108, peek: 108, sheet: null };
+  var raf = 0;
+  function schedule() { if (!raf) raf = requestAnimationFrame(function () { raf = 0; sync(); }); }
+
+  function init() {
+    var body = document.body;
+    try { if (body.classList.contains('vh-transcript-expanded') && window.vhTranscriptSet) window.vhTranscriptSet('bottom'); } catch (_) {}
+    // Kopf rechts
+    var head = document.createElement('div'); head.id = 'vhm-head';
+    head.innerHTML = '<button type="button" id="vhm-stack"></button><button type="button" id="vhm-morebtn" aria-haspopup="dialog">' + ic('more') + '</button>';
+    body.appendChild(head);
+    $('vhm-morebtn').setAttribute('aria-label', T('vhm.more')); $('vhm-morebtn').title = T('vhm.more');
+    // Sheets
+    var ui = document.createElement('div'); ui.id = 'vhm-ui';
+    ui.innerHTML = '<div id="vhm-scrim"></div>' +
+      '<div class="vhm-sheet" id="vhm-more" role="dialog" aria-modal="true"><div class="vhm-grab"><span class="vhm-t"></span><button type="button" class="vhm-tog" data-vhm-close>' + ic('x') + '</button></div><div class="vhm-body" id="vhm-more-body"></div></div>' +
+      '<div class="vhm-sheet" id="vhm-parts" role="dialog" aria-modal="true"><div class="vhm-grab"><span class="vhm-t"></span><button type="button" class="vhm-tog" data-vhm-close>' + ic('x') + '</button></div><div class="vhm-body" id="vhm-parts-body"></div><button type="button" class="vhm-pill" id="vhm-partbtn"></button></div>';
+    body.appendChild(ui);
+    $('vhm-more').setAttribute('aria-label', T('vhm.more')); $('vhm-more').querySelector('.vhm-t').textContent = T('vhm.more');
+    $('vhm-parts').setAttribute('aria-label', T('vhm.room')); $('vhm-parts').querySelector('.vhm-t').textContent = T('vhm.room');
+    ui.querySelectorAll('[data-vhm-close]').forEach(function (b) { b.setAttribute('aria-label', T('vhm.close')); b.addEventListener('click', closeSheets); });
+    $('vhm-scrim').addEventListener('click', closeSheets);
+    $('vhm-morebtn').addEventListener('click', function () { openSheet('vhm-more'); });
+    $('vhm-stack').addEventListener('click', function () { openSheet('vhm-parts'); });
+    $('vhm-partbtn').addEventListener('click', function (e) {
+      e.stopPropagation();
+      var inv = $('vh-invite-btn');
+      closeSheets();
+      if (isCall()) { if (inv && !inv.hidden) inv.click(); }
+      else { var c = $('btn-vh-call'); if (c) c.click(); }
+    });
+    buildMore();
+    document.querySelectorAll('.vhm-sheet').forEach(sheetDrag);
+    // Transkript-Sheet: #vh-transcript in eine Karte mit Ziehgriff hängen
+    var tr = $('vh-transcript');
+    if (tr) {
+      var ts = document.createElement('div'); ts.id = 'vhm-ts';
+      ts.innerHTML = '<div class="vhm-grab" id="vhm-tgrab"><span class="vhm-t"></span><button type="button" class="vhm-tog" id="vhm-tog" aria-controls="vh-transcript">' + ic('up') + '</button></div>';
+      ts.querySelector('.vhm-t').textContent = T('vhm.tr');
+      tr.parentNode.insertBefore(ts, tr); ts.appendChild(tr);
+      $('vhm-tog').addEventListener('click', function (e) { e.stopPropagation(); setOpen(!S.open); });
+      trDrag($('vhm-tgrab'), ts);
+    }
+    // Zusatzknöpfe der Kontrollleiste (Text im Call, Musik + Beenden im Musikmodus)
+    var bar = $('vh-bottom-bar');
+    if (bar) {
+      var mk = function (id, icon, lbl, aria) { var b = document.createElement('button'); b.type = 'button'; b.id = id; b.innerHTML = ic(icon); b.setAttribute('data-vhm-lbl', lbl); b.setAttribute('aria-label', aria || lbl); b.title = aria || lbl; bar.appendChild(b); return b; };
+      mk('vhm-text', 'text', T('vhm.text'), T('vhm.trOpen')).addEventListener('click', function () { setOpen(!S.open); });
+      mk('vhm-music', 'note', T('vhm.music'), T('vhm.musicHide')).addEventListener('click', function () {
+        if (window.vhMusicMinSet) window.vhMusicMinSet(!body.classList.contains('vh-music-min'));
+      });
+      mk('vhm-mend', 'stop', T('vhm.stop'), T('vhm.musicStop')).addEventListener('click', function () {
+        var n = document.querySelector('#vh-mode-row .vh-seg[data-mode="normal"]'); if (n) n.click();
+      });
+    }
+    // Design-Panel: Hintergrund leicht abgedunkelt, Kopf als Ziehgriff
+    var dp = $('vh-design-panel');
+    if (dp) {
+      var dh = dp.querySelector('.vh-dp-head');
+      if (dh) panelDrag(dh, dp, function () { var x = $('vh-dp-close'); if (x) x.click(); });
+    }
+    // Beobachter: Zustände der bestehenden Elemente spiegeln
+    var mo = new MutationObserver(schedule);
+    mo.observe(body, { attributes: true, attributeFilter: ['class'] });
+    ['vh-presence', 'vh-bottom-bar', 'tagline', 'vh-design-panel', 'vh-low-bal', 'vh-invite-banner', 'vh-topup', 'vh-mode-info', 'vh-music-src', 'btn-vh-account', 'vh-acct-pop', 'vh-invite-btn', 'vh-info-pop'].forEach(function (id) {
+      var el = $(id); if (el) mo.observe(el, { attributes: true, subtree: true, childList: true, attributeFilter: ['class', 'hidden', 'style'] });
+    });
+    if (tr) new MutationObserver(function () { schedule(); if (S.open || !tr.matches(':hover')) tr.scrollTop = tr.scrollHeight; }).observe(tr, { childList: true });
+    if (window.ResizeObserver) {
+      var ro = new ResizeObserver(schedule);
+      ['vh-bottom-bar', 'vh-transcript-wrap', 'tagline', 'vh-design-panel'].forEach(function (id) { var el = $(id); if (el) ro.observe(el); });
+    }
+    addEventListener('resize', function () { S.th = S.open ? openH() : S.peek; schedule(); });
+    setInterval(fitRing, 500);   // Zoom-Animation und Ringbox mitführen (billig: nur Transform)
+    sync();
+    setTimeout(sync, 300);
+  }
+
+  function isCall() {
+    var c = $('btn-vh-call'), p = $('vh-presence');
+    return !!((c && c.classList.contains('on')) || (p && p.classList.contains('vh-in-call')));
+  }
+  function chip(slot) { return document.querySelector('#vh-presence .vh-pres-chip[data-slot="' + slot + '"]'); }
+  function chipLabel(el) { var l = el && el.querySelector('.vh-pres-label'); return l ? l.textContent.trim() : ''; }
+  function avatar(slot, el) {
+    var lbl = chipLabel(el), ini = slot === 'voice-ai' ? DLT : esc((lbl.match(/[\p{L}\p{N}]/u) || ['?'])[0].toUpperCase());
+    var cls = 'vhm-av' + (el && el.classList.contains('speak') ? ' speak' : '') + (el && el.classList.contains('joining') ? ' joining' : '');
+    return '<span class="' + cls + '" data-slot="' + slot + '" aria-hidden="true">' + ini + '</span>';
+  }
+  function present(slot) {
+    var el = chip(slot);
+    if (slot === 'user') return true;
+    return !!(el && (el.classList.contains('in') || el.classList.contains('joining')));
+  }
+  function renderStack() {
+    var st = $('vhm-stack'); if (!st) return;
+    var slots = ['user', 'voice-ai', 'agent'].filter(present);
+    var html = slots.map(function (s) { return avatar(s, chip(s)); }).join('');
+    if (st.innerHTML !== html) st.innerHTML = html;
+    var names = slots.map(function (s) { return chipLabel(chip(s)); }).join(', ');
+    var lbl = T('vhm.partsOf', { list: names });
+    if (st.getAttribute('aria-label') !== lbl) { st.setAttribute('aria-label', lbl); st.title = T('vhm.parts'); }
+  }
+  function renderParts() {
+    var bd = $('vhm-parts-body'); if (!bd) return;
+    var html = ['user', 'voice-ai', 'agent'].filter(present).map(function (s) {
+      var el = chip(s), sp = el && el.classList.contains('speak'), jn = el && el.classList.contains('joining'), inn = s === 'user' ? isCall() || (el && el.classList.contains('in')) : (el && el.classList.contains('in'));
+      var st = sp ? T('vhm.speaking') : jn ? T('vhm.joining') : inn ? T('vhm.here') : T('vhm.away');
+      return '<button type="button" class="vhm-part' + (el && el.classList.contains('selected') ? ' selected' : '') + '" data-slot="' + s + '">' + avatar(s, el) +
+        '<span>' + esc(chipLabel(el)) + '<small>' + esc(el ? el.title : '') + '</small></span><span class="vhm-live' + (sp || inn ? ' on' : '') + '"><span class="vhm-dot"></span>' + esc(st) + '</span></button>';
+    }).join('');
+    if (bd.innerHTML !== html) {
+      bd.innerHTML = html;
+      bd.querySelectorAll('.vhm-part').forEach(function (b) { b.addEventListener('click', function (e) { e.stopPropagation(); var c = chip(b.dataset.slot); if (c) c.click(); renderParts(); }); });
+    }
+    var pb = $('vhm-partbtn'), inv = $('vh-invite-btn'), call = $('btn-vh-call');
+    if (pb) {
+      var show = isCall() ? !!(inv && !inv.hidden) : !document.body.classList.contains('vh-music-on');
+      pb.hidden = !show;
+      pb.style.display = show ? '' : 'none';
+      var lab = isCall() ? (inv ? inv.textContent.trim() : '') : (call && call.querySelector('.lbl') ? call.querySelector('.lbl').textContent.trim() : '');
+      var h = ic(isCall() ? 'copy' : 'plus') + '<span>' + esc(lab) + '</span>';
+      if (pb.innerHTML !== h) pb.innerHTML = h;
+    }
+  }
+  // Mehr-Sheet: Schnellzugriffe + Konto + alle Punkte des bisherigen Burger-Menüs
+  function buildMore() {
+    var bd = $('vhm-more-body'); if (!bd) return;
+    bd.innerHTML = '<div class="vhm-q">' +
+      '<button type="button" class="vhm-qb" id="vhm-q-acct"></button>' +
+      '<button type="button" class="vhm-qb" id="vhm-q-design">' + ic('sl') + '<span></span></button>' +
+      '<button type="button" class="vhm-qb" id="vhm-q-info">' + ic('info') + '<span></span></button>' +
+      '<button type="button" class="vhm-qb" id="vhm-q-theme"></button></div>' +
+      '<div class="vhm-acct" id="vhm-acct" hidden><small id="vhm-acct-lbl"></small><span class="vhm-mail" id="vhm-acct-mail"></span><small id="vhm-acct-bal"></small>' +
+      '<div class="vhm-row"><button type="button" class="vhm-pill acc" id="vhm-acct-topup"></button><button type="button" class="vhm-pill" id="vhm-acct-out"></button></div></div>';
+    $('vhm-q-design').querySelector('span').textContent = T('vhm.design');
+    $('vhm-q-info').querySelector('span').textContent = T('vhm.info');
+    $('vhm-q-design').addEventListener('click', function (e) { e.stopPropagation(); closeSheets(); var b = $('btn-vh-design'); if (b) b.click(); });
+    $('vhm-q-info').addEventListener('click', function (e) { e.stopPropagation(); closeSheets(); var b = $('btn-info'); if (b) b.click(); });
+    $('vhm-q-theme').addEventListener('click', function (e) { e.stopPropagation(); var b = $('btn-theme'); if (b) b.click(); renderMore(); });
+    $('vhm-q-acct').addEventListener('click', function (e) {
+      e.stopPropagation();
+      var a = $('btn-vh-account');
+      if (a && a.classList.contains('in')) { S.acctHidden = !S.acctHidden; renderMore(); }
+      else if (a) a.click();   // abgemeldet: /login?next=<diese Seite> wie bisher
+    });
+    $('vhm-acct-topup').addEventListener('click', function (e) { e.stopPropagation(); var a = $('vh-acct-topup'); if (a) a.click(); });
+    $('vhm-acct-out').addEventListener('click', function (e) { e.stopPropagation(); var o = $('vh-acct-out'); if (o && !o.disabled) o.click(); });
+    // Burger-Menü übernehmen: Überschriften, Links (geklont, gleiche Ziele), Mikrofon-Liste (umgehängt)
+    var menu = $('vh-foot-menu'); if (!menu) return;
+    var list = null, sec = null;
+    Array.prototype.slice.call(menu.children).forEach(function (c) {
+      if (c.classList.contains('vh-foot-meta')) { sec = c.textContent.trim(); list = null; return; }
+      if (c.classList.contains('vh-foot-sep')) { list = null; sec = null; return; }
+      if (!list && c.id !== 'vh-foot-mics') {
+        if (sec) { var h = document.createElement('div'); h.className = 'vhm-sec'; h.textContent = sec; bd.appendChild(h); sec = null; }
+        else { var g = document.createElement('div'); g.style.height = '12px'; bd.appendChild(g); }
+        list = document.createElement('div'); list.className = 'vhm-list'; bd.appendChild(list);
+      }
+      if (c.tagName === 'A') {
+        var a = c.cloneNode(true); a.className = 'vhm-li'; a.removeAttribute('role');
+        a.textContent = c.textContent.replace(/\s*↗\s*$/, '').trim();
+        a.insertAdjacentHTML('beforeend', ic(/^https?:/.test(c.getAttribute('href') || '') && !/voicehook\.ai/.test(c.getAttribute('href')) ? 'ext' : 'chev'));
+        list.appendChild(a);
+      } else if (c.id === 'vh-foot-mics') {
+        if (sec) { var h2 = document.createElement('div'); h2.className = 'vhm-sec'; h2.textContent = sec; bd.appendChild(h2); sec = null; }
+        bd.appendChild(c); list = null;
+      }
+    });
+  }
+  function renderMore() {
+    var a = $('btn-vh-account'), inn = !!(a && a.classList.contains('in'));
+    var qa = $('vhm-q-acct'); if (!qa) return;
+    var iniEl = a && a.querySelector('.vh-acct-ini'), ini = iniEl && !iniEl.hidden ? iniEl.textContent : '';
+    var h = (inn && ini ? '<span class="vhm-ini">' + esc(ini) + '</span>' : ic('user')) + '<span>' + esc(inn ? T('acct.menu') : T('acct.login')) + '</span>';
+    if (qa.innerHTML !== h) qa.innerHTML = h;
+    qa.classList.toggle('acc', inn);
+    qa.setAttribute('aria-expanded', String(inn && !S.acctHidden));
+    var light = document.body.classList.contains('theme-light');
+    var th = ic(light ? 'sun' : 'moon') + '<span>' + esc(T(light ? 'vhm.light' : 'vhm.dark')) + '</span>';
+    if ($('vhm-q-theme').innerHTML !== th) $('vhm-q-theme').innerHTML = th;
+    var card = $('vhm-acct');
+    card.hidden = !inn || !!S.acctHidden;
+    var lb = document.querySelector('#vh-acct-pop .vh-acct-lbl'), ml = $('vh-acct-mail'), bl = $('vh-acct-bal'), tu = $('vh-acct-topup'), out = $('vh-acct-out');
+    $('vhm-acct-lbl').textContent = lb ? lb.textContent : '';
+    $('vhm-acct-mail').textContent = ml ? ml.textContent : '';
+    $('vhm-acct-bal').textContent = bl && !bl.hidden ? bl.textContent : '';
+    $('vhm-acct-bal').hidden = !(bl && !bl.hidden);
+    $('vhm-acct-topup').textContent = tu ? tu.textContent : '';
+    $('vhm-acct-out').textContent = out ? out.textContent : '';
+    $('vhm-acct-out').disabled = !!(out && out.disabled);
+  }
+  function openSheet(id) {
+    if (id === 'vhm-more') { renderMore(); try { if (window.vhMicRender) window.vhMicRender(); } catch (_) {} }
+    if (id === 'vhm-parts') renderParts();
+    S.sheet = id;
+    document.querySelectorAll('.vhm-sheet').forEach(function (x) { x.classList.toggle('on', x.id === id); x.style.transform = ''; });
+    var sc = $('vhm-scrim'); sc.classList.add('on'); sc.classList.remove('light');
+    var f = $(id).querySelector('[data-vhm-close]'); if (f) setTimeout(function () { try { f.focus({ preventScroll: true }); } catch (_) {} }, 50);
+  }
+  function closeSheets() {
+    var was = S.sheet; S.sheet = null;
+    document.querySelectorAll('.vhm-sheet').forEach(function (x) { x.classList.remove('on'); x.style.transform = ''; });
+    syncScrim();
+    var b = was === 'vhm-more' ? $('vhm-morebtn') : was === 'vhm-parts' ? $('vhm-stack') : null;
+    if (b) try { b.focus({ preventScroll: true }); } catch (_) {}
+  }
+  function syncScrim() {
+    var sc = $('vhm-scrim'); if (!sc) return;
+    var dp = $('vh-design-panel'), dOpen = !!(dp && !dp.hidden);
+    if (S.sheet) { sc.classList.add('on'); sc.classList.remove('light'); }
+    else if (dOpen) { sc.classList.add('on', 'light'); }
+    else sc.classList.remove('on', 'light');
+  }
+  addEventListener('keydown', function (e) { if (e.key === 'Escape' && S.sheet) { e.stopImmediatePropagation(); closeSheets(); } }, true);
+  // Ziehen nach unten schließt ein Sheet (Griff = Kopfzeile)
+  function sheetDrag(m) { panelDrag(m.querySelector('.vhm-grab'), m, closeSheets); }
+  function panelDrag(g, m, close) {
+    var y0 = null;
+    g.addEventListener('pointerdown', function (e) { if (e.target.closest('button')) return; y0 = e.clientY; m.classList.add('vhm-drag'); m.style.transition = 'none'; try { g.setPointerCapture(e.pointerId); } catch (_) {} });
+    g.addEventListener('pointermove', function (e) { if (y0 == null) return; m.style.transform = 'translateY(' + Math.max(0, e.clientY - y0) + 'px)'; });
+    var up = function (e) { if (y0 == null) return; var dy = e.clientY - y0; y0 = null; m.classList.remove('vhm-drag'); m.style.transition = ''; m.style.transform = ''; if (dy > 80) close(); };
+    g.addEventListener('pointerup', up); g.addEventListener('pointercancel', up);
+  }
+  // Transkript: Peek <-> Detent per Knopf, Tippen auf den Griff oder Ziehen
+  function openH() {
+    var ts = $('vhm-ts'), wrap = $('vh-transcript-wrap'), head = $('vhm-head');
+    if (!ts || !wrap) return S.peek;
+    var r = ts.getBoundingClientRect(), w = wrap.getBoundingClientRect();
+    var hb = head ? head.getBoundingClientRect().bottom : 60;
+    var above = r.top - w.top;            // Einladung o. ä. über dem Sheet
+    var ringMin = 172;                    // Ring bleibt mind. ~150 px sichtbar
+    var want = Math.round(innerHeight * 0.6) - (innerHeight - r.bottom);
+    var room = r.bottom - hb - above - ringMin - 12;
+    return Math.max(S.peek, Math.min(want, room));
+  }
+  function setOpen(on) {
+    S.open = !!on; S.th = S.open ? openH() : S.peek;
+    sync();
+    var tr = $('vh-transcript'); if (tr) tr.scrollTop = tr.scrollHeight;
+  }
+  function trDrag(g, ts) {
+    var y0 = null, h0 = 0, moved = false;
+    g.addEventListener('pointerdown', function (e) { if (e.target.closest('.vhm-tog')) return; y0 = e.clientY; h0 = ts.offsetHeight; moved = false; ts.classList.add('vhm-drag'); try { g.setPointerCapture(e.pointerId); } catch (_) {} });
+    g.addEventListener('pointermove', function (e) {
+      if (y0 == null) return; var dy = y0 - e.clientY; if (Math.abs(dy) > 4) moved = true; if (!moved) return;
+      S.th = Math.max(S.peek, Math.min(openH(), h0 + dy)); applySheet(); fitRing(true);
+    });
+    var up = function (e) {
+      if (y0 == null) return; ts.classList.remove('vhm-drag'); var dy = y0 - e.clientY; y0 = null;
+      if (!moved) setOpen(!S.open); else setOpen(dy > 40 ? true : dy < -40 ? false : S.open);
+    };
+    g.addEventListener('pointerup', up); g.addEventListener('pointercancel', up);
+  }
+  function applySheet() {
+    var ts = $('vhm-ts'); if (!ts) return;
+    H.style.setProperty('--vhm-th', Math.round(S.th) + 'px');
+    ts.classList.toggle('vhm-open', S.open);
+    ts.classList.toggle('vhm-full', S.open || S.th > S.peek + 8);
+    var lbl = T(S.open ? 'vhm.trClose' : 'vhm.trOpen');
+    var tg = $('vhm-tog'); if (tg && tg.getAttribute('aria-label') !== lbl) { tg.setAttribute('aria-label', lbl); tg.title = lbl; tg.setAttribute('aria-expanded', String(S.open)); }
+    var tb = $('vhm-text'); if (tb) { tb.classList.toggle('on', S.open); tb.setAttribute('aria-pressed', String(S.open)); if (tb.getAttribute('aria-label') !== lbl) { tb.setAttribute('aria-label', lbl); tb.title = lbl; } }
+  }
+  function setLbl(el, v) { if (el && el.getAttribute('data-vhm-lbl') !== v) el.setAttribute('data-vhm-lbl', v); }
+  function sync() {
+    var body = document.body, call = isCall(), music = body.classList.contains('vh-music-on');
+    H.classList.toggle('vhm-call', call);
+    var tr = $('vh-transcript');
+    H.classList.toggle('vhm-has-tr', !!(tr && tr.querySelector('.vh-tr-row')));
+    if (!call && S.open && !(tr && tr.querySelector('.vh-tr-row'))) { S.open = false; S.th = S.peek; }
+    if (body.classList.contains('vh-transcript-expanded') && window.vhTranscriptSet) { try { window.vhTranscriptSet('bottom'); } catch (_) {} }
+    var mute = $('btn-mute'), spk = $('btn-speaker'), cb = $('btn-vh-call'), mu = $('vhm-music');
+    setLbl(mute, T(mute && mute.classList.contains('muted') ? 'vhm.muted' : 'vhm.mic'));
+    setLbl(spk, T(spk && spk.classList.contains('muted') ? 'vhm.soundOff' : 'vhm.sound'));
+    if (cb) { if (call) setLbl(cb, T('call.hangup')); else if (cb.hasAttribute('data-vhm-lbl')) cb.removeAttribute('data-vhm-lbl'); }
+    if (mu) { var on = music && !body.classList.contains('vh-music-min'); mu.classList.toggle('on', on); mu.setAttribute('aria-pressed', String(on)); }
+    // Kontrollknöpfe: 4 nebeneinander in der Breite
+    var bar = $('vh-bottom-bar');
+    var w = (bar ? bar.clientWidth : innerWidth - 24) - 8;
+    var n = call ? 4 : 2;
+    var size = Math.max(48, Math.min(innerHeight <= 700 ? 58 : 64, Math.floor((w - 8 * (n - 1)) / n)));
+    H.style.setProperty('--vhm-cb', size + 'px');
+    renderStack();
+    if (S.sheet === 'vhm-parts') renderParts();
+    if (S.sheet === 'vhm-more') renderMore();
+    syncScrim();
+    layout();
+    if (S.open) { var oh = openH(); if (Math.abs(oh - S.th) > 2) { S.th = oh; } }
+    applySheet();
+    fitRing();
+  }
+  function layout() {
+    var bar = $('vh-bottom-bar'), tag = $('tagline');
+    var br = bar ? bar.getBoundingClientRect() : null;
+    var barTop = br && br.height ? br.top : innerHeight;
+    var costOn = !!(tag && isCall() && tag.classList.contains('vh-cost-on'));
+    var costB = Math.round(innerHeight - barTop + 6);
+    H.style.setProperty('--vhm-cost-b', costB + 'px');
+    var costH = costOn ? (tag.offsetHeight || 18) + 6 : 0;
+    H.style.setProperty('--vhm-wrap-b', Math.round(innerHeight - barTop + 10 + costH) + 'px');
+  }
+  // Ring in die freie Bühne setzen: zwischen Kopf und Dock (bzw. Design-Sheet)
+  function fitRing(now) {
+    var cv = document.querySelector('body > canvas');
+    if (!cv || !window.vhRingScreen) return;
+    var r; try { r = window.vhRingScreen(); } catch (_) { return; }
+    var head = $('vhm-head'), top = (head ? head.getBoundingClientRect().bottom : 56) + 8;
+    var bot = innerHeight;
+    var cand = [$('vh-bottom-bar'), $('tagline')];
+    cand.forEach(function (el) {
+      if (!el) return; var cs = getComputedStyle(el); if (cs.display === 'none' || cs.visibility === 'hidden') return;
+      var q = el.getBoundingClientRect(); if (q.height > 0 && q.top < bot && q.top > top) bot = q.top;
+    });
+    // Dock-Oberkante; das Transkript-Sheet zählt mit seiner Zielhöhe (Animation läuft noch)
+    var wrap = $('vh-transcript-wrap'), ts = $('vhm-ts');
+    if (wrap && getComputedStyle(wrap).visibility !== 'hidden') {
+      var wq = wrap.getBoundingClientRect();
+      if (wq.height > 0) { var wt = wq.top + (ts && ts.offsetHeight ? ts.getBoundingClientRect().height - S.th : 0); if (wt > top && wt < bot) bot = wt; }
+    }
+    var dp = $('vh-design-panel');
+    if (dp && !dp.hidden) { var dq = dp.getBoundingClientRect(); if (dq.top > top && dq.top < bot) bot = dq.top; }
+    bot -= 8;
+    var rh = r.bottom - r.top, rw = r.right - r.left, avail = Math.max(60, bot - top);
+    var s = rw > innerWidth * 1.02 ? 1 : Math.min(1, avail / rh, (innerWidth - 16) / rw);
+    var cy0 = (r.top + r.bottom) / 2, cx0 = (r.left + r.right) / 2, cy = (top + bot) / 2;
+    var tf = 'translateY(' + (cy - cy0).toFixed(1) + 'px) scale(' + s.toFixed(4) + ')';
+    var org = cx0.toFixed(1) + 'px ' + cy0.toFixed(1) + 'px';
+    cv.classList.toggle('vhm-notr', !!now);
+    if (cv.style.transform !== tf) cv.style.transform = tf;
+    if (cv.style.transformOrigin !== org) cv.style.transformOrigin = org;
+    S.ring = { top: cy - rh * s / 2, bottom: cy + rh * s / 2, left: cx0 - rw * s / 2, right: cx0 + rw * s / 2, scale: s, stageTop: top, stageBottom: bot };
+  }
+  window.vhmState = function () { return { open: S.open, th: S.th, ring: S.ring, sheet: S.sheet }; };
+  window.vhmSetOpen = setOpen;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
 </script>
 <script>
