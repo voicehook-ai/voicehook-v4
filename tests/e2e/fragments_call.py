@@ -231,7 +231,7 @@ def memfd_credentials() -> tuple[int, str]:
     return fd, f"/proc/{os.getpid()}/fd/{fd}"
 
 
-def start_worker(repo: Path, out: Path, cred_path: str) -> subprocess.Popen:
+def start_worker(repo: Path, out: Path, cred_path: str, live: bool = False) -> subprocess.Popen:
     env = {k: v for k, v in os.environ.items() if k != "VH_E2E_GCP_SA_B64"}
     env.update({
         "PYTHONPATH": str(repo / "apps"), "LIVEKIT_URL": URL, "LIVEKIT_API_KEY": KEY,
@@ -240,6 +240,8 @@ def start_worker(repo: Path, out: Path, cred_path: str) -> subprocess.Popen:
         "VH_FREE_EUR_PER_DAY": "0", "VH_MAX_CALL_SECONDS": str(CALL_CAP_S),
         "VH_IDLE_NO_HUMAN_SECONDS": "20", "VH_WORKER_LOAD_THRESHOLD": "0.99",
         "VH_WORKER_IDLE_PROCS": "1", "VH_DRAIN_TIMEOUT": "5", "VOICEHOOK_AGENT_NAME": "voice-ai",
+        # --live: Gemini-Live-Worker (worker.is_live), Nutzer-Audio geht direkt an Gemini
+        "VOICEHOOK_PIPELINE": "live" if live else "pipeline",
     })
     (out / "state").mkdir(parents=True, exist_ok=True)
     log = open(out / "worker.log", "w")  # noqa: SIM115
@@ -505,14 +507,14 @@ async def run(args: argparse.Namespace) -> dict:
     lk = worker = None
     call = Call(cache, args.scenario)
     res: dict = {"label": args.label, "repo": str(args.repo), "fragments_tts_chars": gen_chars,
-                 "scenario": args.scenario}
+                 "scenario": args.scenario, "live": args.live}
     try:
         res["sha"] = subprocess.run(["git", "-C", str(args.repo), "rev-parse", "--short", "HEAD"],
                                     capture_output=True, text=True).stdout.strip()
         lk = subprocess.Popen([os.environ.get("LIVEKIT_SERVER", "livekit-server"), "--dev", "--bind",
                                "127.0.0.1", "--port", str(PORT)], stdout=open(out / "lk.log", "w"),  # noqa: SIM115
                               stderr=subprocess.STDOUT, start_new_session=True)
-        worker = start_worker(Path(args.repo).resolve(), out, cred_path)
+        worker = start_worker(Path(args.repo).resolve(), out, cred_path, live=args.live)
         assert wait_log(out / "worker.log", "registered worker", 60), "worker nicht registriert"
         room_name = f"frag-{int(time.time())}"
         user, op = rtc.Room(), rtc.Room()
@@ -628,7 +630,11 @@ def analyse(call: Call, out: Path) -> dict:
         final = chain[-1] if chain else None
         delivered = cov >= 0.9 or (final == "replaced" and any(coverage(m["text"], op_lines) >= 0.9
                                                                for m in merged_into))
+        # Wiederholung: mehr als eine Operator-Zeile deckt >= 60 % der Wörter dieser say ab
+        # (requeue spricht die ganze Aussage nochmal). Abbruch: Kette enthält interrupted.
+        repeats = sum(1 for line in op_lines if coverage(s["text"], [line]) >= 0.6)
         says.append({"seq": s["seq"], "sent_t": s["sent"], "mode": s["mode"], "text": s["text"],
+                     "repeated": repeats >= 2, "interrupts": chain.count("interrupted"),
                      "chain": chain, "final": final, "spoken_words_pct": round(100 * cov),
                      "merged_into": [m["seq"] for m in merged_into], "delivered": delivered,
                      "cov_incl_merge": round(100 * cov_m)})
@@ -696,6 +702,9 @@ def analyse(call: Call, out: Path) -> dict:
         "answers_n": n_q,
         "says": says,
         "says_total": len(says),
+        "says_repeated": [s["seq"] for s in says if s["repeated"]],
+        "says_interrupted": [s["seq"] for s in says if s["interrupts"]],
+        "interrupts_total": sum(s["interrupts"] for s in says),
         "says_delivered": sum(s["delivered"] for s in says),
         "says_lost": [s["seq"] for s in says if not s["delivered"]],
         "turns": rows,
@@ -716,16 +725,22 @@ def timing_lines(log: Path) -> dict:
     if not log.exists():
         return {}
     vals: dict[str, list[float]] = {"play": [], "ttft": [], "eot": []}
+    seen: set[str] = set()
     n = 0
     for line in log.read_text(errors="replace").splitlines():
-        if "[timing]" not in line:
+        # der Worker loggt jede Zeile zweimal (Text + JSON): je Turn-ID nur einmal zählen
+        m = re.search(r"\[timing\] turn=(\S+)", line)
+        if not m or m.group(1) in seen:
             continue
+        seen.add(m.group(1))
         n += 1
         for k in vals:
             m = re.search(rf"\b{k}=(\d+)", line)
             if m:
                 vals[k].append(float(m.group(1)))
-    out: dict = {"timing_turns": n}
+    text = log.read_text(errors="replace")
+    applied = sum(1 for x in text.splitlines() if "[operator.activity]" in x and not x.startswith("{"))
+    out: dict = {"timing_turns": n, "activity_applied": applied}
     for k, xs in vals.items():
         out[f"timing_{k}_n"] = len(xs)
         out[f"timing_{k}_median_ms"] = round(statistics.median(xs)) if xs else None
@@ -738,6 +753,7 @@ def main() -> int:
     ap.add_argument("--repo", default=str(Path(__file__).resolve().parents[2]))
     ap.add_argument("--label", default="neu")
     ap.add_argument("--scenario", choices=sorted(SCENARIOS), default="standard")
+    ap.add_argument("--live", action="store_true", help="Gemini-Live-Worker statt Pipeline")
     ap.add_argument("--out", default="/tmp/fragcall")
     ap.add_argument("--frag-dir", default=str(Path.home() / ".cache" / "voicehook-e2e" / "fragments-v1"))
     args = ap.parse_args()
@@ -747,10 +763,11 @@ def main() -> int:
             return 2
     res = asyncio.run(run(args))
     print(json.dumps({k: res.get(k) for k in (
-        "label", "scenario", "sha", "says_total", "says_delivered", "says_lost",
+        "label", "scenario", "live", "sha", "says_total", "says_delivered", "says_lost",
         "answers_n", "answers_inhaltlich", "answers_moment", "answers_keine",
         "delta_latency_median_s", "delta_latency_p90_s", "timing_play_median_ms", "timing_play_p90_ms",
-        "timing_play_n", "longest_wait_silence_s", "deepgram")}, ensure_ascii=False))
+        "timing_play_n", "says_repeated", "says_interrupted", "interrupts_total",
+        "activity_applied", "longest_wait_silence_s", "deepgram")}, ensure_ascii=False))
     for a in res["answers"]:
         print(f"frage {a['turn']:>2} {a['kind']:<10} {a['frage'][:40]:<40} | {' / '.join(a['delta'])[:120]}")
     for s in res["says"]:
