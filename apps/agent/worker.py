@@ -345,7 +345,7 @@ def free_tick_seconds() -> float:
 
 
 class FreeBudget:
-    """Gratis-Topf (freetier.py, 1 EUR pro UTC-Tag) eines Raums, VOR dem Guthaben.
+    """Gratis-Topf (freetier.py, VH_FREE_EUR_PER_DAY pro UTC-Tag) eines Raums, VOR dem Guthaben.
 
     Liest die Merkmale des Raum-Erstellers EINMAL beim Start. Gebucht wird NUR aus
     echten Kostenereignissen (settle_cost, aus metrics_collected), nie aus Zeit:
@@ -428,13 +428,14 @@ class FreeBudget:
         logger.warning("[free] daily free budget used up in room=%s, ending call", self.room)
         await guard.end("free_limit", delete_room=True, announce=FREE_LIMIT_ANNOUNCEMENT)
 
-    def take(self, ueur: int) -> int:
-        """`ueur` aus dem Topf nehmen; liefert den Überhang (nicht gedeckt, ans Wallet).
-        Wird der Topf dabei leer, endet `counting`."""
+    def take(self, ueur: int, real_ueur: int | None = None) -> int:
+        """`ueur` (Kundenpreis) aus dem Topf nehmen; liefert den Überhang (nicht gedeckt,
+        ans Wallet). `real_ueur` = echte Kosten desselben Ereignisses für den internen
+        Monatsdeckel (freetier, Modul-Doku). Wird der Topf dabei leer, endet `counting`."""
         if not self.counting or ueur <= 0:
             return max(0, ueur)
         try:
-            taken, left = freetier.consume_ueur(self.keys, ueur)
+            taken, left = freetier.consume_ueur(self.keys, ueur, real_ueur=real_ueur)
         except Exception as e:  # noqa: BLE001
             logger.error("[free] book room=%s failed: %s", self.room, e)
             taken, left = 0, 0  # fail-closed
@@ -452,7 +453,7 @@ def settle_cost(free: FreeBudget | None, wallet: WalletCharger, usd: float) -> s
         return None
     if free is not None and free.counting:
         ueur = billing_pricing.charge_ueur(usd, wallet.mode)
-        over = free.take(ueur)
+        over = free.take(ueur, billing_pricing.real_ueur(usd))
         if free.counting:
             return None                    # ganz aus dem Gratis-Topf bezahlt
         # Topf ist mit diesem Ereignis leer geworden.

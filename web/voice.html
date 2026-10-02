@@ -1800,7 +1800,7 @@ body.theme-light #vh-auth-modal .vh-auth-msg.warn { color: #b8641a; }
   <div id="vh-topup" role="group" hidden>
     <div class="vh-tu-head"><span data-i18n="topup.title">Top up credit</span><button type="button" class="vh-tu-x" id="vh-topup-x" aria-label="Close" data-i18n-aria="topup.close">&times;</button></div>
     <div class="vh-tu-body">
-      <div class="vh-tu-dial" id="vh-tu-dial" tabindex="0" role="slider" aria-valuemin="10" aria-valuemax="200" aria-valuenow="20" aria-label="Amount" data-i18n-aria="topup.amount">
+      <div class="vh-tu-dial" id="vh-tu-dial" tabindex="0" role="slider" aria-valuemin="5" aria-valuemax="200" aria-valuenow="20" aria-label="Amount" data-i18n-aria="topup.amount">
         <svg viewBox="0 0 300 300" aria-hidden="true">
           <circle class="track" cx="150" cy="150" r="120"/>
           <circle class="fill" id="vh-tu-fill" cx="150" cy="150" r="120" stroke-dasharray="753.98" stroke-dashoffset="753.98"/>
@@ -4756,7 +4756,7 @@ async function vhPayErrMsg(r) {
   if (d.error === 'free_limit') {
     // Gratis-Zeile sofort auf "aufgebraucht" stellen; vhPayShow zeigt dann keinen
     // zweiten Banner mit demselben Text (Oliver 01.10.: Meldung stand doppelt da).
-    const per = Number(d.free_eur_per_day) > 0 ? Number(d.free_eur_per_day) : (vhFree && Number(vhFree.eur_per_day)) || 1;
+    const per = Number(d.free_eur_per_day) > 0 ? Number(d.free_eur_per_day) : (vhFree && Number(vhFree.eur_per_day)) || 0.3;
     vhFree = { eur_left: 0, eur_per_day: per };
     try { vhModeInfoRender(); } catch (_) {}
     return vhT('pay.free');
@@ -4808,7 +4808,7 @@ function vhPayShow(msg) {
 // Stripe öffnet in einem NEUEN Tab (ein laufender Call bricht nicht ab). Der
 // Rückweg landet auf /aufladen, das das Wallet-Token in localStorage legt; diese
 // Seite hört auf 'storage' + Fokus und lädt /api/me neu.
-const VH_TU = { min: 10, max: 200, step: 5, amounts: [10, 20, 50], amount: 20, on: false };
+const VH_TU = { min: 5, max: 200, step: 5, amounts: [5, 10, 20, 50], amount: 20, on: false };
 const vhTu = {
   box: document.getElementById('vh-topup'), dial: document.getElementById('vh-tu-dial'),
   fill: document.getElementById('vh-tu-fill'), knob: document.getElementById('vh-tu-knob'),
@@ -4988,7 +4988,7 @@ function vhPayAfterRefresh() {
 // (GET /api/billing/config). Kein Timer: geladen beim Seitenstart und nach
 // Call-Ende, angezeigt wird nur, was der Server meldet.
 const vhModeInfo = document.getElementById('vh-mode-info');
-let vhFree = null;          // {eur_left, eur_per_day}: 1 EUR pro Tag, Normal + Live gemeinsam
+let vhFree = null;          // {eur_left, eur_per_day}: Tageswert vom Server (Default 0,30 EUR), Normal + Live gemeinsam
 let vhPriceCfg = null;      // {normal, live} EUR pro Stunde
 let vhModeDetail = null;    // 'normal' | 'live' | null (erst nach Klick)
 const vhEur = (() => { try { return new Intl.NumberFormat(VH_LANG === 'de' ? 'de-DE' : 'en-IE', { style: 'currency', currency: 'EUR' }); } catch (_) { return null; } })();

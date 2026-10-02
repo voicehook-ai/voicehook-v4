@@ -550,6 +550,35 @@ def admin_live_room(req: LiveRoomRequest, request: Request) -> LiveRoomResponse:
     return LiveRoomResponse(room=room, url=f"{base}/r/{room}?invite={invite}", expires_in=req.ttl_seconds)
 
 
+@app.get("/api/admin/free-pot")
+def admin_free_pot(request: Request) -> dict:
+    """Stand des internen Gratis-Monatsdeckels (nur Admin, Bearer VOICEHOOK_LIVE_KEY, nie
+    in der URL). Echte Kosten in EUR. Ohne VOICEHOOK_LIVE_KEY aus (404)."""
+    if not os.environ.get("VOICEHOOK_LIVE_KEY"):
+        raise HTTPException(status_code=404, detail="not found")
+    auth = request.headers.get("authorization", "")
+    given = auth[7:] if auth.lower().startswith("bearer ") else ""
+    if not _live_key_ok(given):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    try:
+        st = freetier.pot_status()
+    except Exception as e:  # noqa: BLE001
+        logger.error("[free-pot] read failed: %s", e)
+        raise HTTPException(status_code=503, detail="free pot unreadable (treated as empty)") from None
+
+    def eur(ueur: int) -> float:
+        return round(ueur / freetier.UEUR_PER_EUR, 4)
+
+    return {
+        "month": st["month"], "day": st["day"], "days_left": st["days_left"],
+        "month_budget_eur": eur(st["month_budget_ueur"]),
+        "month_used_eur": eur(st["month_used_ueur"]),
+        "budget_today_eur": eur(st["budget_today_ueur"]),
+        "today_used_eur": eur(st["today_used_ueur"]),
+        "left_today_eur": eur(st["left_today_ueur"]),
+    }
+
+
 # ----- Live-Modus öffentlich (Demo, Oliver 30.09.) -------------------------
 # "testweise für alle verfügbar ... für Demo erst mal für alle frei": jeder darf
 # ohne Schlüssel einen Live-Raum starten. Schutz bis Login+Guthaben kommen:

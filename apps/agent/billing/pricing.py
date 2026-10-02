@@ -33,8 +33,8 @@ USD_EUR_SOURCE = "EZB-Referenzkurs 30.09.2026 (1 EUR = 1,1355 USD)"
 
 UEUR_PER_EUR = 1_000_000
 
-DEFAULT_TOPUP_AMOUNTS_EUR = (10, 20, 50)
-MIN_TOPUP_EUR = 10      # Stripe-Fixgebühr: kleinere Beträge lohnen nicht
+DEFAULT_TOPUP_AMOUNTS_EUR = (5, 10, 20, 50)
+MIN_TOPUP_EUR = 5       # Oliver 02.10.: Mindestaufladung 5 EUR (Env kann nur höher)
 DEFAULT_MAX_TOPUP_EUR = 200
 
 
@@ -70,6 +70,13 @@ def charge_ueur(usd: float, mode: str) -> int:
     return max(1, round(eur * UEUR_PER_EUR))
 
 
+def real_ueur(usd: float) -> int:
+    """Echte Anbieterkosten in µEUR (ohne Faktor, ohne MwSt): usd x USD_EUR."""
+    if usd <= 0:
+        return 0
+    return max(1, round(usd * usd_eur() * UEUR_PER_EUR))
+
+
 def eur_to_ueur(eur: float) -> int:
     return round(eur * UEUR_PER_EUR)
 
@@ -95,7 +102,7 @@ def max_topup_eur() -> int:
 
 
 def topup_amounts_eur() -> list[int]:
-    """Vorschlagsbeträge (Env VOICEHOOK_TOPUP_AMOUNTS_EUR="10,20,50"), im erlaubten Bereich."""
+    """Vorschlagsbeträge (Env VOICEHOOK_TOPUP_AMOUNTS_EUR="5,10,20,50"), im erlaubten Bereich."""
     raw = os.environ.get("VOICEHOOK_TOPUP_AMOUNTS_EUR", "")
     try:
         vals = [int(x) for x in raw.split(",") if x.strip()] if raw.strip() else []

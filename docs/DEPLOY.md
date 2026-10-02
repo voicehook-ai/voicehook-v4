@@ -139,10 +139,11 @@ dasselbe Konto zuerst verrechnet. Der Wiederherstellungs-Link gilt genau einmal 
 | `VOICEHOOK_PRICE_FACTOR_NORMAL` / `_LIVE` | `3` / `1.5` | Abbuchung = Anbieterkosten x Faktor |
 | `VOICEHOOK_VAT_RATE` | `0.19` | MwSt obendrauf |
 | `VOICEHOOK_USD_EUR` | `0.8807` | Kurs USD -> EUR (EZB 30.09.2026) |
-| `VOICEHOOK_TOPUP_AMOUNTS_EUR` | `10,20,50` | Vorschlagsbeträge |
-| `VOICEHOOK_TOPUP_MIN_EUR` / `_MAX_EUR` | `10` / `200` | Spanne des Drehreglers (Minimum nie unter 10) |
-| `VH_FREE_EUR_PER_DAY` | `1.0` | Gratis-Verbrauch in Euro (Kundenpreis inkl. Faktor und MwSt) pro UTC-Tag und Identität, Normal und Live gemeinsam; `0` = aus; kaputter Wert (kein Zahlwert, negativ, inf/nan) = 0 € Gratis bei weiter aktiver Prüfung (ohne Wallet 402), nie unbegrenzt |
+| `VOICEHOOK_TOPUP_AMOUNTS_EUR` | `5,10,20,50` | Vorschlagsbeträge (nur Werte im erlaubten Bereich) |
+| `VOICEHOOK_TOPUP_MIN_EUR` / `_MAX_EUR` | `5` / `200` | Spanne des Drehreglers und der Checkout-Prüfung (Minimum nie unter 5; `/api/checkout` < Minimum -> 400) |
+| `VH_FREE_EUR_PER_DAY` | `0.30` | Gratis-Verbrauch in Euro (Kundenpreis inkl. Faktor und MwSt, 0,30 € ≈ 10 min Normal oder ≈ 2 min Live) pro UTC-Tag und Identität, Normal und Live gemeinsam; `0` = aus; kaputter Wert (kein Zahlwert, negativ, inf/nan) = 0 € Gratis bei weiter aktiver Prüfung (ohne Wallet 402), nie unbegrenzt |
 | `VH_FREE_EXEMPT_KEYS` | leer | Merkmale ohne Gratis-Limit (Owner-Test), kommagetrennt, nur gehashte Keys im Format `anon:<sha256>` / `ip:<sha256>` (siehe unten); leer = keine Ausnahme, kaputte Einträge werden ignoriert |
+| `VH_FREE_POT_EUR_MONTH` | `60` | INTERN, nirgends nach außen nennen: globaler Gratis-Deckel in ECHTEN Kosten (cost_usd × `VOICEHOOK_USD_EUR`) pro UTC-Monat für alle Gratis-Nutzer zusammen, siehe unten; kaputter/negativer Wert = 0 = Gratis gesperrt |
 | `VH_FREE_TICK_SECONDS` | `5` | Prüftakt der Restzeit-Warnung im Worker (bucht nichts) |
 | `VH_REQUIRE_OPERATOR_INVITE` | `0` | Operator-Join `GET /api/token?invite=1` und `/api/bridge/join` ohne HMAC-Einladung (`op_invite` bzw. `?invite=` in der URL): `0` = Übergangsfrist, erlaubt, aber laut geloggt (`legacy operator join without invite`); `1` = 403. Ungültige Signatur ist immer 403. Umschalten auf `1`, sobald die neue voicehook-agent CLI 1 bis 2 Tage draußen ist und das Log keine Legacy-Joins mehr zeigt |
 
@@ -168,7 +169,7 @@ leer ist. Reichen Gratis-Rest + Guthaben ((Gratis-Rest + Guthaben) / Verbrauch d
 noch höchstens 5 Minuten, schickt der Worker einmal pro Call `operator.notice`
 `{kind:"low_balance", minutes_left, ...}` an alle im Raum und sagt "Hey, Achtung, das Guthaben ist in wenigen Minuten leer." `GET /api/me` liefert der Oberfläche Gratis-Rest und Guthaben.
 
-Gratis gibt es `VH_FREE_EUR_PER_DAY` (1 €) Verbrauch pro UTC-Tag, Normal und Live gemeinsam.
+Gratis gibt es `VH_FREE_EUR_PER_DAY` (0,30 €) Verbrauch pro UTC-Tag, Normal und Live gemeinsam.
 Gebucht wird nur aus echten Kostenereignissen des Workers (Spracherkennung, Sprachmodell,
 Sprachausgabe bzw. Live-Turns), als Kundenpreis: Anbieterkosten x Faktor (Normal 3, Live 1,5) plus
 MwSt, dieselbe Rechnung wie beim Guthaben. Stille ohne Kosten zählt nichts herunter (früher zählte
@@ -192,6 +193,23 @@ mit bekanntem Zahler; ein selbst ausgedachter neuer Slug bekommt keinen Gratis-A
 Das Live-Monatsbudget zählt alles, was nicht das Guthaben zahlt: Gratis/Demo-Räume ganz, Wallet-Räume
 ihren Gratis-Teil. Beendet wird am Budget nur ein Raum ohne Wallet; ist das Budget schon erschöpft,
 zahlt bei Wallet-Räumen das Guthaben von Anfang an (kein Gratis-Teil).
+
+**Globaler Gratis-Deckel (`VH_FREE_POT_EUR_MONTH`, intern).** Fester Marketing-Topf pro
+UTC-Monat in echten Kosten (nicht Kundenpreis). Tagesbudget =
+(Monatstopf − im Monat vor heute verbraucht) / verbleibende Tage inkl. heute, d. h. Start 60/30 =
+2 €/Tag, nicht Genutztes verteilt sich auf die Resttage. Ist heute das Tagesbudget verbraucht, ist
+Gratis für ALLE leer bis zum nächsten UTC-Tag: neue Räume 402 `free_limit` (dieselbe Meldung wie
+beim persönlichen Limit), `/api/me` zeigt `eur_left: 0`, laufende Gratis-Calls wie beim
+persönlichen Limit (Wallet zahlt weiter, sonst Ansage + Ende). Gebucht wird im selben
+Kostenereignis wie der persönliche Topf in die Tabelle `free_pot` (`freetier.sqlite`, legt der
+Dienst selbst an), Lesefehler = leer (fail-closed). Owner (`VH_FREE_EXEMPT_KEYS`) und Admin-Räume
+buchen nicht und werden nicht gesperrt. Die Live-Monatssperre gilt zusätzlich. Stand nur für
+den Admin:
+
+```bash
+curl -s -H "Authorization: Bearer $VOICEHOOK_LIVE_KEY" https://voicehook.ai/api/admin/free-pot
+# {month, day, days_left, month_budget_eur, month_used_eur, budget_today_eur, today_used_eur, left_today_eur}
+```
 
 **Gratis-Ausnahme für den Owner (`VH_FREE_EXEMPT_KEYS`).** Trifft eines der Merkmale eines
 Anfragenden bzw. Raums die Liste, ist Gratis unbegrenzt: kein 402 `free_limit`, kein Call-Ende

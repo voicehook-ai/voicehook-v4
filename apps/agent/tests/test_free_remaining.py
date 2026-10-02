@@ -15,8 +15,7 @@ ANON_B = "anon-bbbbbbbb-2222"
 
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
-    for k in ("VH_FREE_EUR_PER_DAY",
-              "VOICEHOOK_APPROX_EUR_PER_HOUR_NORMAL", "VOICEHOOK_APPROX_EUR_PER_HOUR_LIVE"):
+    for k in ("VOICEHOOK_APPROX_EUR_PER_HOUR_NORMAL", "VOICEHOOK_APPROX_EUR_PER_HOUR_LIVE"):
         monkeypatch.delenv(k, raising=False)
 
 
@@ -34,8 +33,13 @@ def _rem(client, anon=None, ip="1.1.1.1"):
     return r.json()
 
 
-def test_default_full_one_euro(client):
+def test_full_one_euro(client):
     assert _rem(client, ANON_A) == {"enabled": True, "eur_left": 1.0, "eur_per_day": 1.0}
+
+
+def test_default_full_030_euro(client, monkeypatch):
+    monkeypatch.delenv("VH_FREE_EUR_PER_DAY", raising=False)
+    assert _rem(client, ANON_A) == {"enabled": True, "eur_left": 0.3, "eur_per_day": 0.3}
 
 
 def test_used_euro_reduces_remaining_rounded_down(client):

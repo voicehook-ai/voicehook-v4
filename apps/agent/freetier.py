@@ -1,6 +1,6 @@
 """Gratis-Kontingent ohne Login (Oliver 01.10.2026, Euro-Topf seit 01.10. abends).
 
-Wer nicht bezahlt hat, bekommt pro UTC-Tag einen Gratis-Verbrauch von 1,00 EUR
+Wer nicht bezahlt hat, bekommt pro UTC-Tag einen Gratis-Verbrauch von 0,30 EUR
 (Kundenpreis inkl. Faktor und MwSt, billing/pricing.charge_ueur). Normal und Live
 teilen sich den Topf. Gebucht wird NUR aus echten Kostenereignissen des Workers
 (metrics_collected), nie aus Zeit: Stille ohne Kosten zählt nichts herunter
@@ -15,7 +15,7 @@ Identität ohne Login, zwei Merkmale je Raum-Ersteller:
 Gezählt wird je Merkmal; der Rest ist der des knappsten Merkmals (MAX über die Keys).
 Gespeichert werden nur SHA-256-Hashes der Merkmale, nie IP oder ID im Klartext.
 
-Env VH_FREE_EUR_PER_DAY (Euro pro UTC-Tag), Default 1.0:
+Env VH_FREE_EUR_PER_DAY (Euro pro UTC-Tag), Default 0.30 (Oliver 02.10.):
   0           Gratis aus (wie früher Limit 0: Räume laufen ohne Zählung, es sei denn
               VOICEHOOK_REQUIRE_CREDITS_<MODE>=1),
   kaputt      (kein Zahlwert, negativ, inf/nan) -> 0 EUR Gratis, die Prüfung bleibt
@@ -46,10 +46,25 @@ unbegrenzt: kein 402 free_limit, kein Call-Ende wegen free_limit, nichts wird ge
 /api/me zeigt eur_left = eur_per_day plus exempt=true. Wallet und die Live-Monatssperre
 (budget.py) bleiben unverändert. Leer/fehlend: keine Ausnahme; kaputte Einträge werden
 ignoriert. Keys erzeugen (lokal auf der Box): python -m agent.freetier keys --ip <ip> --anon <id>
+
+Globaler Gratis-Deckel (Oliver 02.10., INTERN, nirgends nach außen erwähnen): fester
+Monatstopf in ECHTEN Kosten (cost_usd x USD_EUR, Olivers Geld, nicht Kundenpreis),
+Env VH_FREE_POT_EUR_MONTH (Default 60; kaputt/negativ -> 0 = gesperrt, nie unbegrenzt).
+Tagesbudget dynamisch (UTC):
+    budget_heute = (Monatstopf - verbraucht im Monat VOR heute) / verbleibende Tage inkl. heute
+Nicht Genutztes verteilt sich so automatisch auf die Resttage (Start 60/30 = 2 EUR/Tag).
+Heute verbraucht >= budget_heute -> Gratis für ALLE leer bis zum nächsten UTC-Tag: neue
+Räume 402 free_limit (dieselbe Meldung, kein Hinweis auf den Topf), /api/me eur_left 0,
+laufende Calls wie beim persönlichen Limit (Wallet zahlt weiter, sonst Ansage + Ende).
+Gebucht wird im selben Kostenereignis und in derselben Transaktion wie der persönliche
+Topf (consume_ueur) in die Tabelle free_pot. Lesefehler -> leer (fail-closed).
+Owner (VH_FREE_EXEMPT_KEYS) und Admin-Räume buchen nicht und werden nicht gesperrt.
+Die Live-Monatssperre (budget.py) gilt zusätzlich, es greift die strengere.
 """
 
 from __future__ import annotations
 
+import calendar
 import contextlib
 import hashlib
 import ipaddress
@@ -62,8 +77,10 @@ import time
 from collections.abc import Iterable
 from pathlib import Path
 
-DEFAULT_EUR_PER_DAY = 1.0
+DEFAULT_EUR_PER_DAY = 0.30
 ENV_EUR_PER_DAY = "VH_FREE_EUR_PER_DAY"
+DEFAULT_POT_EUR_MONTH = 60.0
+ENV_POT_EUR_MONTH = "VH_FREE_POT_EUR_MONTH"
 ENV_EXEMPT_KEYS = "VH_FREE_EXEMPT_KEYS"
 _KEY_RE = re.compile(r"^(anon|ip):[0-9a-f]{64}$")
 UEUR_PER_EUR = 1_000_000
@@ -88,6 +105,12 @@ CREATE TABLE IF NOT EXISTS free_usage_eur (
     key TEXT NOT NULL,
     ueur INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (day, key)
+);
+CREATE TABLE IF NOT EXISTS free_pot (
+    month TEXT NOT NULL,
+    day TEXT NOT NULL,
+    ueur INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day)
 );
 CREATE TABLE IF NOT EXISTS free_rooms (
     room TEXT PRIMARY KEY,
@@ -129,6 +152,93 @@ def enabled(mode: str | None = None) -> bool:
 
 def day_key(now: float | None = None) -> str:
     return time.strftime("%Y-%m-%d", time.gmtime(time.time() if now is None else now))
+
+
+# ----- Globaler Gratis-Deckel (intern, siehe Modul-Doku) ----------------------
+
+
+def pot_eur_month() -> float:
+    """Monatstopf in echten EUR. Leer -> Default; kaputt/negativ/inf -> 0 (gesperrt)."""
+    raw = os.environ.get(ENV_POT_EUR_MONTH, "").strip()
+    if not raw:
+        return DEFAULT_POT_EUR_MONTH
+    try:
+        v = float(raw)
+    except ValueError:
+        return 0.0
+    return v if math.isfinite(v) and v >= 0 else 0.0
+
+
+def _month_days_left(now: float) -> tuple[str, int]:
+    """(Monat 'YYYY-MM', verbleibende UTC-Tage inkl. heute)."""
+    t = time.gmtime(now)
+    days = calendar.monthrange(t.tm_year, t.tm_mon)[1]
+    return time.strftime("%Y-%m", t), days - t.tm_mday + 1
+
+
+def pot_budget_today_ueur(month_budget_ueur: int, used_before_today_ueur: int, days_left: int) -> int:
+    """Tagesbudget = (Monatstopf - Verbrauch vor heute) / Resttage inkl. heute, abgerundet."""
+    rest = max(0, int(month_budget_ueur) - int(used_before_today_ueur))
+    return rest // max(1, int(days_left))
+
+
+def _pot_read(conn: sqlite3.Connection, now: float) -> dict:
+    month, days_left = _month_days_left(now)
+    day = day_key(now)
+    row = conn.execute(
+        "SELECT COALESCE(SUM(CASE WHEN day < ? THEN ueur ELSE 0 END), 0),"
+        " COALESCE(SUM(CASE WHEN day = ? THEN ueur ELSE 0 END), 0)"
+        " FROM free_pot WHERE month = ?",
+        (day, day, month),
+    ).fetchone()
+    before, today = int(row[0]), int(row[1])
+    month_ueur = round(pot_eur_month() * UEUR_PER_EUR)
+    budget = pot_budget_today_ueur(month_ueur, before, days_left)
+    return {
+        "month": month, "day": day, "days_left": days_left,
+        "month_budget_ueur": month_ueur, "month_used_ueur": before + today,
+        "budget_today_ueur": budget, "today_used_ueur": today,
+        "left_today_ueur": max(0, budget - today),
+    }
+
+
+def pot_status(now: float | None = None) -> dict:
+    """Stand des Monatstopfs (echte Kosten, µEUR). Wirft bei Lesefehlern."""
+    now = time.time() if now is None else now
+    conn = connect()
+    try:
+        return _pot_read(conn, now)
+    finally:
+        conn.close()
+
+
+def pot_left_ueur(now: float | None = None) -> int:
+    """Heute noch im Topf (echte µEUR). Lesefehler -> 0 (fail-closed)."""
+    try:
+        return pot_status(now)["left_today_ueur"]
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def add_pot_ueur(real_ueur: int, now: float | None = None) -> None:
+    """Echte Kosten direkt in den Topf buchen (Tests/Altlast; der Call bucht über consume_ueur)."""
+    if real_ueur <= 0:
+        return
+    now = time.time() if now is None else now
+    conn = connect()
+    try:
+        _pot_add(conn, int(real_ueur), now)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _pot_add(conn: sqlite3.Connection, real_ueur: int, now: float) -> None:
+    conn.execute(
+        "INSERT INTO free_pot (month, day, ueur) VALUES (?, ?, ?)"
+        " ON CONFLICT(day) DO UPDATE SET ueur = ueur + excluded.ueur",
+        (time.strftime("%Y-%m", time.gmtime(now)), day_key(now), int(real_ueur)),
+    )
 
 
 def _hash(kind: str, value: str) -> str:
@@ -214,11 +324,15 @@ def used_ueur(keys: Iterable[str], now: float | None = None) -> int:
 
 
 def remaining_ueur(keys: Iterable[str], now: float | None = None) -> int:
-    """Gratis-Rest heute. Ausnahme-Merkmal (VH_FREE_EXEMPT_KEYS): immer das volle Tageslimit."""
+    """Gratis-Rest heute. Ausnahme-Merkmal (VH_FREE_EXEMPT_KEYS): immer das volle Tageslimit.
+    Ist der globale Topf heute leer (oder unlesbar), ist der Rest 0 für alle."""
     keys = list(keys)
     if is_exempt(keys):
         return limit_ueur()
-    return max(0, limit_ueur() - used_ueur(keys, now))
+    left = max(0, limit_ueur() - used_ueur(keys, now))
+    if left > 0 and pot_left_ueur(now) <= 0:
+        return 0
+    return left
 
 
 def remaining_eur(keys: Iterable[str], now: float | None = None) -> float:
@@ -253,16 +367,26 @@ def add_ueur(keys: Iterable[str], ueur: int, now: float | None = None) -> None:
         conn.close()
 
 
-def consume_ueur(keys: Iterable[str], ueur: int, now: float | None = None) -> tuple[int, int]:
+def consume_ueur(
+    keys: Iterable[str], ueur: int, now: float | None = None, *, real_ueur: int | None = None
+) -> tuple[int, int]:
     """Kostenereignis aus dem Gratis-Topf nehmen, atomar (parallele Räume derselben
     Identität teilen den Topf). Liefert (aus dem Topf genommen, Rest danach).
     Überhang = ueur - genommen geht ans Wallet.
+
+    `ueur` ist der Kundenpreis (persönlicher Topf), `real_ueur` die echten Kosten
+    desselben Ereignisses (globaler Monatstopf). Ohne `real_ueur` wird konservativ
+    der Kundenpreis in den Monatstopf gebucht (nie zu wenig). Reicht der globale Topf
+    nur teilweise, wird anteilig genommen; danach ist der Rest 0 (für alle leer).
     Ausnahme-Merkmal (VH_FREE_EXEMPT_KEYS): alles gilt als gedeckt, nichts wird gebucht."""
     keys = list(keys)
     if not keys:
         return 0, 0
     if is_exempt(keys):
         return max(0, int(ueur)), limit_ueur()
+    now = time.time() if now is None else now
+    ueur = int(ueur)
+    real = int(ueur if real_ueur is None else real_ueur)
     day = day_key(now)
     limit = limit_ueur()
     conn = connect()
@@ -274,16 +398,27 @@ def consume_ueur(keys: Iterable[str], ueur: int, now: float | None = None) -> tu
                 f"SELECT MAX(ueur) FROM free_usage_eur WHERE day = ? AND key IN ({q})", (day, *keys)
             ).fetchone()
             left = max(0, limit - int(row[0] or 0))
-            take = max(0, min(int(ueur), left))
+            pot_left = _pot_read(conn, now)["left_today_ueur"]
+            take = max(0, min(ueur, left))
+            if pot_left <= 0:
+                take = 0
+            elif real > pot_left and take > 0:
+                take = min(take, ueur * pot_left // real)  # anteilig, bis der Topf genau leer ist
             if take > 0:
                 _add(conn, keys, take, day)
+                real_take = real if take >= ueur else -(-real * take // max(1, ueur))
+                _pot_add(conn, min(real_take, pot_left), now)
+                pot_left -= min(real_take, pot_left)
             conn.execute("COMMIT")
         except BaseException:
             conn.execute("ROLLBACK")
             raise
     finally:
         conn.close()
-    return take, left - take
+    rest = left - take
+    if pot_left <= 0:
+        rest = 0
+    return take, rest
 
 
 def register_room(

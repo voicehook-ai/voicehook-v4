@@ -28,7 +28,7 @@ login_nonce des anfordernden Browsers nur nach Bestätigung (confirm=1). Die
 Stripe-Mail allein verknüpft nie (siehe billing/db.py login_verified_email).
 
 Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, VOICEHOOK_PUBLIC_URL,
-     VOICEHOOK_TOPUP_AMOUNTS_EUR ("10,20,50"), VOICEHOOK_TOPUP_MIN_EUR (10),
+     VOICEHOOK_TOPUP_AMOUNTS_EUR ("5,10,20,50"), VOICEHOOK_TOPUP_MIN_EUR (5),
      VOICEHOOK_TOPUP_MAX_EUR (200), Preis-Env siehe billing/pricing.py.
 """
 
@@ -165,7 +165,8 @@ def billing_config() -> dict:
 
 # ----- Checkout ----------------------------------------------------------------
 class CheckoutRequest(BaseModel):
-    amount_eur: int = Field(..., ge=1, le=100_000)
+    # float, damit 4,99 als 400 (unter Minimum) ankommt statt als 422; nur ganze Euro.
+    amount_eur: float = Field(..., gt=0, le=100_000)
 
 
 @router.post("/api/checkout")
@@ -174,10 +175,11 @@ def api_checkout(req: CheckoutRequest, request: Request) -> dict:
     if not stripe_api.configured():
         raise HTTPException(status_code=503, detail="top-up not available yet")
     lo, hi = pricing.min_topup_eur(), pricing.max_topup_eur()
-    if not lo <= req.amount_eur <= hi:
-        raise HTTPException(status_code=400, detail=f"amount must be between {lo} and {hi} EUR")
+    if req.amount_eur != int(req.amount_eur) or not lo <= req.amount_eur <= hi:
+        raise HTTPException(status_code=400, detail=f"amount must be a whole number between {lo} and {hi} EUR")
+    amount_eur = int(req.amount_eur)
     base = _public_base()
-    metadata = {"vh_amount_eur": str(req.amount_eur)}
+    metadata = {"vh_amount_eur": str(amount_eur)}
     params: dict = {
         "mode": "payment",
         "locale": "auto",
@@ -185,8 +187,8 @@ def api_checkout(req: CheckoutRequest, request: Request) -> dict:
             "quantity": 1,
             "price_data": {
                 "currency": "eur",
-                "unit_amount": req.amount_eur * 100,
-                "product_data": {"name": f"voicehook Guthaben {req.amount_eur} EUR"},
+                "unit_amount": amount_eur * 100,
+                "product_data": {"name": f"voicehook Guthaben {amount_eur} EUR"},
             },
         }],
         "success_url": f"{base}{TOPUP_PATH}?session_id={{CHECKOUT_SESSION_ID}}",
@@ -204,7 +206,7 @@ def api_checkout(req: CheckoutRequest, request: Request) -> dict:
     except stripe_api.StripeError as e:
         logger.error("[billing] checkout create failed: %s", e)
         raise HTTPException(status_code=502, detail="payment provider error") from e
-    logger.info("[billing] checkout %s %s EUR", session.get("id"), req.amount_eur)
+    logger.info("[billing] checkout %s %s EUR", session.get("id"), amount_eur)
     return {"url": session.get("url"), "session_id": session.get("id")}
 
 
