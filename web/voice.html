@@ -109,7 +109,8 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'join.gate': 'Tippen zum Beitreten', 'join.aria': 'Dem Call beitreten',
       'invite.clipOk': 'In der Zwischenablage. Schick das deinem Agent:',
       'invite.clipFail': 'Kopier diese Zeile für deinen Agent (Zwischenablage blockiert):',
-      'invite.copy': 'kopieren', 'invite.copied': 'kopiert',
+      'invite.copy': 'Kopieren', 'invite.copied': 'Kopiert', 'invite.share': 'Teilen',
+      'invite.manual': 'Lang drücken zum Kopieren', 'invite.shareTitle': 'voicehook.ai Einladung',
       'invite.wait': 'Warte auf Agent …',
       'invite.agentIn': 'Agent ist da · leg los! (Banner bleibt zum erneuten Teilen)',
       'invite.msg': 'Kannst du bitte meinem Voice-Call auf voicehook.ai beitreten? {url}\nSkill: {skill}',
@@ -245,7 +246,8 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'join.gate': 'Tap to join', 'join.aria': 'Join the call',
       'invite.clipOk': 'Copied. Send this to your agent:',
       'invite.clipFail': 'Copy this line for your agent (clipboard blocked):',
-      'invite.copy': 'copy', 'invite.copied': 'copied',
+      'invite.copy': 'Copy', 'invite.copied': 'Copied', 'invite.share': 'Share',
+      'invite.manual': 'Long-press to copy', 'invite.shareTitle': 'voicehook.ai invite',
       'invite.wait': 'Waiting for agent …',
       'invite.agentIn': 'Agent is here · go ahead! (banner stays for re-sharing)',
       'invite.msg': 'Could you please join my voice call on voicehook.ai? {url}\nSkill: {skill}',
@@ -1014,10 +1016,11 @@ body.theme-light #label .by, body.theme-light #label .tld { color: #5c5c66; }
    #btn-call Talk-to-AI-Label) komplett entfernt — Olli "komplette bar mülltonne". */
 
 /* ── Call-Choice Modal ─────────────────────────────────────────────── */
-#vh-call-modal{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;}
+#vh-call-modal{position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box;
+  top:var(--vh-vv-top,0px);bottom:auto;height:100vh;height:var(--vh-vv-h,100dvh);padding:max(12px,env(safe-area-inset-top,0px)) 0 max(12px,env(safe-area-inset-bottom,0px));}
 #vh-call-modal[hidden]{display:none;}
-#vh-call-modal .vh-modal-backdrop{position:absolute;inset:0;background:rgba(10,12,18,0.78);backdrop-filter:blur(8px);}
-#vh-call-modal .vh-modal-card{position:relative;background:#101218;border:1px solid rgba(109,201,217,0.25);border-radius:12px;padding:28px 32px;width:min(420px,92vw);box-shadow:0 12px 60px rgba(0,0,0,0.55);}
+#vh-call-modal .vh-modal-backdrop{position:fixed;inset:0;background:rgba(10,12,18,0.78);backdrop-filter:blur(8px);}
+#vh-call-modal .vh-modal-card{position:relative;margin:auto 0;flex-shrink:0;background:#101218;border:1px solid rgba(109,201,217,0.25);border-radius:12px;padding:28px 32px;width:min(420px,92vw);box-shadow:0 12px 60px rgba(0,0,0,0.55);}
 #vh-call-modal h2{margin:0 0 6px;font-size:1.05rem;color:var(--vh-fg-0,#f4f4f7);letter-spacing:0.02em;font-weight:500;}
 #vh-call-modal .vh-modal-sub{margin:0 0 18px;font-size:0.78rem;color:var(--vh-fg-3,#888);letter-spacing:0.01em;line-height:1.4;}
 #vh-call-modal .vh-modal-opt{display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;padding:14px 16px;margin-bottom:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.10);border-radius:8px;cursor:pointer;text-align:left;color:inherit;font:inherit;transition:border-color .15s,background .15s;}
@@ -1026,7 +1029,7 @@ body.theme-light #label .by, body.theme-light #label .tld { color: #5c5c66; }
 #vh-call-modal .vh-modal-opt-title{font-size:0.95rem;color:var(--vh-fg-0,#f4f4f7);font-weight:500;letter-spacing:0.01em;}
 #vh-call-modal .vh-modal-opt-alt .vh-modal-opt-title{color:var(--vh-teal,#6dc9d9);}
 #vh-call-modal .vh-modal-opt-meta{font-size:0.72rem;color:var(--vh-fg-3,#888);letter-spacing:0.01em;line-height:1.4;}
-#vh-call-modal .vh-modal-close{position:absolute;top:8px;right:10px;background:transparent;border:none;color:var(--vh-fg-3,#888);font-size:1.4rem;line-height:1;padding:4px 8px;cursor:pointer;border-radius:4px;z-index:2;}
+#vh-call-modal .vh-modal-close{position:sticky;float:right;margin:-20px -22px 0 4px;top:0;background:transparent;border:none;color:var(--vh-fg-3,#888);font-size:1.4rem;line-height:1;padding:4px 8px;cursor:pointer;border-radius:4px;z-index:2;}
 #vh-call-modal .vh-modal-close:hover{color:var(--vh-fg-0,#f4f4f7);background:rgba(255,255,255,0.05);}
 #vh-call-modal .vh-field{display:block;margin-bottom:12px;}
 #vh-call-modal .vh-field>span{display:block;font-size:0.7rem;color:var(--vh-fg-3,#888);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;}
@@ -1066,7 +1069,7 @@ body.theme-light #label .by, body.theme-light #label .tld { color: #5c5c66; }
    overrides background+padding below — don't break that. */
 #vh-transcript-wrap{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);width:min(560px,82vw);z-index:15;
   display:flex;flex-direction:column;box-sizing:border-box;
-  height:var(--vh-wrap-h,auto);max-height:calc(100vh - 140px);
+  height:var(--vh-wrap-h,auto);max-height:calc(100vh - 140px);max-height:calc(100dvh - 140px - env(safe-area-inset-top,0px));
   background:var(--vh-btn-bg);
   border:1px solid var(--vh-btn-border);
   border-radius:12px;
@@ -1092,7 +1095,7 @@ body.vh-transcript-min #vh-transcript-wrap{height:auto;}
   display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;align-items:center;}
 .vh-invite-hint .hd{grid-column:1;color:#6dc9d9;font-size:11px;letter-spacing:0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 body.theme-light .vh-invite-hint .hd{color:#1f7f90;}
-.vh-invite-hint .url{grid-column:1 / -1;margin:4px 0 0;padding:3px 8px;background:var(--vh-btn-bg);border:1px solid var(--vh-btn-border);border-radius:4px;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;line-height:1.45;color:var(--vh-btn-fg);white-space:pre;overflow:hidden;text-overflow:ellipsis;user-select:all;}
+.vh-invite-hint .url{grid-column:1 / -1;margin:4px 0 0;padding:3px 8px;background:var(--vh-btn-bg);border:1px solid var(--vh-btn-border);border-radius:4px;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;line-height:1.45;color:var(--vh-btn-fg);white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;max-height:12em;overflow-y:auto;-webkit-user-select:text;user-select:text;-webkit-touch-callout:default;}
 .vh-invite-hint ol{margin:0;padding-left:20px;font-size:12px;line-height:1.6;}
 .vh-invite-hint li{margin:2px 0;}
 .vh-invite-hint code{background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:11px;}
@@ -1101,7 +1104,19 @@ body.theme-light .vh-invite-hint .hd{color:#1f7f90;}
 .vh-dismiss-btn{background:var(--vh-btn-bg);border:1px solid var(--vh-btn-border);color:var(--vh-btn-fg);backdrop-filter:var(--vh-btn-blur);-webkit-backdrop-filter:var(--vh-btn-blur);}
 .vh-dismiss-btn:hover{background:var(--vh-btn-bg-hover);border-color:var(--vh-btn-border-hov);color:var(--vh-btn-fg-hov);}
 .vh-invite-actions{grid-column:2;grid-row:1;display:flex;gap:8px;}
-.vh-invite-actions .vh-copy-btn{margin-top:0;padding:2px 10px;}
+.vh-invite-actions .vh-copy-btn{margin-top:0;padding:2px 10px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;}
+.vh-copy-btn svg{width:12px;height:12px;flex:0 0 12px;}
+.vh-copy-btn.copied{color:#000;background:#6dc9d9;border-color:#6dc9d9;}
+body.theme-light .vh-copy-btn.copied{color:#fff;background:#1f7f90;border-color:#1f7f90;}
+.vh-invite-hint .vh-invite-manual{grid-column:1 / -1;margin-top:3px;font-size:10.5px;color:#6dc9d9;}
+body.theme-light .vh-invite-hint .vh-invite-manual{color:#1f7f90;}
+/* Handy: Knöpfe unter den Text, volle Breite, große Tippfläche */
+@media (max-width:640px){
+  .vh-invite-hint .hd{white-space:normal;}
+  .vh-invite-hint .vh-invite-actions{grid-column:1 / -1;grid-row:auto;margin-top:6px;}
+  .vh-invite-hint .vh-invite-actions .vh-copy-btn{flex:1 1 0;justify-content:center;min-height:36px;font-size:12px;padding:6px 10px;}
+  .vh-invite-hint .vh-invite-actions .vh-copy-btn svg{width:14px;height:14px;flex-basis:14px;}
+}
 .vh-invite-status{grid-column:1 / -1;margin-top:3px;font-size:10.5px;color:var(--vh-btn-fg);opacity:0.6;letter-spacing:0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .vh-invite-status.ok{color:#9ddb6d;opacity:1;}
 .vh-invite-status.warn{color:#f2a65a;opacity:1;white-space:normal;}
@@ -1218,6 +1233,10 @@ body.theme-light .vh-linkbtn{color:#1f7f90;}
    die Call-Leiste zu schieben oder das Transkript zu zerquetschen (Review-Altlast 320 px). */
 body.vh-wrap-grow:not(.vh-transcript-expanded):not(.vh-transcript-min) #vh-transcript-wrap{height:auto;min-height:var(--vh-wrap-h,140px);}
 body.vh-wrap-grow:not(.vh-transcript-expanded):not(.vh-transcript-min) #vh-transcript{min-height:56px;}
+/* Einladung mit Knöpfen sichtbar: Panel wächst ebenso nach oben, damit Text und
+   Kopieren/Teilen nicht unter die Call-Leiste rutschen (320 px). */
+body:not(.vh-transcript-expanded):not(.vh-transcript-min) #vh-transcript-wrap:not(.vh-agent-in):has(#vh-invite-banner:not([hidden]) .vh-invite-actions){height:auto;min-height:var(--vh-wrap-h,140px);}
+body:not(.vh-transcript-expanded):not(.vh-transcript-min) #vh-transcript-wrap:not(.vh-agent-in):has(#vh-invite-banner:not([hidden]) .vh-invite-actions) #vh-transcript{min-height:40px;}
 /* Sehr schmal: "Anmelden" steht im Aufladen-Panel, die Gratis-Zeile bleibt einzeilig. */
 @media (max-width:360px){#vh-mode-info .vh-login-wrap{display:none;}}
 #vh-tu-login{align-self:flex-start;text-align:left;font-size:10px;}
@@ -1296,6 +1315,7 @@ body.theme-light #vh-low-bal{color:#b8641a;border-color:rgba(184,100,26,0.5);}
 @media (max-width:640px){
   #vh-transcript{font-size:10px;padding:6px 10px;}
   #vh-call-modal .vh-modal-card{padding:22px 20px;}
+  #vh-call-modal .vh-modal-close{margin:-14px -10px 0 4px;}
 }
 </style>
 <style>
@@ -1472,16 +1492,21 @@ body.theme-light #vh-acct-pop { background: rgba(250,250,252,0.94); box-shadow: 
 #vh-acct-pop #vh-acct-topup { border-color: #6dc9d9; color: #6dc9d9; }
 body.theme-light #vh-acct-pop #vh-acct-topup { border-color: #1f7f90; color: #1f7f90; }
 /* Anmelde-Dialog vor "Style speichern" (Oliver 02.10.): Anbieter wie /login. */
-#vh-auth-modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 16px; }
+#vh-auth-modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: flex-start; justify-content: center; padding: 16px; box-sizing: border-box;
+  overflow-y: auto; overscroll-behavior: contain; top: var(--vh-vv-top, 0px); bottom: auto; height: 100vh; height: var(--vh-vv-h, 100dvh);
+  padding-top: max(16px, env(safe-area-inset-top, 0px)); padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
 #vh-auth-modal[hidden] { display: none; }
 #vh-auth-modal .vh-auth-bg { position: absolute; inset: 0; background: rgba(10,12,18,0.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 #vh-auth-modal .vh-auth-card { position: relative; width: min(360px, 100%); box-sizing: border-box; padding: 26px 20px 20px; border-radius: 12px;
   background: #101218; border: 1px solid var(--vh-btn-border); box-shadow: 0 12px 60px rgba(0,0,0,0.55);
   font-family: var(--vh-mono); color: var(--vh-fg-0, #f4f4f7); display: flex; flex-direction: column; gap: 10px; }
+/* Handy: Karte oben nie abgeschnitten (margin:auto statt Zentrierung), Schließen-x klebt oben */
+#vh-auth-modal .vh-auth-bg { position: fixed; }
+#vh-auth-modal .vh-auth-card { margin: auto 0; flex-shrink: 0; }
 body.theme-light #vh-auth-modal .vh-auth-bg { background: rgba(244,244,247,0.72); }
 body.theme-light #vh-auth-modal .vh-auth-card { background: #fafafc; box-shadow: 0 12px 48px rgba(0,0,0,0.14); color: #0b0b0f; }
 #vh-auth-modal h2 { margin: 0 22px 6px 0; font-size: 13px; font-weight: 500; line-height: 1.5; letter-spacing: .02em; }
-#vh-auth-modal .vh-auth-x { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; padding: 0; border-radius: 8px; border: 0;
+#vh-auth-modal .vh-auth-x { position: sticky; align-self: flex-end; top: 0; margin: -18px -12px -22px 0; z-index: 1; width: 30px; height: 30px; padding: 0; border-radius: 8px; border: 0;
   background: transparent; color: inherit; opacity: .6; font-size: 20px; line-height: 1; cursor: pointer; }
 #vh-auth-modal .vh-auth-x:hover { opacity: 1; background: var(--vh-btn-bg-hover); }
 #vh-auth-modal .vh-auth-btn { appearance: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; row-gap: 2px;
@@ -5346,6 +5371,87 @@ function vhEndCall(fromEvent) {
 }
 
 
+// ── Einladung kopieren/teilen (Oliver 02.10., iPhone: Link war nicht kopierbar) ──
+// Kopieren: Clipboard-API direkt im Klick, sonst verstecktes Textfeld plus
+// execCommand('copy'), zuletzt Text markieren und "Lang drücken" anzeigen.
+// Teilen nur, wenn navigator.share existiert (Handy); Abbruch bleibt still.
+const VH_ICO_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const VH_ICO_SHARE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 15V3"/><path d="M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+async function vhCopyText(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); return true; }
+  } catch (_) {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;font-size:16px;';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand && document.execCommand('copy');
+    ta.remove();
+    if (ok) return true;
+  } catch (_) {}
+  return false;
+}
+function vhSelectNode(el) {
+  try { const r = document.createRange(); r.selectNodeContents(el); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); } catch (_) {}
+}
+// Knopfreihe .vh-invite-actions mit Kopieren (+ Teilen). getText liefert genau
+// den angezeigten Einladungstext; selEl ist das sichtbare Textfeld.
+function vhInviteActions(getText, selEl, hintHost) {
+  const row = document.createElement('div');
+  row.className = 'vh-invite-actions';
+  const mk = (cls, ico, label) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'vh-copy-btn ' + cls;
+    b.innerHTML = ico + '<span></span>';
+    b.lastChild.textContent = label;
+    return b;
+  };
+  const copy = mk('vh-act-copy', VH_ICO_COPY, vhT('invite.copy'));
+  let tm = null;
+  copy.addEventListener('click', async () => {
+    const ok = await vhCopyText(getText());
+    clearTimeout(tm);
+    const old = hintHost && hintHost.querySelector('.vh-invite-manual');
+    if (old) old.remove();
+    if (ok) {
+      copy.classList.add('copied'); copy.lastChild.textContent = vhT('invite.copied');
+      tm = setTimeout(() => { copy.classList.remove('copied'); copy.lastChild.textContent = vhT('invite.copy'); }, 2000);
+    } else {
+      if (selEl) vhSelectNode(selEl);
+      if (hintHost) {
+        const m = document.createElement('div');
+        m.className = 'vh-invite-manual'; m.setAttribute('role', 'status');
+        m.textContent = vhT('invite.manual');
+        hintHost.appendChild(m);
+      }
+    }
+  });
+  row.appendChild(copy);
+  if (typeof navigator.share === 'function') {
+    const share = mk('vh-act-share', VH_ICO_SHARE, vhT('invite.share'));
+    share.addEventListener('click', async () => {
+      try { await navigator.share({ title: vhT('invite.shareTitle'), text: getText() }); }
+      catch (_) {}  // Abbruch (AbortError) oder Ablehnung: still
+    });
+    row.appendChild(share);
+  }
+  return row;
+}
+// iOS: sichtbarer Bereich (Safari-Leiste, Tastatur) als CSS-Variablen, damit
+// Dialoge oben nie herausgeschoben werden.
+(() => {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const set = () => {
+    const st = document.documentElement.style;
+    st.setProperty('--vh-vv-h', Math.round(vv.height) + 'px');
+    st.setProperty('--vh-vv-top', Math.round(vv.offsetTop) + 'px');
+  };
+  vv.addEventListener('resize', set); vv.addEventListener('scroll', set); set();
+})();
+
 // ── Modal: Call-Mode Choice ────────────────────────────────────────────────
 // btn-call click no longer connects directly — user picks "Talk to Model"
 // (use selected lk-model + lk-voice, agent auto-dispatched) or "Agent
@@ -7216,21 +7322,12 @@ async function vhMusicOffForCall() {
             '<div class="vh-invite-hint">' +
               '<div class="hd">' + (clipOk ? vhT('invite.clipOk') : vhT('invite.clipFail')) + '</div>' +
               '<pre class="url" id="vh-invite-msg"></pre>' +
-              '<div class="vh-invite-actions">' +
-                '<button type="button" class="vh-copy-btn" id="vh-copy-invite">' + vhT('invite.copy') + '</button>' +
-              '</div>' +
               '<div class="vh-invite-status" id="vh-invite-status">' + vhT('invite.wait') + '</div>' +
             '</div>';
           const msgEl = document.getElementById('vh-invite-msg');
           if (msgEl) msgEl.textContent = inviteMsg;
-          const btnCopy = document.getElementById('vh-copy-invite');
-          if (btnCopy) btnCopy.addEventListener('click', async () => {
-            try {
-              await navigator.clipboard.writeText(inviteMsg);
-              btnCopy.textContent = vhT('invite.copied');
-              setTimeout(() => { btnCopy.textContent = vhT('invite.copy'); }, 1500);
-            } catch (_) {}
-          });
+          const hint = banner.querySelector('.vh-invite-hint');
+          if (hint) hint.insertBefore(vhInviteActions(() => inviteMsg, msgEl, hint), hint.querySelector('.vh-invite-status'));
         }
       } catch (_) {}
       const { Room, RoomEvent, Track } = window.LivekitClient;
