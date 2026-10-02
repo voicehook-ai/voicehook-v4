@@ -32,7 +32,7 @@ H = {"x-anon-id": ANON, "x-forwarded-for": "8.8.8.8"}
 def _r4_env(monkeypatch):
     import agent.server as srv
     monkeypatch.setattr(srv, "_HOST_LIMIT", 10_000)
-    for k in ("RESEND_API_KEY", "MAIL_FROM", "VH_LOW_BALANCE_WARN_SECONDS", "VH_FREE_TICK_SECONDS"):
+    for k in ("RESEND_API_KEY", "RESEND_SENDING_API_KEY", "MAIL_FROM", "VH_LOW_BALANCE_WARN_SECONDS", "VH_FREE_TICK_SECONDS"):
         monkeypatch.delenv(k, raising=False)
     billing_routes._LOGIN_HITS.clear()
 

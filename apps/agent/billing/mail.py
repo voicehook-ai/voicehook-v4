@@ -1,10 +1,14 @@
 """Mailversand für den Magic-Link-Login über die Resend-API (ohne SDK).
 
-POST https://api.resend.com/emails, Bearer RESEND_API_KEY, JSON {from, to, subject,
+POST https://api.resend.com/emails, Bearer <Key>, JSON {from, to, subject,
 html, text} (https://resend.com/docs/api-reference/emails/send-email).
 
-Env: RESEND_API_KEY (ohne Key ist der Login aus, /api/login -> 503),
-     MAIL_FROM (Default "voicehook <login@voicehook.ai>").
+Env: RESEND_SENDING_API_KEY = Resend-Key mit Recht "Sending access" (nur Senden).
+     Auf den Server gehört NUR dieser Key, nie der Full-Access-Key fürs Domain-Management.
+     RESEND_API_KEY wird als Fallback weiter gelesen (bestehende .env), sollte aber
+     ebenfalls nur ein Sending-Key sein. Ohne Key ist der Login aus (/api/login -> 503).
+     MAIL_FROM (Default "voicehook <login@voicehook.ai>", Domain in Resend verifiziert).
+Die Empfängeradresse landet nie im Log und nie in einer MailError-Meldung.
 """
 
 from __future__ import annotations
@@ -17,14 +21,24 @@ import urllib.request
 
 RESEND_API = "https://api.resend.com/emails"
 DEFAULT_FROM = "voicehook <login@voicehook.ai>"
+# Resend steht hinter Cloudflare, das den urllib-Default-UA mit 403 "error code: 1010"
+# abweist (gemessen 02.10.). Ohne eigenen User-Agent geht keine Mail raus.
+USER_AGENT = "voicehook-agent/1.0 (+https://voicehook.ai)"
 
 
 class MailError(RuntimeError):
     pass
 
 
+KEY_ENVS = ("RESEND_SENDING_API_KEY", "RESEND_API_KEY")
+
+
 def api_key() -> str:
-    return os.environ.get("RESEND_API_KEY", "").strip()
+    for name in KEY_ENVS:
+        v = os.environ.get(name, "").strip()
+        if v:
+            return v
+    return ""
 
 
 def configured() -> bool:
@@ -59,13 +73,17 @@ def send(to: str, message: dict, *, timeout: float = 10.0) -> None:
     """Mail verschicken; MailError bei fehlendem Key oder Fehler des Anbieters."""
     key = api_key()
     if not key:
-        raise MailError("RESEND_API_KEY not configured")
+        raise MailError("RESEND_SENDING_API_KEY not configured")
     payload = {"from": sender(), "to": [to], **message}
     req = urllib.request.Request(
         RESEND_API,
         method="POST",
         data=json.dumps(payload).encode(),
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
+        },
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
