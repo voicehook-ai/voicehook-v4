@@ -554,6 +554,8 @@ def build_relay_handlers(
             if rest:
                 queue.appendleft(nxt)
                 _say_status(item["seq"], "requeued", len(spoken))
+            else:  # alles war draußen (Abbruch genau am Ende): gilt als gesprochen
+                _say_status(item["seq"], "spoken", len(spoken))
         else:
             _say_status(item["seq"], "spoken", len(spoken) or len(item["text"]))
         _pump()

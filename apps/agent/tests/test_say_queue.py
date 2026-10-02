@@ -150,6 +150,19 @@ async def test_user_turn_mid_say_rest_is_spoken_again():
 
 
 @pytest.mark.asyncio
+async def test_interrupted_after_last_word_counts_as_spoken():
+    # E2E fragments_call 02.10.: der letzte Rest lief zu Ende, livekit meldete trotzdem
+    # interrupted (Nutzer setzte genau am Ende ein). Ohne Rest kein requeued, also muss
+    # spoken kommen, sonst bleibt die say für den Operator ewig offen.
+    session, _agent, room, h = _build()
+    await h.on_say(_pkt({"text": LONG, "_seq": 3}))
+    session.handles[0].finish(LONG, interrupted=True)
+    await _drain()
+    assert _status(room) == [(3, "queued"), (3, "interrupted"), (3, "spoken")]
+    assert session.said == [LONG]
+
+
+@pytest.mark.asyncio
 async def test_short_rest_restarts_the_whole_sentence():
     session, _agent, _room_, h = _build()
     await h.on_say(_pkt({"text": LONG, "seq": 1}))

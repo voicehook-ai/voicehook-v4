@@ -178,7 +178,7 @@ One packet per state change of a say, keyed by its `seq` (the CLI's `_seq`, the 
 | state | meaning |
 |---|---|
 | `queued` | accepted, waiting for silence (or held for your `overwrite`) |
-| `spoken` | played to the end; `spoken_chars` = length of the spoken text |
+| `spoken` | played to the end; `spoken_chars` = length of the spoken text (also right after `interrupted` when the cut came after the last word) |
 | `interrupted` | the user cut it off after `spoken_chars` characters (or `operator.interrupt`) |
 | `requeued` | the unspoken rest is queued again and will be spoken (follows `interrupted`) |
 | `replaced` | dropped on purpose: an `overwrite`, or a `revise` that sent you `operator.revise` |
