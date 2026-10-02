@@ -7,8 +7,10 @@ Szenarien (je frische Seite, web/voice.html lokal ausgeliefert, /api/* gemockt,
 livekit-client durch einen Fake ersetzt):
   free_limit   Worker sendet call_end {reason: free_limit}, verlässt den Raum
                -> UI "vor dem Call" in <= 3 s, Meldung "Gratis heute aufgebraucht", Mikro aus
-  agent_gone   voice-ai verlässt den Raum ohne Topic, kommt nicht wieder -> UI beendet (Grace 8 s)
-  reconnect    voice-ai geht kurz weg und ist nach 2 s wieder da -> Call läuft weiter
+  agent_gone   voice-ai verlässt den Raum ohne Topic, kommt nicht wieder -> sofort Hinweis
+               "Delta verbindet neu …", Call läuft weiter, Ende erst nach 30 s mit "Call beendet"
+  reconnect    voice-ai geht weg und ist nach 10 s wieder da (Re-Dispatch, #128) -> Hinweis
+               verschwindet, Call läuft auch über die 30-s-Marke hinaus weiter
   room_deleted Raum gelöscht (Disconnected) -> UI beendet, "Call beendet"
   free_state   Topic free.state im Call -> Gratis-Zeile zeigt den Worker-Wert
 Jeweils 0 Console-Errors. Lauf: python3 tests/e2e/call_end_ui.py   (Exit 0 = grün)
@@ -75,6 +77,8 @@ class _H(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.split("?")[0] in ("/", "/r/calm-ember-tide-4PFD"):
             self.path = "/voice.html"
+        elif self.path.split("?")[0] == "/aufladen":  # Caddy-Rewrite (Overlay-iframe aus #127)
+            self.path = "/aufladen.html"
         return super().do_GET()
 
 
@@ -167,22 +171,30 @@ def run() -> int:
         def _agent_gone(page):
             _start_call(page, base)
             page.evaluate("() => window.lkRoom._agentLeave('agent-AJ_test1')")
-            time.sleep(2.0)
-            assert not _ended(page), "zu früh beendet (Grace)"
-            dt = _wait_ended(page, 9.0)
+            time.sleep(1.0)
+            hint = _err_text(page)
+            assert "Delta verbindet neu" in hint, hint
+            time.sleep(26.0)  # 27 s nach Weggang: noch im Call (Abstimmung #126/#128: 30 s)
+            assert not _ended(page), "zu früh beendet (30-s-Karenz)"
+            assert "Delta verbindet neu" in _err_text(page), _err_text(page)
+            dt = _wait_ended(page, 6.0)
             txt = _err_text(page)
             assert "Call beendet" in txt, txt
-            return f"beendet {dt + 2:.1f}s nach Agent-Weggang, Meldung: {txt.strip()[:40]}"
+            return f"Hinweis sofort, beendet {dt + 27:.1f}s nach Agent-Weggang, Meldung: {txt.strip()[:40]}"
 
         @scenario("reconnect")
         def _reconnect(page):
             _start_call(page, base)
             page.evaluate("() => window.lkRoom._agentLeave('agent-AJ_test1')")
-            time.sleep(2.0)
+            time.sleep(1.0)
+            assert "Delta verbindet neu" in _err_text(page), _err_text(page)
+            time.sleep(9.0)
             page.evaluate("() => window.lkRoom._agentJoin('agent-AJ_test2')")
-            time.sleep(8.0)
-            assert not _ended(page), "Call wurde trotz Agent-Reconnect beendet"
-            return "Call läuft nach kurzem Agent-Reconnect weiter"
+            time.sleep(0.5)
+            assert "Delta verbindet neu" not in _err_text(page), "Hinweis bleibt nach Rückkehr stehen"
+            time.sleep(22.0)  # über die 30-s-Marke seit Weggang hinaus
+            assert not _ended(page), "Call wurde trotz Agent-Rückkehr beendet"
+            return "Hinweis weg nach Rückkehr (10 s), Call läuft nach 32 s weiter"
 
         @scenario("room_deleted")
         def _room_deleted(page):

@@ -162,6 +162,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'low.notice': 'Noch etwa {n} min, dann endet der Call',
       'pay.ended': 'Call beendet: Gratis-Verbrauch und Guthaben aufgebraucht',
       'call.endedSrv': 'Call beendet',
+      'call.agentReconnect': 'Delta verbindet neu …',
       'price.approx': 'ca. {p} pro Stunde inkl. MwSt',
       'adv.live1': 'natürlichere Stimme', 'adv.live2': 'schneller', 'adv.live3': 'hört den Tonfall',
       'adv.normal1': 'günstiger', 'adv.normal2': 'kostet nichts bei Stille',
@@ -297,6 +298,7 @@ window.VH_BUILD = { sha: "2950fc6", ts: "2026-05-19 21:16" };
       'low.notice': 'About {n} min left, then the call ends',
       'pay.ended': 'Call ended: free allowance and credit used up',
       'call.endedSrv': 'Call ended',
+      'call.agentReconnect': 'Delta is reconnecting …',
       'price.approx': 'approx. {p} per hour incl. VAT',
       'adv.live1': 'more natural voice', 'adv.live2': 'faster', 'adv.live3': 'hears your tone of voice',
       'adv.normal1': 'cheaper', 'adv.normal2': 'costs nothing during silence',
@@ -4990,7 +4992,6 @@ function vhModeInfoRender() {
         wrap.appendChild(lg);
         freeEl.appendChild(wrap);
       }
-      const tl = document.getElementById('vh-tu-login'); if (tl) tl.hidden = vhLoggedIn();
       showFree = true;
     }
     freeEl.hidden = !showFree;
@@ -5440,10 +5441,24 @@ async function vhStartCall() {
 // Server beendet den Call (Oliver 02.10.: "jetzt bin ich alleine da und warte. Das
 // Frontend muss mich dann auch rauswerfen"). Signale: Topic call_end vom Worker (Grund),
 // Raum gelöscht (Disconnected), oder voice-ai weg und nicht binnen VH_AGENT_GONE_MS zurück.
-const VH_AGENT_GONE_MS = 8000;    // kurzer Agent-Reconnect bleibt unbemerkt
+// Abstimmung #126/#128 (Oliver 02.10.): Agent-Verlust beendet nicht sofort; der Wächter
+// (redispatch.py) holt Delta nach einem Neustart zurück. Solange zeigt das Frontend
+// "Delta verbindet neu …" und beendet erst nach 30 s ohne Rückkehr mit "Call beendet".
+// call_end (free_limit usw.) und Raum gelöscht beenden weiterhin sofort.
+const VH_AGENT_GONE_MS = 30000;   // Agent weg: so lange auf Rückkehr (Re-Dispatch) warten
 const VH_AGENT_NEVER_MS = 30000;  // nach Verbindungsaufbau: Agent kommt gar nicht
 let vhAgentGoneTimer = null;
-function vhAgentWatchClear() { if (vhAgentGoneTimer) { clearTimeout(vhAgentGoneTimer); vhAgentGoneTimer = null; } }
+let vhAgentReconnHint = false;    // "Delta verbindet neu …" steht gerade im Banner
+function vhAgentReconnHintSet(on) {
+  if (on === vhAgentReconnHint) return;
+  vhAgentReconnHint = on;
+  if (err.dataset.sticky) return;  // eine Endmeldung hat Vorrang
+  vhLiveErrShow(on ? vhT('call.agentReconnect') : '');
+}
+function vhAgentWatchClear() {
+  if (vhAgentGoneTimer) { clearTimeout(vhAgentGoneTimer); vhAgentGoneTimer = null; }
+  vhAgentReconnHintSet(false);
+}
 function vhAgentPresent(room) {
   try { for (const p of room.remoteParticipants.values()) if (vhPresenceSlotFor(p.identity) === 'voice-ai') return true; } catch (_) {}
   return false;
@@ -6224,8 +6239,12 @@ function vhWireRoomEvents(room, RoomEvent, Track) {
   room.on(RoomEvent.ParticipantDisconnected, (p) => {
     vhTrLog('system', vhT('sys.peerLeft', { id: p.identity }));
     const slot = vhPresenceSlotForP(p);
-    // voice-ai weg: kommt er nicht binnen VH_AGENT_GONE_MS zurück, Call beenden.
-    if (vhPresenceSlotFor(p.identity) === 'voice-ai' && !vhAgentPresent(room)) vhAgentWatchArm(room, VH_AGENT_GONE_MS);
+    // voice-ai weg: Hinweis "Delta verbindet neu …"; kommt er nicht binnen
+    // VH_AGENT_GONE_MS zurück, Call beenden ("Call beendet").
+    if (vhPresenceSlotFor(p.identity) === 'voice-ai' && !vhAgentPresent(room) && lkRoom === room) {
+      vhAgentWatchArm(room, VH_AGENT_GONE_MS);
+      vhAgentReconnHintSet(true);
+    }
     // Issue #3: pass identity so vhPresenceSet can ignore stale events for an
     // identity that has already been replaced by a fresh peer in the same slot.
     if (slot) vhPresenceSet(slot, 'out', p.identity);
@@ -7695,7 +7714,6 @@ html.vh-phone #vh-transcript-wrap .vh-linkbtn,html.vh-phone #vh-mode-info a{disp
 html.vh-phone #vh-invite-banner{order:40;max-width:none;background:var(--vhm-card);border:1px solid var(--vhm-line);border-radius:16px;padding:10px 12px;box-sizing:border-box;}
 html.vh-phone #vh-invite-banner[hidden],html.vh-phone #vh-transcript-wrap.vh-agent-in #vh-invite-banner{display:none !important;}
 html.vh-phone .vh-invite-hint .vh-invite-actions .vh-copy-btn{min-height:44px;}
-html.vh-phone #vh-topup{order:45;}
 html.vh-phone #vh-low-bal{order:60;display:flex;align-items:center;justify-content:center;gap:4px;min-height:44px;padding:0 8px;border-radius:14px;font-size:12px;
   background:rgba(242,166,90,0.10);border-color:rgba(242,166,90,0.35);box-sizing:border-box;}
 html.vh-phone #vh-low-bal[hidden]{display:none !important;}
@@ -7928,7 +7946,7 @@ html.vh-phone body > canvas.vhm-notr{transition:none;}
     // Beobachter: Zustände der bestehenden Elemente spiegeln
     var mo = new MutationObserver(schedule);
     mo.observe(body, { attributes: true, attributeFilter: ['class'] });
-    ['vh-presence', 'vh-bottom-bar', 'tagline', 'vh-design-panel', 'vh-low-bal', 'vh-invite-banner', 'vh-topup', 'vh-mode-info', 'vh-music-src', 'btn-vh-account', 'vh-acct-pop', 'vh-invite-btn', 'vh-info-pop'].forEach(function (id) {
+    ['vh-presence', 'vh-bottom-bar', 'tagline', 'vh-design-panel', 'vh-low-bal', 'vh-invite-banner', 'vh-mode-info', 'vh-music-src', 'btn-vh-account', 'vh-acct-pop', 'vh-invite-btn', 'vh-info-pop'].forEach(function (id) {
       var el = $(id); if (el) mo.observe(el, { attributes: true, subtree: true, childList: true, attributeFilter: ['class', 'hidden', 'style'] });
     });
     if (tr) new MutationObserver(function () { schedule(); if (S.open || !tr.matches(':hover')) tr.scrollTop = tr.scrollHeight; }).observe(tr, { childList: true });
