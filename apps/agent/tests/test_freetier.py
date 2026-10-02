@@ -33,8 +33,7 @@ def _env(monkeypatch):
     monkeypatch.setenv("LIVEKIT_API_SECRET", "secret_test_value")
     monkeypatch.setenv("LIVEKIT_URL", "wss://rtc.test")
     monkeypatch.setenv("GOOGLE_API_KEY", "test")
-    for k in ("VH_FREE_EUR_PER_DAY",
-              "VOICEHOOK_REQUIRE_CREDITS_NORMAL", "VOICEHOOK_REQUIRE_CREDITS_LIVE",
+    for k in ("VOICEHOOK_REQUIRE_CREDITS_NORMAL", "VOICEHOOK_REQUIRE_CREDITS_LIVE",
               "VOICEHOOK_LIVE_PUBLIC", "VH_FREE_TICK_SECONDS"):
         monkeypatch.delenv(k, raising=False)
     import agent.server as srv
@@ -68,8 +67,10 @@ def _expected_ueur(usd, mode):
 
 
 # ----- Konfiguration ------------------------------------------------------------
-def test_default_one_euro_per_day():
-    assert freetier.limit_eur() == 1.0 and freetier.limit_ueur() == 1_000_000
+def test_default_030_euro_per_day(monkeypatch):
+    """Oliver 02.10.: 0,30 EUR Kundenpreis pro Tag (conftest setzt für Alt-Tests 1.0)."""
+    monkeypatch.delenv("VH_FREE_EUR_PER_DAY", raising=False)
+    assert freetier.limit_eur() == 0.30 and freetier.limit_ueur() == 300_000
     assert freetier.enabled("normal") and freetier.enabled("live")
 
 

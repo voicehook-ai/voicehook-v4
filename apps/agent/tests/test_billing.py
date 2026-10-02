@@ -31,8 +31,7 @@ def _env(monkeypatch):
     for k in ("VOICEHOOK_REQUIRE_CREDITS_NORMAL", "VOICEHOOK_REQUIRE_CREDITS_LIVE",
               "VOICEHOOK_PRICE_FACTOR_NORMAL", "VOICEHOOK_PRICE_FACTOR_LIVE",
               "VOICEHOOK_VAT_RATE", "VOICEHOOK_USD_EUR", "VOICEHOOK_TOPUP_AMOUNTS_EUR",
-              "VOICEHOOK_TOPUP_MIN_EUR", "VOICEHOOK_TOPUP_MAX_EUR",
-              "VH_FREE_EUR_PER_DAY"):
+              "VOICEHOOK_TOPUP_MIN_EUR", "VOICEHOOK_TOPUP_MAX_EUR"):
         monkeypatch.delenv(k, raising=False)
     # Kein Test darf LiveKit erreichen
     import agent.server as srv
@@ -204,13 +203,33 @@ def test_checkout_builds_stripe_session(client, monkeypatch):
     assert "customer_email" not in seen      # E-Mail kommt aus Stripe Checkout
 
 
-def test_checkout_amount_bounds_and_minimum_10(client, monkeypatch):
-    monkeypatch.setattr(stripe_api, "create_checkout_session", lambda p, **_: {"id": "x", "url": "u"})
-    assert client.post("/api/checkout", json={"amount_eur": 9}).status_code == 400
+def test_checkout_amount_bounds_and_minimum_5(client, monkeypatch):
+    """Oliver 02.10.: Mindestaufladung 5 EUR (vorher 10)."""
+    seen = []
+    monkeypatch.setattr(stripe_api, "create_checkout_session",
+                        lambda p, **_: seen.append(p) or {"id": "x", "url": "u"})
+    assert client.post("/api/checkout", json={"amount_eur": 4.99}).status_code == 400
+    assert client.post("/api/checkout", json={"amount_eur": 4}).status_code == 400
+    assert client.post("/api/checkout", json={"amount_eur": 7.5}).status_code == 400   # nur ganze Euro
     assert client.post("/api/checkout", json={"amount_eur": 201}).status_code == 400
-    assert client.post("/api/checkout", json={"amount_eur": 10}).status_code == 200
-    monkeypatch.setenv("VOICEHOOK_TOPUP_MIN_EUR", "5")   # unter 10 nie erlaubt
-    assert pricing.min_topup_eur() == 10
+    assert client.post("/api/checkout", json={"amount_eur": 5}).status_code == 200
+    assert seen[-1]["line_items"][0]["price_data"]["unit_amount"] == 500
+    assert seen[-1]["metadata"]["vh_amount_eur"] == "5"
+    assert client.post("/api/checkout", json={"amount_eur": 10.0}).status_code == 200
+    assert seen[-1]["line_items"][0]["price_data"]["unit_amount"] == 1000
+    assert pricing.min_topup_eur() == 5
+    assert client.get("/api/billing/config").json()["min_eur"] == 5
+
+
+def test_topup_min_env_only_raises(client, monkeypatch):
+    monkeypatch.setattr(stripe_api, "create_checkout_session", lambda p, **_: {"id": "x", "url": "u"})
+    monkeypatch.setenv("VOICEHOOK_TOPUP_MIN_EUR", "7")
+    assert pricing.min_topup_eur() == 7
+    assert client.post("/api/checkout", json={"amount_eur": 5}).status_code == 400
+    assert client.post("/api/checkout", json={"amount_eur": 7}).status_code == 200
+    monkeypatch.setenv("VOICEHOOK_TOPUP_MIN_EUR", "3")   # unter 5 nie erlaubt
+    assert pricing.min_topup_eur() == 5
+    assert client.post("/api/checkout", json={"amount_eur": 4}).status_code == 400
 
 
 def test_checkout_503_without_stripe_key(client, monkeypatch):
@@ -225,8 +244,8 @@ def test_checkout_form_encoding_matches_stripe_nesting():
 
 
 def test_config_amounts_from_env(client, monkeypatch):
-    assert client.get("/api/billing/config").json()["amounts_eur"] == [10, 20, 50]
-    monkeypatch.setenv("VOICEHOOK_TOPUP_AMOUNTS_EUR", "5,25,100")
+    assert client.get("/api/billing/config").json()["amounts_eur"] == [5, 10, 20, 50]
+    monkeypatch.setenv("VOICEHOOK_TOPUP_AMOUNTS_EUR", "3,25,100")
     assert client.get("/api/billing/config").json()["amounts_eur"] == [25, 100]
 
 

@@ -139,7 +139,7 @@ h1{ font-size:14px; font-weight:500; letter-spacing:.08em; text-transform:upperc
   <h1 id="t-h1">Guthaben aufladen</h1>
   <div class="balance" id="balance" hidden></div>
 
-  <div class="dial-box" id="dial" tabindex="0" role="slider" aria-valuemin="10" aria-valuemax="200" aria-valuenow="20" aria-label="Betrag">
+  <div class="dial-box" id="dial" tabindex="0" role="slider" aria-valuemin="5" aria-valuemax="200" aria-valuenow="20" aria-label="Betrag">
     <svg viewBox="0 0 300 300" aria-hidden="true">
       <defs>
         <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -290,7 +290,7 @@ btnTheme.addEventListener('click', () => {
 paintTheme();
 
 // ---- Drehregler (1:1 aus dem alten Repo, Einheit Euro statt Minuten) ----
-let MIN = 10, MAX = 200, STEP = 5, AMOUNTS = [10, 20, 50], amount = 20, checkoutOn = false;
+let MIN = 5, MAX = 200, STEP = 5, AMOUNTS = [5, 10, 20, 50], amount = 20, checkoutOn = false;
 const R = 120, CIRC = 2 * Math.PI * R;
 const dial = $('dial'), fill = $('fill'), knob = $('knob'), amtEl = $('amt'), cta = $('cta'), chips = $('chips');
 
